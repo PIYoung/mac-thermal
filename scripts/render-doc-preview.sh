@@ -30,4 +30,4 @@ xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$preview_dir/
   "$source_dir/Uptime.swift" "$source_dir/CPUUsageHistory.swift" "$source_dir/LiquidTabs.swift" \
   "$source_dir/Panel.swift" "$project_dir/scripts/render-doc-preview.swift" \
   -framework AppKit -framework QuartzCore -o "$helper_dir/Contents/MacOS/DocPreview"
-"$helper_dir/Contents/MacOS/DocPreview" "$project_dir/docs/images/mac-thermal-summary.png"
+"$helper_dir/Contents/MacOS/DocPreview" "$project_dir/docs/images/mac-thermal-cpu.png" "$project_dir/build/panel-previews"

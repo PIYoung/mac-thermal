@@ -43,8 +43,22 @@ enum PanelUpdatesProbe {
             + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
     }
 
+    private static func withDefaults<T>(_ body: (UserDefaults) -> T) -> T {
+        let suite = "local.mac-thermal.panel-probe.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else { fatalError("Cannot isolate preferences") }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        return body(defaults)
+    }
+
     private static func benchmark() {
+        #if PANEL_UPDATES_PROBE
+        let suite = "local.mac-thermal.panel-benchmark.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else { fatalError("Cannot isolate benchmark preferences") }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let panel = PanelController(defaults: defaults)
+        #else
         let panel = PanelController()
+        #endif
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: PanelController.size),
             styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -72,17 +86,87 @@ enum PanelUpdatesProbe {
     }
 
     #if PANEL_UPDATES_PROBE
+    private static let oldTabKey = "dashboardSelectedTabV2"
+    private static let resourceTabKey = "dashboardSelectedResourceTabV3"
+
+    private static func selectionChecks() {
+        // Saved tab indexes changed meaning. Migrate the resource, not the index.
+        for (old, expected) in [(0, 0), (1, 1), (2, 0), (3, 2), (-1, 0), (99, 0)] {
+            withDefaults { defaults in
+                defaults.set(old, forKey: oldTabKey)
+                let panel = PanelController(defaults: defaults)
+                _ = panel.view
+                precondition(panel.probeSelectedTab == expected, "Legacy selection must migrate to the same resource")
+                precondition(defaults.integer(forKey: resourceTabKey) == expected)
+            }
+        }
+        for current in 0..<4 {
+            withDefaults { defaults in
+                defaults.set(3, forKey: oldTabKey)
+                defaults.set(current, forKey: resourceTabKey)
+                let panel = PanelController(defaults: defaults)
+                _ = panel.view
+                precondition(panel.probeSelectedTab == current, "New selection takes precedence over a stale legacy key")
+                let next = (current + 1) % 4
+                panel.probeSelectTab(next)
+                precondition(defaults.integer(forKey: resourceTabKey) == next)
+                let reopened = PanelController(defaults: defaults)
+                _ = reopened.view
+                precondition(reopened.probeSelectedTab == next, "A new controller must restore the last selected resource")
+            }
+        }
+        for invalid in [-1, 99] {
+            withDefaults { defaults in
+                defaults.set(invalid, forKey: resourceTabKey)
+                let panel = PanelController(defaults: defaults)
+                _ = panel.view
+                precondition(panel.probeSelectedTab == 0)
+            }
+        }
+        withDefaults { defaults in
+            let panel = PanelController(defaults: defaults)
+            _ = panel.view
+            precondition(panel.probeSelectedTab == 0, "First launch defaults to CPU")
+        }
+    }
+
+    private static func checkContentBounds(_ root: NSView) {
+        // Inspect our fixed resource canvases, excluding AppKit's private material
+        // and control subviews. This catches a card or label crossing its parent.
+        func visit(_ node: NSView) {
+            for child in node.subviews where !child.isHidden {
+                let container = node.bounds.insetBy(dx: -0.5, dy: -0.5)
+                precondition(container.contains(child.frame), "Visible content outside its parent: \(type(of: child)) \(child.frame) in \(node.bounds)")
+                if !(child is NSControl) { visit(child) }
+            }
+        }
+        var canvasCount = 0
+        func findCanvases(_ node: NSView) {
+            if node.frame.width == 344 && (280...320).contains(node.frame.height) {
+                precondition(node.bounds.size == node.frame.size)
+                precondition(node.frame.maxY < 429, "Resource content must remain above the footer divider")
+                if !node.isHidden { canvasCount += 1; visit(node) }
+            } else {
+                node.subviews.forEach(findCanvases)
+            }
+        }
+        findCanvases(root)
+        precondition(canvasCount == 1, "Exactly one resource content canvas must be visible")
+    }
+
     private static func regressionChecks(defaults: UserDefaults) {
-        let panel = PanelController()
+        let panel = PanelController(defaults: defaults)
         let window = DashboardWindow(controller: panel)
         window.setFrame(NSRect(x: 128, y: 256, width: PanelController.size.width,
             height: PanelController.size.height), display: false)
         let initialFrame = window.frame
         let initialSurfaceFrames = panel.probeSurfaceFrames
         let initialStrings = panel.probeStrings
+        let initialRankings = panel.probeRankingTexts
         precondition(!window.isVisible)
         for index in 0...90 { panel.apply(sample(index)) }
         precondition(panel.probeStrings == initialStrings, "Hidden sampling must not format AppKit fields")
+        precondition(panel.probeRankingTexts == initialRankings, "Hidden sampling must not format either ranking")
         let hiddenTimes = panel.probeHistoryTimes
         precondition(hiddenTimes.allSatisfy { $0.count == 31 }, "All histories must retain the last minute while hidden")
         precondition(hiddenTimes[0].first == 4_120 && hiddenTimes[0].last == 4_180)
@@ -94,7 +178,10 @@ enum PanelUpdatesProbe {
         precondition(panel.probePresentedCPUHistoryTimes == hiddenTimes[0])
         precondition(panel.probeStrings["memory"] == initialStrings["memory"])
         precondition(panel.probeStrings["disk"] == initialStrings["disk"])
-        precondition(Array(panel.probePresentedHistoryTimes.prefix(2)) == Array(hiddenTimes[1...2]))
+        precondition(panel.probeStrings["upload"] == initialStrings["upload"])
+        precondition(panel.probeRankingTexts["cpu"]?.contains(where: { $0.contains("Fixture 90 · ") }) == true)
+        precondition(panel.probeRankingTexts["memory"] == initialRankings["memory"])
+        precondition(panel.probePresentedHistoryTimes.allSatisfy(\.isEmpty), "CPU presentation must not update SSD or network graph views")
         for _ in 0..<5 { panel.prepareForPresentation() }
         precondition(panel.probeHistoryTimes == hiddenTimes, "Presentation must not duplicate history")
 
@@ -102,32 +189,56 @@ enum PanelUpdatesProbe {
         panel.probeSetVisible(true)
         panel.probeSelectTab(1)
         let memoryAt90 = panel.probeStrings["memory"]
+        let cpuRankingAt90 = panel.probeRankingTexts["cpu"]
         precondition(memoryAt90 != initialStrings["memory"])
+        precondition(panel.probeRankingTexts["memory"]?.contains(where: { $0.contains("Fixture 90 · ") }) == true)
         panel.apply(sample(91))
         precondition(panel.probeStrings["memory"] != memoryAt90)
-        precondition(panel.probeStrings["cpuPercent"] == "90%", "Inactive summary must remain untouched")
+        precondition(panel.probeRankingTexts["memory"]?.contains(where: { $0.contains("Fixture 91 · ") }) == true)
+        precondition(panel.probeRankingTexts["cpu"] == cpuRankingAt90, "Memory sampling must not update CPU ranking views")
+        precondition(panel.probeStrings["cpuPercent"] == "90%", "Inactive CPU must remain untouched")
         precondition(panel.probePresentedCPUHistoryTimes == hiddenTimes[0], "Inactive CPU graph must not update its views")
+        precondition(panel.probeStrings["memoryProcesses"] == L10n.format("조회 %d개 · 제외 %d개", 191, 1))
+
         panel.probeSelectTab(2)
-        precondition(panel.probeStrings["processes"] == L10n.format("조회 %d개 · 제외 %d개", 191, 1))
-        panel.probeSelectTab(3)
         precondition(Array(panel.probePresentedHistoryTimes.suffix(2)) == Array(panel.probeHistoryTimes.suffix(2)))
+        precondition(panel.probePresentedHistoryTimes.prefix(2).allSatisfy(\.isEmpty))
         let diskAt91 = panel.probeStrings["disk"]
         panel.probeToggleSettings()
         panel.apply(sample(92))
         precondition(panel.probeStrings["disk"] == diskAt91, "Settings must not update hidden data tabs")
         panel.probeToggleSettings()
         precondition(panel.probeStrings["disk"] != diskAt91, "Closing settings must immediately show the latest sample")
+        let diskAt92 = panel.probeStrings["disk"]
+        let diskHistoryAt92 = Array(panel.probePresentedHistoryTimes.suffix(2))
+        panel.probeSelectTab(3)
+        let uploadAt92 = panel.probeStrings["upload"]
+        panel.apply(sample(93))
+        precondition(panel.probeStrings["upload"] != uploadAt92)
+        precondition(panel.probeStrings["disk"] == diskAt92)
+        precondition(Array(panel.probePresentedHistoryTimes.suffix(2)) == diskHistoryAt92)
+        precondition(Array(panel.probePresentedHistoryTimes.prefix(2)) == Array(panel.probeHistoryTimes[1...2]))
 
         let timesBeforeLanguage = panel.probeHistoryTimes
         for language in AppLanguage.allCases {
             L10n.setLanguage(language, defaults: defaults)
-            panel.probeSelectTab(0)
-            precondition(panel.probeStrings["thermal"] == ThermalStatus(.nominal).detail)
-            panel.probeSelectTab(1)
-            precondition(panel.probeStrings["memoryTotal"] == L10n.format("전체 %@", "64.0 GB"))
-            panel.probeSelectTab(2)
-            precondition(panel.probeStrings["processes"] == L10n.format("조회 %d개 · 제외 %d개", 192, 1))
-            panel.probeSelectTab(3)
+            precondition(panel.probeTabLabels == ["CPU", L10n.text("메모리"), "SSD", L10n.text("네트워크")])
+            for tab in 0..<4 {
+                panel.probeSelectTab(tab)
+                panel.view.layoutSubtreeIfNeeded()
+                checkContentBounds(panel.view)
+                switch tab {
+                case 0:
+                    precondition(panel.probeStrings["cpuPercent"] == "93%")
+                    precondition(panel.probeStrings["cpuProcesses"] == L10n.format("조회 %d개 · 제외 %d개", 193, 1))
+                    precondition(panel.probeRankingTexts["cpu"]?.contains(where: { $0.contains("Fixture 93 · ") }) == true)
+                case 1:
+                    precondition(panel.probeStrings["memoryTotal"] == L10n.format("전체 %@", "64.0 GB"))
+                    precondition(panel.probeStrings["memoryProcesses"] == L10n.format("조회 %d개 · 제외 %d개", 193, 1))
+                    precondition(panel.probeRankingTexts["memory"]?.contains(where: { $0.contains("Fixture 93 · ") }) == true)
+                default: break
+                }
+            }
         }
         precondition(panel.probeHistoryTimes == timesBeforeLanguage, "Language and tab changes must not record samples")
 
@@ -137,30 +248,28 @@ enum PanelUpdatesProbe {
         panel.apply(sample(95, seconds: 320))
         precondition(panel.probeHistoryTimes.allSatisfy { $0.count == 1 }, "A sleep-sized gap must discard history older than one minute")
         panel.prepareForPresentation()
-        precondition(Array(panel.probePresentedHistoryTimes.suffix(2)) == Array(panel.probeHistoryTimes.suffix(2)))
+        precondition(Array(panel.probePresentedHistoryTimes.prefix(2)) == Array(panel.probeHistoryTimes[1...2]))
         panel.probeSetVisible(true)
         panel.probeSelectTab(0)
         precondition(panel.probeStrings["cpuPercent"] == "95%", "Reopening must show the most recent hidden sample")
-        precondition(panel.probeStrings["thermal"] == ThermalStatus(.nominal).detail)
+        precondition(panel.probeRankingTexts["cpu"]?.contains(where: { $0.contains("Fixture 95 · ") }) == true)
         precondition(panel.probePresentedCPUHistoryTimes == panel.probeHistoryTimes[0])
         precondition(panel.probeCPUHistoryRuns.count == 1 && panel.probeCPUHistoryRuns[0].count == 1)
         precondition(window.frame == initialFrame && panel.probeSurfaceFrames == initialSurfaceFrames)
         precondition(PanelController.surfaceSize == NSSize(width: 380, height: 468))
-        print("Panel hidden sampling, latest selected tab/reopen/settings, four languages, history retention/no duplicates, and fixed frame checks passed")
+        print("Resource tab migration/persistence, embedded rankings, selected-tab-only updates, hidden histories, settings/reopen, four-language bounds, and fixed frame checks passed")
     }
     #endif
 
     static func main() {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
-        UserDefaults.standard.setVolatileDomain(["dashboardSelectedTabV2": 0,
-            AppLanguage.defaultsKey: AppLanguage.korean.rawValue], forName: UserDefaults.argumentDomain)
-        let suite = "local.mac-thermal.panel-probe.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suite) else { fatalError("Cannot isolate preferences") }
-        defer { defaults.removePersistentDomain(forName: suite) }
-        L10n.setLanguage(.korean, defaults: defaults)
         #if PANEL_UPDATES_PROBE
-        regressionChecks(defaults: defaults)
+        selectionChecks()
+        withDefaults { defaults in
+            L10n.setLanguage(.korean, defaults: defaults)
+            regressionChecks(defaults: defaults)
+        }
         #endif
         if CommandLine.arguments.contains("--benchmark") { benchmark() }
     }

@@ -6,7 +6,7 @@
 
 **使用 AI 制作。** 代码、UI、翻译和文档借助 OpenAI Codex 编写，并根据用户的多轮反馈不断改进。
 
-![Mac Thermal 概览面板](docs/images/mac-thermal-summary.png)
+![Mac Thermal CPU 面板](docs/images/mac-thermal-cpu.png)
 
 使用合成示例数据渲染实际界面。玻璃效果会因macOS版本而异。
 
@@ -14,7 +14,7 @@
 
 - **菜单栏实时显示：** CPU 温度与使用率、SSD 读写速度、网络上传与下载速度。
 - **动态指标：** CPU 节奏条或环绕圆点、沿传输方向流动的网络效果，以及用液面高度表示已用容量、用波浪速度表示 I/O 活动的 SSD 图标。
-- **点击查看详情：** 概览、内存压力与交换空间、CPU 和内存占用最高的 3 个进程、SSD 活动与容量，以及开机时长。
+- **按资源查看详情：** CPU、内存、SSD、网络四个标签页显示使用情况与图表。CPU 和内存页分别列出占用最高的 3 个进程，CPU 与 SSD 温度作为辅助信息显示，也可查看开机时长。
 - **按需设置：** 在设置顶部即时切换韩语、英语、日语和简体中文，也可调整动画、强度和登录时自动启动。默认语言为韩语。
 - **融入 macOS：** 支持浅色与深色外观、macOS 26 的 Liquid Glass、减弱动态效果和键盘操作。
 - **仅在本地运行：** 无账号、广告、分析或跟踪、服务器上传、管理员辅助程序，也不控制风扇。
@@ -23,7 +23,7 @@
 
 需要 **Apple Silicon Mac，运行 macOS 14 或更新版本**。当前发布包仅支持 ARM64，不支持 Intel Mac。
 
-1. [下载最新 DMG](https://github.com/PIYoung/mac-thermal/releases/latest/download/Mac-Thermal-v2.3.0-arm64.dmg)。
+1. [下载最新 DMG](https://github.com/PIYoung/mac-thermal/releases/latest/download/Mac-Thermal-v2.4.0-arm64.dmg)。
 2. 打开 DMG，将 **Mac Thermal.app** 拖入 **Applications** 文件夹。
 3. 启动应用，点击菜单栏中的指标。应用不显示 Dock 图标。
 
@@ -45,7 +45,7 @@ zsh scripts/install.sh --open
 
 ## 使用
 
-点击菜单栏即可打开固定大小的面板。右上角的**设置**图标用于打开或关闭设置。语言、所选标签页和动画设置会在下次启动时保留。请在**设置 → 登录时启动**中管理自动启动。只有从源码安装脚本的目标目录 `~/Applications` 运行时，应用才会在首次启动时自动注册。通过 DMG 安装到 `/Applications` 时不会自动注册。如果 macOS 要求批准，请在系统的登录项设置中允许。
+点击菜单栏即可打开固定大小的面板。右上角的**设置**图标用于打开或关闭设置。首次打开 CPU 页，之后会记住上次查看的标签页。语言、所选标签页和动画设置会在下次启动时保留。请在**设置 → 登录时启动**中管理自动启动。只有从源码安装脚本的目标目录 `~/Applications` 运行时，应用才会在首次启动时自动注册。通过 DMG 安装到 `/Applications` 时不会自动注册。如果 macOS 要求批准，请在系统的登录项设置中允许。
 
 当 macOS 报告热状态升高时，菜单栏文字会变为橙色或红色。该状态来自系统热状态，而非自行设定的温度阈值。应用不调节散热或风扇转速。
 

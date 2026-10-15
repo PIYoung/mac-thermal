@@ -1,7 +1,13 @@
 # Releases
 
-## Unreleased
+## v2.4.0 — 2026-10-15
 
+Resource-focused tabs and lower background overhead. Build 16.
+
+- Replace Overview, Memory, Top 3 and SSD with CPU, Memory, SSD and Network tabs, retaining the fixed 380×468pt panel.
+- Put the CPU and memory top-three process lists beside their corresponding resource metrics. Keep CPU and SSD temperatures as supporting information.
+- Give network upload/download rates and graphs a dedicated tab. Open CPU initially, then remember the last selected tab.
+- Update the four-language README files and panel preview for the new layout.
 - Resolve process names only for the final CPU/memory top-three entries, reusing names for shared PIDs.
 - Reuse menu bar text measurements across animation frames while preserving the existing appearance and 8fps limit.
 - Defer hidden panel and inactive tab display updates while retaining measurement history and showing the latest values when opened.

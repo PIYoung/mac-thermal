@@ -310,16 +310,17 @@ private final class ProcessRankingCard: GlassCard {
     private let values = (0..<3).map { _ in text("", size: 11, weight: .semibold, digits: true) }
     private let ranks = (1...3).map { text(String($0), size: 10, weight: .semibold, color: PanelColor.secondary, digits: true) }
     private let empty = text("측정 중", size: 11, color: PanelColor.secondary)
+    private let count = text("정보 없음", size: 8, color: PanelColor.secondary)
 
     init(title: String, subtitle: String, icon: String, accent: NSColor) {
         super.init(frame: .zero)
         place(symbol(icon, color: accent), in: self, 14, 11, 13, 13)
-        place(text(title, size: 11, weight: .semibold), in: self, 34, 9, 160, 17)
+        place(text(title, size: 11, weight: .semibold), in: self, 34, 9, 184, 17)
         let note = text(subtitle, size: 9, color: PanelColor.secondary)
         note.alignment = .right
-        place(note, in: self, 204, 11, 125, 14)
+        place(note, in: self, 220, 11, 109, 14)
         for index in 0..<3 {
-            let y = CGFloat(34 + index * 25)
+            let y = CGFloat(35 + index * 25)
             ranks[index].alignment = .center
             place(ranks[index], in: self, 12, y + 1, 16, 16)
             place(names[index], in: self, 37, y, 189, 18)
@@ -328,16 +329,19 @@ private final class ProcessRankingCard: GlassCard {
             if index < 2 {
                 let separator = NSBox()
                 separator.boxType = .separator
-                place(separator, in: self, 37, y + 21, 292, 1)
+                place(separator, in: self, 37, y + 22, 292, 1)
             }
         }
-        place(empty, in: self, 16, 59, 311, 18)
+        place(empty, in: self, 16, 61, 311, 18)
+        place(count, in: self, 16, 110, 313, 12)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
-    func update(_ processes: [ResourceProcess], emptyMessage: String, format: (ResourceProcess) -> String) {
+    func update(_ processes: [ResourceProcess], emptyMessage: String, countText: String, detail: String, format: (ResourceProcess) -> String) {
         empty.isHidden = !processes.isEmpty
         empty.stringValue = emptyMessage
+        count.stringValue = countText
+        toolTip = detail
         for index in 0..<3 {
             let process = index < processes.count ? processes[index] : nil
             ranks[index].isHidden = process == nil
@@ -351,6 +355,12 @@ private final class ProcessRankingCard: GlassCard {
             }
         }
     }
+    #if PANEL_UPDATES_PROBE
+    var probeCount: String { count.stringValue }
+    var probeRows: [String] {
+        zip(names, values).filter { !$0.0.isHidden }.map { $0.0.stringValue + " · " + $0.1.stringValue }
+    }
+    #endif
 }
 
 final class PanelController: NSViewController {
@@ -359,11 +369,9 @@ final class PanelController: NSViewController {
     static let size = NSSize(width: surfaceSize.width + 2 * surfaceInset, height: surfaceSize.height + 2 * surfaceInset)
     static let cornerRadius: CGFloat = 22
 
-    private let cpuTemp = text("—", size: 33, weight: .medium, digits: true)
-    private let ssdTemp = text("—", size: 33, weight: .medium, digits: true)
-    private let cpuCaption = text("코어 최고 온도", size: 9, color: PanelColor.secondary)
-    private let ssdCaption = text("내장 저장장치", size: 9, color: PanelColor.secondary)
-    private let cpuPercent = text("측정 중", size: 12, weight: .semibold, digits: true)
+    private let cpuTemp = text("—", size: 18, weight: .medium, digits: true)
+    private let ssdTemp = text("—", size: 18, weight: .medium, digits: true)
+    private let cpuPercent = text("측정 중", size: 30, weight: .medium, digits: true)
     private let cpuGraph = CPUHistoryGraph(frame: .zero)
     private let uptimeLabel = text("부팅 후 시간 확인 중", size: 10, color: PanelColor.secondary, digits: true)
     private let upValue = text("—", size: 20, weight: .medium, digits: true)
@@ -379,12 +387,10 @@ final class PanelController: NSViewController {
     private let memoryPercent = text("—", size: 11, weight: .semibold, digits: true)
     private let memoryBar = UsageBar()
     private let memoryPressure = ResourceBadge(frame: .zero)
-    private let memoryPressureNote = text("메모리 압박 정보 없음", size: 10, color: PanelColor.secondary)
-    private let memoryCompressed = text("—", size: 24, weight: .medium, digits: true)
-    private let memorySwap = text("—", size: 24, weight: .medium, digits: true)
-    private let processCount = text("정보 없음", size: 9, color: PanelColor.secondary)
-    private let cpuRanking = ProcessRankingCard(title: "CPU 사용량", subtitle: "전체 CPU 기준", icon: "cpu", accent: PanelColor.blue)
-    private let memoryRanking = ProcessRankingCard(title: "메모리 사용량", subtitle: "실제 점유 메모리", icon: "memorychip", accent: PanelColor.violet)
+    private let memoryCompressed = text("—", size: 17, weight: .medium, digits: true)
+    private let memorySwap = text("—", size: 17, weight: .medium, digits: true)
+    private let cpuRanking = ProcessRankingCard(title: "CPU 프로세스 TOP 3", subtitle: "전체 CPU 기준", icon: "cpu", accent: PanelColor.blue)
+    private let memoryRanking = ProcessRankingCard(title: "메모리 프로세스 TOP 3", subtitle: "실제 점유 메모리", icon: "memorychip", accent: PanelColor.violet)
     private let diskFree = text("—", size: 31, weight: .medium, digits: true)
     private let diskCapacity = text("전체 용량 정보 없음", size: 11, color: PanelColor.secondary)
     private let diskPercent = text("—", size: 11, weight: .semibold, digits: true)
@@ -464,12 +470,31 @@ final class PanelController: NSViewController {
         localizedToolTip(control, "선택한 언어를 바로 적용하고 다음 실행에도 유지합니다")
         return control
     }()
-    private let tabDefaultsKey = "dashboardSelectedTabV2"
+    private let tabDefaults: UserDefaults
+    private let tabDefaultsKey = "dashboardSelectedResourceTabV3"
+    private static let tabLabels = ["CPU", "메모리", "SSD", "네트워크"]
+    init(defaults: UserDefaults = .standard) {
+        tabDefaults = defaults
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) {
+        tabDefaults = .standard
+        super.init(coder: coder)
+    }
+    private func restoredTab() -> Int {
+        if tabDefaults.object(forKey: tabDefaultsKey) != nil {
+            let saved = tabDefaults.integer(forKey: tabDefaultsKey)
+            return (0..<4).contains(saved) ? saved : 0
+        }
+        let legacy = tabDefaults.integer(forKey: "dashboardSelectedTabV2")
+        let migrated = [0: 0, 1: 1, 2: 0, 3: 2][legacy] ?? 0
+        tabDefaults.set(migrated, forKey: tabDefaultsKey)
+        return migrated
+    }
     private lazy var tabs: LiquidTabControl = {
-        let control = LiquidTabControl(labels: ["요약", "메모리", "TOP 3", "SSD"].map(L10n.text), target: self, action: #selector(changeTab))
+        let control = LiquidTabControl(labels: Self.tabLabels.map(L10n.text), target: self, action: #selector(changeTab))
         localizedAccessibilityLabel(control, "시스템 모니터 탭")
-        let saved = UserDefaults.standard.integer(forKey: tabDefaultsKey)
-        control.selectedSegment = (0..<4).contains(saved) ? saved : 0
+        control.selectedSegment = restoredTab()
         return control
     }()
     private let timeFormatter: DateFormatter = {
@@ -526,13 +551,13 @@ final class PanelController: NSViewController {
         tabViews = (0..<4).map { _ in
             let content = FlippedView()
             content.wantsLayer = true
-            place(content, in: canvas, 18, 100, 344, 289)
+            place(content, in: canvas, 18, 100, 344, 317)
             return content
         }
-        buildSummary(in: tabViews[0])
+        buildCPU(in: tabViews[0])
         buildMemory(in: tabViews[1])
-        buildProcesses(in: tabViews[2])
-        buildDisk(in: tabViews[3])
+        buildDisk(in: tabViews[2])
+        buildNetwork(in: tabViews[3])
         place(menuBarSettingsView, in: canvas, 18, 66, 344, 363)
         buildMenuBarSettings()
         showSelectedTab()
@@ -564,7 +589,7 @@ final class PanelController: NSViewController {
     private func refreshLanguage() {
         guard isViewLoaded else { return }
         refreshLocalizedViews(view)
-        tabs.updateLabels(["요약", "메모리", "TOP 3", "SSD"].map(L10n.text))
+        tabs.updateLabels(Self.tabLabels.map(L10n.text))
         animationStyleControl.removeAllItems()
         animationStyleControl.addItems(withTitles: [MenuBarAnimationStyle.rhythm.title, MenuBarAnimationStyle.orbit.title])
         languageControl.selectItem(at: AppLanguage.allCases.firstIndex(of: L10n.language) ?? 0)
@@ -654,111 +679,109 @@ final class PanelController: NSViewController {
         showSelectedTab()
     }
 
-    private func buildSummary(in content: NSView) {
-        place(thermalDetail, in: content, 3, 0, 338, 15)
-        let cpu = GlassCard()
-        let ssd = GlassCard()
-        place(cpu, in: content, 0, 23, 167, 82)
-        place(ssd, in: content, 177, 23, 167, 82)
-        for (card, name, icon, accent, value, caption) in [
-            (cpu, "CPU", "cpu", PanelColor.blue, cpuTemp, cpuCaption),
-            (ssd, "SSD", "internaldrive", PanelColor.violet, ssdTemp, ssdCaption)
-        ] {
-            place(symbol(icon, color: accent), in: card, 15, 10, 13, 13)
-            place(text(name, size: 10, weight: .semibold, color: PanelColor.secondary), in: card, 35, 8, 95, 17)
-            place(value, in: card, 13, 25, 141, 39)
-            place(caption, in: card, 16, 65, 140, 13)
-        }
+    private func buildCPU(in content: NSView) {
         let usage = GlassCard()
-        place(usage, in: content, 0, 115, 344, 68)
-        place(text("CPU 사용률", size: 11, weight: .medium, color: PanelColor.secondary), in: usage, 15, 7, 100, 16)
-        let graphRange = text("최근 1분 · 0–100%", size: 9, color: .tertiaryLabelColor)
-        graphRange.alignment = .right
-        place(graphRange, in: usage, 124, 9, 127, 14)
+        place(usage, in: content, 0, 0, 344, 130)
+        place(symbol("cpu", color: PanelColor.blue), in: usage, 15, 14, 13, 13)
+        place(text("CPU 사용률", size: 11, weight: .semibold), in: usage, 35, 11, 170, 17)
+        place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 16, 31, 193, 14)
         cpuPercent.alignment = .right
-        place(cpuPercent, in: usage, 259, 6, 69, 18)
-        place(cpuGraph, in: usage, 14, 28, 316, 32)
+        place(cpuPercent, in: usage, 213, 7, 115, 38)
+        place(cpuGraph, in: usage, 14, 58, 316, 60)
 
-        let network = GlassCard()
-        place(network, in: content, 0, 193, 344, 96)
-        buildActivityCard(network, title: "네트워크", icon: "arrow.left.arrow.right", firstTitle: "↑  업로드", secondTitle: "↓  다운로드", firstValue: upValue, secondValue: downValue, firstGraph: upGraph, secondGraph: downGraph, secondColor: PanelColor.teal, spacious: false)
-        localizedToolTip(network, "Wi-Fi·유선 인터페이스의 바이트/초 합계. 그래프는 실제 측정값의 최근 1분 이력입니다.")
+        let thermal = GlassCard()
+        place(thermal, in: content, 0, 138, 344, 42)
+        place(text("온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 15, 13, 62, 16)
+        place(cpuTemp, in: thermal, 79, 8, 73, 26)
+        thermalDetail.alignment = .right
+        place(thermalDetail, in: thermal, 157, 13, 172, 16)
+        place(cpuRanking, in: content, 0, 190, 344, 127)
     }
 
     private func buildMemory(in content: NSView) {
         let capacity = GlassCard()
-        place(capacity, in: content, 0, 0, 344, 157)
+        place(capacity, in: content, 0, 0, 344, 130)
         place(symbol("memorychip", color: PanelColor.violet), in: capacity, 15, 15, 14, 14)
         place(text("사용 중인 메모리", size: 11, weight: .semibold), in: capacity, 36, 13, 170, 18)
         place(memoryPressure, in: capacity, 235, 12, 94, 23)
-        localizedToolTip(memoryPressure, "macOS가 보고하는 메모리 압박 상태입니다. RAM 사용률로 판단하지 않습니다.")
-        place(memoryUsed, in: capacity, 14, 40, 245, 42)
+        place(memoryUsed, in: capacity, 14, 35, 245, 40)
         memoryPercent.alignment = .right
-        place(memoryPercent, in: capacity, 259, 57, 69, 18)
-        place(memoryTotal, in: capacity, 17, 87, 310, 17)
+        place(memoryPercent, in: capacity, 259, 51, 69, 18)
+        place(memoryTotal, in: capacity, 17, 86, 310, 16)
         place(memoryBar, in: capacity, 16, 113, 312, 5)
-        place(memoryPressureNote, in: capacity, 17, 130, 310, 15)
         localizedToolTip(memoryUsed, "활성·비활성·고정 메모리와 압축 메모리에서 파일 캐시·회수 가능한 페이지를 제외한 추정 사용량입니다.")
-        for (x, title, icon, field, note, color) in [
-            (CGFloat(0), "압축 메모리", "arrow.down.right.and.arrow.up.left", memoryCompressed, "RAM 안에서 압축한 크기", PanelColor.violet),
-            (CGFloat(177), "스왑 사용량", "internaldrive", memorySwap, "SSD에 옮겨 둔 메모리", PanelColor.blue)
-        ] {
-            let card = GlassCard()
-            place(card, in: content, x, 168, 167, 88)
-            place(symbol(icon, color: color), in: card, 14, 12, 13, 13)
-            place(text(title, size: 10, weight: .semibold, color: PanelColor.secondary), in: card, 34, 10, 119, 17)
-            place(field, in: card, 13, 31, 143, 33)
-            place(text(note, size: 9, color: PanelColor.secondary), in: card, 15, 69, 140, 13)
-        }
-        place(symbol("info.circle", color: PanelColor.secondary), in: content, 3, 272, 12, 12)
-        place(text("메모리 압박은 macOS가 판단한 현재 상태입니다", size: 9, color: PanelColor.secondary), in: content, 21, 270, 320, 16)
-    }
 
-    private func buildProcesses(in content: NSView) {
-        place(text("프로세스 기준", size: 10, weight: .medium, color: PanelColor.secondary), in: content, 3, 0, 135, 15)
-        processCount.alignment = .right
-        place(processCount, in: content, 139, 1, 202, 14)
-        place(cpuRanking, in: content, 0, 23, 344, 119)
-        place(memoryRanking, in: content, 0, 152, 344, 119)
-        place(text("CPU 비율은 전체 코어를 합친 100% 기준입니다", size: 9, color: PanelColor.secondary), in: content, 3, 276, 338, 13)
+        let secondary = GlassCard()
+        place(secondary, in: content, 0, 138, 344, 42)
+        for (x, title, field, note) in [
+            (CGFloat(15), "압축 메모리", memoryCompressed, "RAM 안에서 압축한 크기"),
+            (CGFloat(187), "스왑 사용량", memorySwap, "SSD에 옮겨 둔 메모리")
+        ] {
+            place(text(title, size: 9, weight: .medium, color: PanelColor.secondary), in: secondary, x, 4, 142, 13)
+            place(field, in: secondary, x - 1, 17, 143, 23)
+            localizedToolTip(field, note)
+        }
+        let divider = NSBox()
+        divider.boxType = .separator
+        place(divider, in: secondary, 171, 9, 1, 24)
+        place(memoryRanking, in: content, 0, 190, 344, 127)
     }
 
     private func buildDisk(in content: NSView) {
         let capacity = GlassCard()
         place(capacity, in: content, 0, 0, 344, 130)
         place(symbol("internaldrive", color: PanelColor.violet), in: capacity, 15, 15, 14, 14)
-        place(text("내장 SSD · 사용 가능 공간", size: 11, weight: .semibold), in: capacity, 36, 13, 220, 18)
+        place(text("내장 SSD · 사용 가능 공간", size: 11, weight: .semibold), in: capacity, 36, 13, 214, 18)
         diskPercent.alignment = .right
         place(diskPercent, in: capacity, 253, 15, 75, 16)
-        place(diskFree, in: capacity, 14, 38, 313, 42)
-        place(diskCapacity, in: capacity, 17, 84, 310, 17)
-        place(diskBar, in: capacity, 16, 111, 312, 5)
+        place(diskFree, in: capacity, 14, 35, 313, 40)
+        place(diskCapacity, in: capacity, 17, 86, 310, 16)
+        place(diskBar, in: capacity, 16, 113, 312, 5)
         localizedToolTip(capacity, "시동 볼륨의 전체 용량과 현재 사용 가능한 공간입니다. APFS 공유 공간에 따라 값이 바뀔 수 있습니다.")
-        let activity = GlassCard()
-        place(activity, in: content, 0, 142, 344, 147)
-        buildActivityCard(activity, title: "디스크 활동", icon: "arrow.up.arrow.down", firstTitle: "↓  읽기", secondTitle: "↑  쓰기", firstValue: diskRead, secondValue: diskWrite, firstGraph: diskReadGraph, secondGraph: diskWriteGraph, secondColor: PanelColor.violet, spacious: true)
-        localizedToolTip(activity, "내장 물리 SSD의 읽기·쓰기 바이트/초 합계. 그래프는 실제 측정값의 최근 1분 이력입니다.")
-    }
 
-    private func buildActivityCard(_ card: NSView, title: String, icon: String, firstTitle: String, secondTitle: String, firstValue: NSTextField, secondValue: NSTextField, firstGraph: Sparkline, secondGraph: Sparkline, secondColor: NSColor, spacious: Bool) {
-        place(symbol(icon, color: PanelColor.secondary), in: card, 15, 12, 13, 13)
-        place(text(title, size: 11, weight: .semibold, color: PanelColor.secondary), in: card, 34, 10, 137, 17)
-        let live = text("최근 1분", size: 9, color: .tertiaryLabelColor)
-        live.alignment = .right
-        place(live, in: card, 248, 12, 79, 14)
-        let labelY: CGFloat = spacious ? 43 : 30
-        let valueY: CGFloat = spacious ? 62 : 45
-        let graphY: CGFloat = spacious ? 107 : 76
-        let graphHeight: CGFloat = spacious ? 25 : 13
-        place(text(firstTitle, size: 10, weight: .medium, color: PanelColor.blue), in: card, 16, labelY, 145, 15)
-        place(text(secondTitle, size: 10, weight: .medium, color: secondColor), in: card, 186, labelY, 142, 15)
-        place(firstValue, in: card, 14, valueY, 148, 28)
-        place(secondValue, in: card, 184, valueY, 148, 28)
-        place(firstGraph, in: card, 17, graphY, 142, graphHeight)
-        place(secondGraph, in: card, 187, graphY, 140, graphHeight)
+        let activity = GlassCard()
+        place(activity, in: content, 0, 138, 344, 137)
+        place(symbol("arrow.up.arrow.down", color: PanelColor.secondary), in: activity, 15, 12, 13, 13)
+        place(text("디스크 활동", size: 11, weight: .semibold), in: activity, 34, 10, 168, 17)
+        let recent = text("최근 1분", size: 9, color: PanelColor.secondary)
+        recent.alignment = .right
+        place(recent, in: activity, 236, 12, 92, 14)
+        for (x, title, field, graph, color) in [
+            (CGFloat(16), "↓  읽기", diskRead, diskReadGraph, PanelColor.blue),
+            (CGFloat(187), "↑  쓰기", diskWrite, diskWriteGraph, PanelColor.violet)
+        ] {
+            place(text(title, size: 10, weight: .medium, color: color), in: activity, x, 35, 142, 15)
+            place(field, in: activity, x - 2, 51, 148, 28)
+            place(graph, in: activity, x, 94, 141, 29)
+        }
         let divider = NSBox()
         divider.boxType = .separator
-        place(divider, in: card, 171, labelY, 1, graphY + graphHeight - labelY)
+        place(divider, in: activity, 171, 36, 1, 87)
+        localizedToolTip(activity, "내장 물리 SSD의 읽기·쓰기 바이트/초 합계. 그래프는 실제 측정값의 최근 1분 이력입니다.")
+
+        let thermal = GlassCard()
+        place(thermal, in: content, 0, 283, 344, 34)
+        place(symbol("thermometer.medium", color: PanelColor.violet), in: thermal, 15, 10, 13, 13)
+        place(text("SSD 온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 35, 10, 180, 15)
+        ssdTemp.alignment = .right
+        place(ssdTemp, in: thermal, 234, 4, 94, 26)
+    }
+
+    private func buildNetwork(in content: NSView) {
+        for (y, title, value, graph, color) in [
+            (CGFloat(0), "↓  다운로드", downValue, downGraph, PanelColor.teal),
+            (CGFloat(164), "↑  업로드", upValue, upGraph, PanelColor.blue)
+        ] {
+            let card = GlassCard()
+            place(card, in: content, 0, y, 344, 153)
+            place(text(title, size: 11, weight: .semibold, color: color), in: card, 16, 12, 220, 18)
+            let recent = text("최근 1분", size: 9, color: PanelColor.secondary)
+            recent.alignment = .right
+            place(recent, in: card, 236, 14, 92, 14)
+            place(value, in: card, 14, 34, 314, 36)
+            place(graph, in: card, 16, 80, 312, 60)
+            localizedToolTip(card, "Wi-Fi·유선 인터페이스의 바이트/초 합계. 그래프는 실제 측정값의 최근 1분 이력입니다.")
+        }
     }
 
     override func viewDidAppear() {
@@ -781,26 +804,26 @@ final class PanelController: NSViewController {
     }
 
     @objc private func changeTab() {
-        UserDefaults.standard.set(tabs.selectedSegment, forKey: tabDefaultsKey)
+        tabDefaults.set(tabs.selectedSegment, forKey: tabDefaultsKey)
         showSelectedTab()
     }
 
     private func temperatureText(_ value: Double?) -> NSAttributedString {
         let number = value.map { String(format: "%.0f", $0) } ?? "—"
-        let result = NSMutableAttributedString(string: number, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 33, weight: .medium)])
-        result.append(NSAttributedString(string: " °C", attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .regular), .foregroundColor: PanelColor.secondary]))
+        let result = NSMutableAttributedString(string: number, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 18, weight: .medium)])
+        result.append(NSAttributedString(string: " °C", attributes: [.font: NSFont.systemFont(ofSize: 10, weight: .regular), .foregroundColor: PanelColor.secondary]))
         return result
     }
 
-    private func rateText(_ value: Double?, placeholder: String = "—") -> NSAttributedString {
-        guard let value else { return NSAttributedString(string: placeholder, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: placeholder == "—" ? 20 : 12, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor]) }
+    private func rateText(_ value: Double?, placeholder: String = "—", size: CGFloat = 20) -> NSAttributedString {
+        guard let value else { return NSAttributedString(string: placeholder, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: placeholder == "—" ? size : 12, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor]) }
         let units = ["B/s", "KB/s", "MB/s", "GB/s"]
         var scaled = value
         var index = 0
         while scaled >= 1_000 && index < units.count - 1 { scaled /= 1_000; index += 1 }
         let number = String(format: scaled < 100 && index > 0 ? "%.1f" : "%.0f", scaled)
-        let result = NSMutableAttributedString(string: number, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .medium), .foregroundColor: NSColor.labelColor])
-        result.append(NSAttributedString(string: " " + units[index], attributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: PanelColor.secondary]))
+        let result = NSMutableAttributedString(string: number, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium), .foregroundColor: NSColor.labelColor])
+        result.append(NSAttributedString(string: " " + units[index], attributes: [.font: NSFont.systemFont(ofSize: size > 20 ? 11 : 10, weight: .medium), .foregroundColor: PanelColor.secondary]))
         return result
     }
 
@@ -861,43 +884,39 @@ final class PanelController: NSViewController {
         updated.stringValue = L10n.format("2초마다 갱신  ·  %@", timeFormatter.string(from: sample.time))
         guard !showingMenuBarSettings else { return }
         switch tabs.selectedSegment {
-        case 0: applySummary(sample)
-        case 1: applyMemory(sample.resources.memory)
-        case 2: applyProcesses(sample.resources.processes)
-        case 3: applyDisk(sample.resources.disk)
+        case 0: applyCPU(sample)
+        case 1:
+            applyMemory(sample.resources.memory)
+            applyMemoryProcesses(sample.resources.processes)
+        case 2: applyDisk(sample)
+        case 3: applyNetwork(sample)
         default: break
         }
     }
 
-    private func applySummary(_ sample: Snapshot) {
+    private func applyCPU(_ sample: Snapshot) {
         let temperatureColor = sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor
-        for (field, value) in [(cpuTemp, sample.cpuTemperature), (ssdTemp, sample.ssdTemperature)] {
-            let attributed = NSMutableAttributedString(attributedString: temperatureText(value))
-            attributed.addAttribute(.foregroundColor, value: temperatureColor, range: NSRange(location: 0, length: attributed.length - 3))
-            field.attributedStringValue = attributed
-        }
-        cpuCaption.stringValue = L10n.text(sample.cpuTemperature == nil ? "센서 읽기 불가" : "코어 최고 온도")
-        ssdCaption.stringValue = L10n.text(sample.ssdTemperature == nil ? "센서 읽기 불가" : "내장 저장장치")
+        let attributed = NSMutableAttributedString(attributedString: temperatureText(sample.cpuTemperature))
+        attributed.addAttribute(.foregroundColor, value: temperatureColor, range: NSRange(location: 0, length: attributed.length - 3))
+        cpuTemp.attributedStringValue = attributed
         cpuTemp.toolTip = L10n.format("CPU 코어 센서 %d개 중 최댓값 · PMU 제외", sample.cpuSensors)
-        ssdTemp.toolTip = L10n.format("내장 SSD NAND 센서 %d개 중 최댓값", sample.ssdSensors)
         cpuTemp.setAccessibilityLabel(L10n.format("CPU 온도 %@", sample.cpuTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
-        ssdTemp.setAccessibilityLabel(L10n.format("SSD 온도 %@", sample.ssdTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
         cpuPercent.stringValue = sample.cpuUsage.map { String(format: "%.0f%%", $0) } ?? L10n.text("측정 중")
+        cpuPercent.font = .monospacedDigitSystemFont(ofSize: sample.cpuUsage == nil ? 12 : 30, weight: .medium)
         cpuGraph.update(cpuHistory, percent: sample.cpuUsage)
         cpuGraph.color = sample.thermal.level > 0 ? sample.thermal.color : PanelColor.blue
-        thermalDetail.stringValue = sample.thermal.detail
+        thermalDetail.stringValue = L10n.format("macOS 열 상태 · %@", sample.thermal.title)
+        thermalDetail.toolTip = sample.thermal.detail
+        thermalDetail.setAccessibilityLabel(sample.thermal.detail)
         thermalDetail.textColor = sample.thermal.level > 0 ? sample.thermal.color : PanelColor.secondary
-        upValue.attributedStringValue = rateText(sample.upload)
-        downValue.attributedStringValue = rateText(sample.download)
-        presentHistory(uploadHistory, in: upGraph)
-        presentHistory(downloadHistory, in: downGraph)
+        applyCPUProcesses(sample.resources.processes)
     }
 
     private func applyMemory(_ memory: MemorySnapshot) {
         memoryUsed.attributedStringValue = sizeText(memory.usedBytes, size: 31)
         memoryTotal.stringValue = L10n.format("전체 %@", bytesString(memory.totalBytes))
-        memoryCompressed.attributedStringValue = sizeText(memory.compressedBytes, size: 24)
-        memorySwap.attributedStringValue = sizeText(memory.swapUsedBytes, size: 24)
+        memoryCompressed.attributedStringValue = sizeText(memory.compressedBytes, size: 17)
+        memorySwap.attributedStringValue = sizeText(memory.swapUsedBytes, size: 17)
         let percentage = memory.totalBytes.flatMap { total in memory.usedBytes.map { total > 0 ? $0 / total * 100 : 0 } }
         memoryBar.value = percentage
         memoryPercent.stringValue = percentage.map { String(format: "%.0f%%", $0) } ?? "—"
@@ -915,23 +934,33 @@ final class PanelController: NSViewController {
             title = L10n.text("정보 없음"); note = L10n.text("메모리 압박 상태를 읽을 수 없습니다"); color = .secondaryLabelColor
         }
         memoryPressure.update(title, color: color)
-        memoryPressureNote.stringValue = note
+        memoryPressure.toolTip = note + "\n" + L10n.text("macOS가 보고하는 메모리 압박 상태입니다. RAM 사용률로 판단하지 않습니다.")
         memoryBar.color = PanelColor.violet
     }
 
-    private func applyProcesses(_ processes: ProcessSnapshot) {
-        processCount.stringValue = processes.available ? L10n.format("조회 %d개 · 제외 %d개", processes.readableCount, processes.skippedCount) : L10n.text("조회 정보 없음")
-        processCount.toolTip = L10n.format("정보를 읽은 프로세스 %d개, 종료·권한 제한 등으로 제외한 프로세스 %d개. 앱별로 합산하지 않은 프로세스 기준 순위입니다.", processes.readableCount, processes.skippedCount)
+    private func processCountText(_ processes: ProcessSnapshot) -> String {
+        processes.available ? L10n.format("조회 %d개 · 제외 %d개", processes.readableCount, processes.skippedCount) : L10n.text("조회 정보 없음")
+    }
+
+    private func processDetail(_ processes: ProcessSnapshot) -> String {
+        L10n.format("정보를 읽은 프로세스 %d개, 종료·권한 제한 등으로 제외한 프로세스 %d개. 앱별로 합산하지 않은 프로세스 기준 순위입니다.", processes.readableCount, processes.skippedCount)
+    }
+
+    private func applyCPUProcesses(_ processes: ProcessSnapshot) {
         let cpuEmpty = processes.available ? (processes.cpuReady ? L10n.text("표시할 프로세스가 없습니다") : L10n.text("다음 측정부터 CPU 순위를 표시합니다")) : L10n.text("프로세스 정보를 읽을 수 없습니다")
-        cpuRanking.update(processes.cpuTop, emptyMessage: cpuEmpty) { process in
+        cpuRanking.update(processes.cpuTop, emptyMessage: cpuEmpty, countText: processCountText(processes), detail: processDetail(processes) + "\n" + L10n.text("CPU 비율은 전체 코어를 합친 100% 기준입니다")) { process in
             process.cpuPercent.map { String(format: "%.1f%%", $0) } ?? L10n.text("측정 중")
         }
-        memoryRanking.update(processes.memoryTop, emptyMessage: processes.available ? L10n.text("표시할 프로세스가 없습니다") : L10n.text("프로세스 정보를 읽을 수 없습니다")) { process in
+    }
+
+    private func applyMemoryProcesses(_ processes: ProcessSnapshot) {
+        memoryRanking.update(processes.memoryTop, emptyMessage: processes.available ? L10n.text("표시할 프로세스가 없습니다") : L10n.text("프로세스 정보를 읽을 수 없습니다"), countText: processCountText(processes), detail: processDetail(processes)) { process in
             bytesString(process.memoryBytes)
         }
     }
 
-    private func applyDisk(_ disk: DiskSnapshot) {
+    private func applyDisk(_ sample: Snapshot) {
+        let disk = sample.resources.disk
         diskFree.attributedStringValue = sizeText(disk.availableBytes, size: 31, binary: false)
         diskCapacity.stringValue = L10n.format("전체 %@", bytesString(disk.totalBytes, binary: false))
         let percentage = disk.totalBytes.flatMap { total in disk.availableBytes.map { total > 0 ? max(0, total - $0) / total * 100 : 0 } }
@@ -943,6 +972,18 @@ final class PanelController: NSViewController {
         diskWrite.attributedStringValue = rateText(disk.writeBytesPerSecond, placeholder: placeholder)
         presentHistory(diskReadHistory, in: diskReadGraph)
         presentHistory(diskWriteHistory, in: diskWriteGraph)
+        let temperature = NSMutableAttributedString(attributedString: temperatureText(sample.ssdTemperature))
+        temperature.addAttribute(.foregroundColor, value: sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor, range: NSRange(location: 0, length: temperature.length - 3))
+        ssdTemp.attributedStringValue = temperature
+        ssdTemp.toolTip = L10n.format("내장 SSD NAND 센서 %d개 중 최댓값", sample.ssdSensors)
+        ssdTemp.setAccessibilityLabel(L10n.format("SSD 온도 %@", sample.ssdTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
+    }
+
+    private func applyNetwork(_ sample: Snapshot) {
+        upValue.attributedStringValue = rateText(sample.upload, size: 26)
+        downValue.attributedStringValue = rateText(sample.download, size: 26)
+        presentHistory(uploadHistory, in: upGraph)
+        presentHistory(downloadHistory, in: downGraph)
     }
 
     func updateLoginState() {
@@ -979,17 +1020,22 @@ extension PanelController {
     func probeSetVisible(_ visible: Bool) { probeVisible = visible }
     func probeSelectTab(_ index: Int) {
         tabs.selectedSegment = index
-        showSelectedTab()
+        changeTab()
     }
     func probeToggleSettings() { toggleMenuBarSettings() }
     var probeStrings: [String: String] {
         ["cpu": cpuTemp.stringValue, "cpuPercent": cpuPercent.stringValue,
          "memory": memoryUsed.stringValue, "memoryTotal": memoryTotal.stringValue,
-         "processes": processCount.stringValue, "disk": diskFree.stringValue,
+         "processes": tabs.selectedSegment == 1 ? memoryRanking.probeCount : cpuRanking.probeCount,
+         "cpuProcesses": cpuRanking.probeCount, "memoryProcesses": memoryRanking.probeCount,
+         "disk": diskFree.stringValue, "ssdTemperature": ssdTemp.stringValue,
          "upload": upValue.stringValue, "diskRead": diskRead.stringValue,
          "thermal": thermalDetail.stringValue, "uptime": uptimeLabel.stringValue,
          "updated": updated.stringValue]
     }
+    var probeSelectedTab: Int { tabs.selectedSegment }
+    var probeTabLabels: [String] { Self.tabLabels.map(L10n.text) }
+    var probeRankingTexts: [String: [String]] { ["cpu": cpuRanking.probeRows, "memory": memoryRanking.probeRows] }
     var probeHistoryTimes: [[TimeInterval]] {
         [cpuHistory.points.map(\.time), uploadHistory.points.map { $0.0.timeIntervalSince1970 },
          downloadHistory.points.map { $0.0.timeIntervalSince1970 },

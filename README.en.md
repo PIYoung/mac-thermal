@@ -6,7 +6,7 @@ A free, open-source menu bar app for a quick look at your Mac's temperature and 
 
 **Made with AI.** The code, UI, translations, and documentation were created with OpenAI Codex and refined through iterative user feedback.
 
-![Mac Thermal overview panel](docs/images/mac-thermal-summary.png)
+![Mac Thermal CPU panel](docs/images/mac-thermal-cpu.png)
 
 The real UI is rendered with synthetic example data. Glass effects vary with the macOS version.
 
@@ -14,7 +14,7 @@ The real UI is rendered with synthetic example data. Glass effects vary with the
 
 - **In the menu bar:** CPU temperature and utilization, SSD read/write rates, and network upload/download rates.
 - **Indicators with motion:** CPU rhythm bars or orbiting dots, network flow in each transfer direction, and an SSD tank showing used capacity with waves driven by I/O activity.
-- **Details in one click:** Overview, memory pressure and swap, the top three processes by CPU and memory, SSD activity and capacity, and time since boot.
+- **Details by resource:** CPU, Memory, SSD, and Network tabs show usage and graphs. The CPU and Memory tabs include their top three processes; CPU and SSD temperatures appear as supporting information. Time since boot is also available.
 - **Your preferences:** Instantly switch between Korean, English, Japanese, and Simplified Chinese at the top of Settings. Adjust motion, intensity, and launch at login. Korean is the default language.
 - **At home on macOS:** Light and dark appearance, Liquid Glass on macOS 26, Reduce Motion, and keyboard navigation.
 - **Local only:** No accounts, ads, analytics, tracking, server uploads, administrator helper, or fan control.
@@ -23,7 +23,7 @@ The real UI is rendered with synthetic example data. Glass effects vary with the
 
 Requires an **Apple Silicon Mac running macOS 14 or later**. Current releases are ARM64 only; Intel Macs are not supported.
 
-1. [Download the latest DMG](https://github.com/PIYoung/mac-thermal/releases/latest/download/Mac-Thermal-v2.3.0-arm64.dmg).
+1. [Download the latest DMG](https://github.com/PIYoung/mac-thermal/releases/latest/download/Mac-Thermal-v2.4.0-arm64.dmg).
 2. Open it and drag **Mac Thermal.app** into **Applications**.
 3. Launch the app and click its menu bar indicators. It does not show a Dock icon.
 
@@ -45,7 +45,7 @@ This builds locally, installs to `~/Applications/Mac Thermal.app`, and launches 
 
 ## Use
 
-Click the menu bar to open a fixed-size panel. The **Settings** icon at the top right toggles settings. Language, the selected tab, and motion preferences persist across launches. Manage automatic startup in **Settings → Launch at login**. First-launch registration happens automatically only when the app runs from `~/Applications`, the source installer's destination. A DMG installation in `/Applications` does not register automatically. If macOS requests approval, allow it in the system's Login Items settings.
+Click the menu bar to open a fixed-size panel. The **Settings** icon at the top right toggles settings. The CPU tab opens initially; after that, the app remembers the last tab you viewed. Language, the selected tab, and motion preferences persist across launches. Manage automatic startup in **Settings → Launch at login**. First-launch registration happens automatically only when the app runs from `~/Applications`, the source installer's destination. A DMG installation in `/Applications` does not register automatically. If macOS requests approval, allow it in the system's Login Items settings.
 
 Menu bar text turns orange or red when macOS reports elevated thermal pressure. This uses the system's thermal state rather than arbitrary temperature thresholds. The app does not control cooling or fan speed.
 
