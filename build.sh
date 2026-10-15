@@ -1,6 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
 project_dir="${0:A:h}"
+source_dir="$project_dir/Sources"
 build_dir="$project_dir/build"
 app_dir="$build_dir/Mac Thermal.app"
 
@@ -24,14 +25,14 @@ done
 # bundle so removed resources cannot leak into a release.
 rm -rf -- "$app_dir"
 mkdir -p "$build_dir" "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
-xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$project_dir/ThermalSensors.c" -o "$build_dir/ThermalSensors.o"
-xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$project_dir/SystemMetrics.c" -o "$build_dir/SystemMetrics.o"
-xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$project_dir/ResourceMetrics.c" -o "$build_dir/ResourceMetrics.o"
-xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$project_dir/DiskMetrics.c" -o "$build_dir/DiskMetrics.o"
-xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$build_dir/module-cache" -import-objc-header "$project_dir/BridgingHeader.h" "$project_dir/Localization.swift" "$project_dir/PanelTranslations.swift" "$project_dir/SystemTranslations.swift" "$project_dir/LoginItem.swift" "$project_dir/Uptime.swift" "$project_dir/CPUUsageHistory.swift" "$project_dir/MenuBarPreferences.swift" "$project_dir/Resources.swift" "$project_dir/LiquidTabs.swift" "$project_dir/Panel.swift" "$project_dir/MenuBarContent.swift" "$project_dir/DashboardWindow.swift" "$project_dir/main.swift" "$build_dir/ThermalSensors.o" "$build_dir/SystemMetrics.o" "$build_dir/ResourceMetrics.o" "$build_dir/DiskMetrics.o" -framework AppKit -framework QuartzCore -framework IOKit -framework CoreFoundation -framework ServiceManagement -o "$app_dir/Contents/MacOS/MacThermal"
-cp "$project_dir/Info.plist" "$app_dir/Contents/Info.plist"
+xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$source_dir/ThermalSensors.c" -o "$build_dir/ThermalSensors.o"
+xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$source_dir/SystemMetrics.c" -o "$build_dir/SystemMetrics.o"
+xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$source_dir/ResourceMetrics.c" -o "$build_dir/ResourceMetrics.o"
+xcrun clang -arch arm64 -std=c11 -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 -c "$source_dir/DiskMetrics.c" -o "$build_dir/DiskMetrics.o"
+xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$build_dir/module-cache" -import-objc-header "$source_dir/BridgingHeader.h" "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/LoginItem.swift" "$source_dir/Uptime.swift" "$source_dir/CPUUsageHistory.swift" "$source_dir/MenuBarPreferences.swift" "$source_dir/Resources.swift" "$source_dir/LiquidTabs.swift" "$source_dir/Panel.swift" "$source_dir/MenuBarContent.swift" "$source_dir/DashboardWindow.swift" "$source_dir/main.swift" "$build_dir/ThermalSensors.o" "$build_dir/SystemMetrics.o" "$build_dir/ResourceMetrics.o" "$build_dir/DiskMetrics.o" -framework AppKit -framework QuartzCore -framework IOKit -framework CoreFoundation -framework ServiceManagement -o "$app_dir/Contents/MacOS/MacThermal"
+cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
 cp "$project_dir/LICENSE" "$project_dir/THIRD_PARTY_NOTICES.txt" "$project_dir/ASSET_PROVENANCE.md" "$app_dir/Contents/Resources/"
-xcrun swift -module-cache-path "$build_dir/module-cache" "$project_dir/DrawIcon.swift" "$build_dir/AppIcon.iconset"
+xcrun swift -module-cache-path "$build_dir/module-cache" "$project_dir/scripts/DrawIcon.swift" "$build_dir/AppIcon.iconset"
 iconutil -c icns "$build_dir/AppIcon.iconset" -o "$app_dir/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$app_dir"
 codesign --verify --strict "$app_dir"

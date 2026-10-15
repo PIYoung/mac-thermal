@@ -27,6 +27,16 @@ To build without running the checks, use `zsh build.sh`. To build and install lo
 
 The checks use isolated preference domains. Do not add tests that modify the user's actual language, launch-at-login setting, or menu bar preferences. Real sensor behavior and sleep/wake behavior still need manual verification when affected. See [measurement details](docs/DETAILS.md) for calculations and additional resource probes; this document is currently in Korean.
 
+## Project layout
+
+- `Sources/`: application Swift code and native C collectors with their headers.
+- `Resources/`: application bundle metadata (`Info.plist`).
+- `tests/probes/`: isolated checks and optional live measurement probes.
+- `scripts/`: check runners, installation, release packaging, and icon/document preview generation.
+- `docs/`: measurement details and documentation images.
+
+Run commands from the repository root. `build/` and `dist/` contain generated files and are excluded from Git.
+
 ## Send a pull request
 
 Keep the change focused and explain the problem, resulting behavior, and verification. For UI work, include before/after images using synthetic values where possible. State which macOS and hardware combinations you actually tested, and distinguish those from expected compatibility.
@@ -43,7 +53,7 @@ If a feature needs a new external service, permission, dependency, or license, o
 
 ## Translations
 
-App translations live in `PanelTranslations.swift` and `SystemTranslations.swift`. Korean source strings are the keys; each value lists English, Japanese, then Simplified Chinese. Preserve format specifiers such as `%@` and `%d`. Keep labels short enough for the existing panel, and run `zsh run_localization_probe.sh` after changes.
+App translations live in `Sources/PanelTranslations.swift` and `Sources/SystemTranslations.swift`. Korean source strings are the keys; each value lists English, Japanese, then Simplified Chinese. Preserve format specifiers such as `%@` and `%d`. Keep labels short enough for the existing panel, and run `zsh scripts/run_localization_probe.sh` after changes.
 
 The public READMEs are `README.md` (Korean), `README.en.md`, `README.ja.md`, and `README.zh-CN.md`. Update all four when installation requirements or user-facing behavior changes. Native-language corrections are welcome.
 

@@ -27,7 +27,7 @@
 | 메모리 온도 | 제공하지 않습니다. 확인되지 않은 PMU 값을 RAM 온도로 표시하지 않습니다. |
 | 열 상태 | `ProcessInfo.processInfo.thermalState`의 `nominal` / `fair` / `serious` / `critical`을 사용합니다. 온도 숫자로 자체 판정하지 않습니다. |
 
-CPU 센서의 현재 SMC 키 목록은 [ThermalSensors.c](../ThermalSensors.c)에 있습니다. PMU `tdie`·`tdev` 값은 CPU 온도에 포함하지 않습니다. 유효 범위를 벗어나거나 비정상인 온도는 제외합니다.
+CPU 센서의 현재 SMC 키 목록은 [ThermalSensors.c](../Sources/ThermalSensors.c)에 있습니다. PMU `tdie`·`tdev` 값은 CPU 온도에 포함하지 않습니다. 유효 범위를 벗어나거나 비정상인 온도는 제외합니다.
 
 열 상태가 `fair`이면 메뉴 막대 글자와 온도 숫자를 주황색, `serious`·`critical`이면 빨간색으로 표시합니다. 정상으로 돌아오면 기본 색상으로 복구합니다. 경고는 상태를 알려주는 표시이며 냉각을 직접 제어하지 않습니다.
 
@@ -113,9 +113,9 @@ zsh scripts/check.sh
 
 ```sh
 mkdir -p build
-xcrun clang -std=c11 -O2 -Wall -Wextra -Werror resource_metrics_probe.c ResourceMetrics.c DiskMetrics.c -framework IOKit -framework CoreFoundation -o build/resource-metrics-probe
+xcrun clang -std=c11 -O2 -Wall -Wextra -Werror -I Sources tests/probes/resource_metrics_probe.c Sources/ResourceMetrics.c Sources/DiskMetrics.c -framework IOKit -framework CoreFoundation -o build/resource-metrics-probe
 build/resource-metrics-probe
-xcrun clang -std=c11 -O2 -Wall -Wextra -Werror resource_cpu_units_probe.c ResourceMetrics.c -o build/resource-cpu-units-probe
+xcrun clang -std=c11 -O2 -Wall -Wextra -Werror -I Sources tests/probes/resource_cpu_units_probe.c Sources/ResourceMetrics.c -o build/resource-cpu-units-probe
 build/resource-cpu-units-probe
 ```
 

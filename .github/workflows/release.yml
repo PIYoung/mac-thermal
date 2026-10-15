@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release version matching Info.plist, for example v2.3.0
+        description: Release version matching Resources/Info.plist, for example v2.3.0
         required: true
         type: string
 
@@ -32,7 +32,7 @@ jobs:
           tag = os.environ['RELEASE_TAG']
           if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
               raise SystemExit('Expected a vMAJOR.MINOR.PATCH tag.')
-          with open('Info.plist', 'rb') as stream:
+          with open('Resources/Info.plist', 'rb') as stream:
               version = plistlib.load(stream)['CFBundleShortVersionString']
           if tag != f'v{version}':
               raise SystemExit(f'Tag {tag} does not match app version {version}.')

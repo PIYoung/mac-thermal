@@ -14,7 +14,7 @@ esac
 
 app_dir="$project_dir/build/Mac Thermal.app"
 dist_dir="$project_dir/dist"
-version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$project_dir/Info.plist")"
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$project_dir/Resources/Info.plist")"
 [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || { print -u2 -- "Invalid release version: $version"; exit 1; }
 app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_dir/Contents/Info.plist")"
 [[ "$app_version" == "$version" ]] || { print -u2 -- "The built app version does not match Info.plist."; exit 1; }

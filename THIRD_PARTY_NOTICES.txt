@@ -2,7 +2,7 @@ Mac Thermal — third-party notices
 
 Stats (https://github.com/exelban/stats)
 The SMC protocol and temperature sensor key mappings were consulted when
-implementing ThermalSensors.c. Stats is not bundled as a library. This notice
+implementing Sources/ThermalSensors.c. Stats is not bundled as a library. This notice
 preserves the upstream copyright and permission notice for any adapted portions.
 The CPU graph, interface, uptime feature and application icon are independently
 implemented in this project; no Stats UI assets or branding are included.

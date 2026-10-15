@@ -115,7 +115,7 @@ enum LocalizationProbe {
         var callCount = 0
         var koreanLiteralCount = 0
         for name in sourceNames {
-            let source = try String(contentsOf: project.appendingPathComponent(name), encoding: .utf8)
+            let source = try String(contentsOf: project.appendingPathComponent("Sources").appendingPathComponent(name), encoding: .utf8)
             let ns = source as NSString
             for match in literalRegex.matches(in: source, range: NSRange(location: 0, length: ns.length)) {
                 let literal = ns.substring(with: match.range(at: 1))
