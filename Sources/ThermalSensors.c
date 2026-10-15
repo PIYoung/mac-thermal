@@ -147,6 +147,7 @@ MTThermalReading mt_thermal_read(void) {
         if (smc_read(cpu_keys[i], &value)) add_reading(value, &reading.cpu_celsius, &reading.cpu_sensor_count);
     }
     if (reading.cpu_sensor_count) snprintf(reading.cpu_source, sizeof(reading.cpu_source), "SMC CPU sensors (max)");
+    const bool smc_cpu_available = reading.cpu_sensor_count > 0;
     hid_open();
     if (hid_client) {
         CFArrayRef services = copy_services(hid_client);
@@ -160,7 +161,9 @@ MTThermalReading mt_thermal_read(void) {
                 CFRelease(product);
                 bool is_cpu = valid && (strncmp(name, "pACC MTR Temp Sensor", 19) == 0 || strncmp(name, "eACC MTR Temp Sensor", 19) == 0);
                 bool is_ssd = valid && strncmp(name, "NAND CH", 7) == 0 && strstr(name, "temp");
-                if (!is_cpu && !is_ssd) continue;
+                /* SMC is preferred, so these CPU events would be discarded.
+                 * Continue reading every HID CPU sensor when SMC is absent. */
+                if ((!is_cpu || smc_cpu_available) && !is_ssd) continue;
                 CFTypeRef event = copy_event(service, 15, 0, 0);
                 if (!event) continue;
                 double value = event_float(event, 15 << 16);

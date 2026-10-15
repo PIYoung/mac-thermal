@@ -27,6 +27,8 @@ To build without running the checks, use `zsh build.sh`. To build and install lo
 
 The checks use isolated preference domains. Do not add tests that modify the user's actual language, launch-at-login setting, or menu bar preferences. Real sensor behavior and sleep/wake behavior still need manual verification when affected. See [measurement details](docs/DETAILS.md) for calculations and additional resource probes; this document is currently in Korean.
 
+Optional synthetic timing probes are available with `zsh scripts/run_menu_render_probe.sh --benchmark` and `zsh scripts/run_panel_updates_probe.sh --benchmark`. These measure specific rendering/update paths, not overall app CPU usage or battery life. Keep timing thresholds out of the default checks; use deterministic output and behavior assertions for regression coverage.
+
 ## Project layout
 
 - `Sources/`: application Swift code and native C collectors with their headers.

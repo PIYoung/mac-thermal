@@ -1,5 +1,13 @@
 # Releases
 
+## Unreleased
+
+- Resolve process names only for the final CPU/memory top-three entries, reusing names for shared PIDs.
+- Reuse menu bar text measurements across animation frames while preserving the existing appearance and 8fps limit.
+- Defer hidden panel and inactive tab display updates while retaining measurement history and showing the latest values when opened.
+- Skip unused HID CPU events when valid SMC CPU readings already take priority; preserve sensor fallbacks.
+- Add synthetic ranking, sensor fallback, cache invalidation and panel lifecycle regression checks.
+
 ## v2.3.0 — 2026-10-15
 
 First public release of Mac Thermal. Created with AI assistance using OpenAI Codex and iterative user feedback. MIT licensed.

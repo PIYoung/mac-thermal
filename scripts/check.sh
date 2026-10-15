@@ -9,6 +9,9 @@ mkdir -p "$check_dir"
 zsh "$project_dir/build.sh"
 zsh "$project_dir/scripts/run_localization_probe.sh"
 zsh "$project_dir/scripts/run_menu_render_probe.sh"
+zsh "$project_dir/scripts/run_process_ranking_probe.sh"
+zsh "$project_dir/scripts/run_thermal_fallback_probe.sh"
+zsh "$project_dir/scripts/run_panel_updates_probe.sh"
 
 # These probes use isolated preference suites and synthetic history samples.
 # They do not enumerate other processes, read sensors, or change app settings.
@@ -20,4 +23,4 @@ xcrun swiftc -O -target arm64-apple-macosx14.0 \
   -framework AppKit -o "$check_dir/ui-metrics-probe"
 "$check_dir/ui-metrics-probe"
 
-print -- "Build, localization, menu rendering, uptime, and CPU history checks passed."
+print -- "Build, localization, menu rendering, process ranking, thermal fallback, panel updates, uptime, and CPU history checks passed."

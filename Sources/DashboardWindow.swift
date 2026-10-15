@@ -49,6 +49,7 @@ final class DashboardWindow: NSPanel {
         let inset = PanelController.surfaceInset
         let windowOrigin = NSPoint(x: origin.x - inset, y: origin.y - inset)
         setFrame(NSRect(origin: windowOrigin, size: PanelController.size), display: false)
+        (contentViewController as? PanelController)?.prepareForPresentation()
         contentView?.layoutSubtreeIfNeeded()
         animateOpening()
         makeKeyAndOrderFront(nil)

@@ -21,6 +21,7 @@ final class MenuBarContent: NSObject {
     private var lastTick: TimeInterval?
     private var previewAppearance: NSAppearance?
     private var textSignature = ""
+    private var displayWidth = MenuBarContent.imageSize.width
 
     var preferences = MenuBarPreferences.load() {
         didSet {
@@ -77,10 +78,11 @@ final class MenuBarContent: NSObject {
 
     func update(sample: Snapshot) {
         self.sample = sample
-        let signature = labels.joined(separator: "|") + "|\(sample.thermal.level)"
+        let lines = labels
+        let signature = lines.joined(separator: "|") + "|\(sample.thermal.level)"
         if signature != textSignature || baseImage == nil {
             textSignature = signature
-            rebuildBase()
+            rebuildBase(labels: lines)
         }
         updateAccessibility()
         configureAnimation()
@@ -205,7 +207,7 @@ final class MenuBarContent: NSObject {
         return context
     }
 
-    private func rebuildBase() {
+    private func rebuildBase(labels preparedLabels: [String]? = nil) {
         scale = max(1, button?.window?.backingScaleFactor ?? 2)
         guard let context = context() else { return }
         let appearance = previewAppearance ?? button?.effectiveAppearance ?? NSAppearance.currentDrawing()
@@ -214,7 +216,12 @@ final class MenuBarContent: NSObject {
             ink = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-            let lines = labels
+            let lines = preparedLabels ?? labels
+            // Text only changes with a new sample or appearance. Measuring it in
+            // the animation painter repeated formatting and font layout eight times a second.
+            let top = (lines[4] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
+            let bottom = (lines[5] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
+            displayWidth = min(Self.imageSize.width, max(220, ceil(200 + max(top, bottom) + 4)))
             for (index, x, width) in [(0, CGFloat(30), CGFloat(43)), (2, 106, 59), (4, 200, 59)] {
                 drawText(lines[index], at: NSPoint(x: x, y: 10.4), width: width, size: 9.3, color: color)
                 drawText(lines[index + 1], at: NSPoint(x: x, y: 0.2), width: width, size: 8.6, color: color)
@@ -235,13 +242,6 @@ final class MenuBarContent: NSObject {
             attributes[.font] = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .medium)
         }
         (value as NSString).draw(at: point, withAttributes: attributes)
-    }
-
-    private var displayWidth: CGFloat {
-        let lines = labels
-        let top = (lines[4] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
-        let bottom = (lines[5] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
-        return min(Self.imageSize.width, max(220, ceil(200 + max(top, bottom) + 4)))
     }
 
     private func displayFrame() {
@@ -343,15 +343,24 @@ final class MenuBarContent: NSObject {
 
     /// Offscreen fixtures exercise the same painter without changing the menu bar.
     static func preview(sample: Snapshot, preferences: MenuBarPreferences, dark: Bool, phase: Double) -> NSImage? {
+        previewRenderer(sample: sample, preferences: preferences, dark: dark)(phase, nil)
+    }
+
+    /// Keep one painter alive to exercise successive frames and sample invalidation.
+    /// The optional sample follows the same update path as the live status button.
+    static func previewRenderer(sample: Snapshot, preferences: MenuBarPreferences, dark: Bool) -> (Double, Snapshot?) -> NSImage? {
         let content = MenuBarContent(frame: .zero)
         content.sample = sample
         content.preferences = preferences
         content.previewAppearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        content.cpuPhase = phase
-        content.uploadPhase = phase
-        content.downloadPhase = phase
-        content.diskPhase = phase
         content.rebuildBase()
-        return content.composite()
+        return { phase, replacement in
+            if let replacement { content.update(sample: replacement) }
+            content.cpuPhase = phase
+            content.uploadPhase = phase
+            content.downloadPhase = phase
+            content.diskPhase = phase
+            return content.composite()
+        }
     }
 }

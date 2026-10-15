@@ -164,6 +164,65 @@ struct MenuRenderProbe {
         print("PASS region pixels: CPU/SSD/network active motion, zero activity frozen, motion-off frozen")
     }
 
+    static func benchmark(_ sample: Snapshot) throws {
+        let frames = 1_000
+        let rounds = 5
+        for dark in [false, true] {
+            for style in MenuBarAnimationStyle.allCases {
+                let painter = MenuBarContent.previewRenderer(sample: sample,
+                    preferences: MenuBarPreferences(style: style), dark: dark)
+                // Reuse a painter exactly as the eight-fps status button does:
+                // creating its text raster and observers is outside the timed loop.
+                for frame in 0..<100 { _ = painter(Double(frame % 100) / 100, nil) }
+                var durations: [Double] = []
+                var widths = 0.0
+                var failed = false
+                for _ in 0..<rounds {
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    for frame in 0..<frames {
+                        autoreleasepool {
+                            if let image = painter(Double(frame % 100) / 100, nil) {
+                                widths += image.size.width
+                            } else { failed = true }
+                        }
+                    }
+                    let elapsed = DispatchTime.now().uptimeNanoseconds - start
+                    durations.append(Double(elapsed) / Double(frames) / 1_000)
+                }
+                try check(!failed && widths > 0, "benchmark frame unavailable")
+                let median = durations.sorted()[rounds / 2]
+                print(String(format: "BENCH %@ %@: median %.3f us/frame (%d rounds x %d frames)",
+                    dark ? "dark" : "light", style == .rhythm ? "rhythm" : "orbit", median, rounds, frames))
+            }
+        }
+    }
+
+    static func sampleInvalidationChecks(_ fixtures: [Fixture]) throws {
+        for dark in [false, true] {
+            for style in MenuBarAnimationStyle.allCases {
+                let preferences = MenuBarPreferences(style: style)
+                let painter = MenuBarContent.previewRenderer(sample: fixtures[0].sample,
+                    preferences: preferences, dark: dark)
+                for fixture in fixtures + fixtures.reversed() {
+                    guard let updated = painter(0.17, fixture.sample),
+                          let fresh = MenuBarContent.preview(sample: fixture.sample, preferences: preferences,
+                            dark: dark, phase: 0.17),
+                          let updatedCG = updated.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                          let freshCG = fresh.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                          let updatedBytes = updatedCG.dataProvider?.data,
+                          let freshBytes = freshCG.dataProvider?.data else {
+                        throw ProbeError.failed("sample invalidation renderer unavailable")
+                    }
+                    try check(updated.size == fresh.size,
+                        "cached width did not follow sample changes for \(fixture.name)")
+                    try check((updatedBytes as Data) == (freshBytes as Data),
+                        "cached text pixels did not follow sample changes for \(fixture.name)")
+                }
+            }
+        }
+        print("PASS persistent sample changes: identical text, pixels, and compact width in both directions")
+    }
+
     static func main() {
         do { try run() }
         catch {
@@ -198,6 +257,8 @@ struct MenuRenderProbe {
                 read: 999_400_000_000, write: 999_900_000_000,
                 upload: 999_400_000_000, download: 999_900_000_000, thermalState: .serious)
         ]
+        try sampleInvalidationChecks(fixtures)
+        if CommandLine.arguments.contains("--benchmark") { try benchmark(fixtures[2].sample) }
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         try regionMotionChecks(active: fixtures[2].sample, idle: fixtures[0].sample, reduceMotion: reduceMotion)
         var count = 0

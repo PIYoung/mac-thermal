@@ -138,6 +138,35 @@ static void mt_insert_top(MTProcessEntry top[3], int *count,
     }
 }
 
+static void mt_read_process_name(MTProcessEntry *entry) {
+    /* Only the final top entries need a name. Do not query paths or args. */
+    if (proc_name(entry->pid, entry->name, sizeof(entry->name)) <= 0 ||
+        entry->name[0] == '\0') {
+        snprintf(entry->name, sizeof(entry->name), "PID %d", entry->pid);
+    }
+    entry->name[sizeof(entry->name) - 1] = '\0';
+}
+
+static void mt_read_top_names(MTProcessMetrics *metrics) {
+    for (int index = 0; index < metrics->memory_count; ++index) {
+        mt_read_process_name(&metrics->memory_top[index]);
+    }
+    for (int index = 0; index < metrics->cpu_count; ++index) {
+        MTProcessEntry *entry = &metrics->cpu_top[index];
+        int reused = 0;
+        for (int memory_index = 0; memory_index < metrics->memory_count;
+             ++memory_index) {
+            const MTProcessEntry *memory = &metrics->memory_top[memory_index];
+            if (entry->pid == memory->pid) {
+                memcpy(entry->name, memory->name, sizeof(entry->name));
+                reused = 1;
+                break;
+            }
+        }
+        if (!reused) mt_read_process_name(entry);
+    }
+}
+
 static void mt_clear_process_baseline(void) {
     free(mt_previous_processes);
     mt_previous_processes = NULL;
@@ -224,12 +253,6 @@ MTProcessMetrics mt_process_metrics_sample(void) {
         MTProcessEntry entry = {0};
         entry.pid = pids[index];
         entry.memory_bytes = usage.ri_phys_footprint;
-        /* Collect only a process name, never its path, command line or args. */
-        if (proc_name(pids[index], entry.name, sizeof(entry.name)) <= 0 ||
-            entry.name[0] == '\0') {
-            snprintf(entry.name, sizeof(entry.name), "PID %d", pids[index]);
-        }
-        entry.name[sizeof(entry.name) - 1] = '\0';
         ++metrics.readable_count;
         mt_insert_top(metrics.memory_top, &metrics.memory_count, &entry, 0);
 
@@ -254,6 +277,7 @@ MTProcessMetrics mt_process_metrics_sample(void) {
         entry.cpu_usage_percent = percent > 100.0 ? 100.0 : percent;
         mt_insert_top(metrics.cpu_top, &metrics.cpu_count, &entry, 1);
     }
+    mt_read_top_names(&metrics);
     free(pids);
     qsort(current, current_count, sizeof(*current), mt_baseline_compare);
     mt_clear_process_baseline();

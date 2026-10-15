@@ -3,7 +3,13 @@ set -euo pipefail
 project_dir="${0:A:h:h}"
 source_dir="$project_dir/Sources"
 build_dir="$project_dir/build"
-mkdir -p "$build_dir" "$build_dir/menu-previews"
+output_dir="$build_dir/menu-previews"
+case "${1:-}" in
+  ""|--benchmark) ;;
+  *) print -u2 -- "Usage: zsh scripts/run_menu_render_probe.sh [--benchmark]"; exit 2 ;;
+esac
+(( $# <= 1 )) || { print -u2 -- "Too many arguments."; exit 2; }
+mkdir -p "$build_dir" "$output_dir"
 /usr/bin/python3 - "$project_dir" <<'PY'
 from pathlib import Path
 import sys
@@ -17,4 +23,4 @@ xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$build_dir/mo
   "$build_dir/ProbeModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/MenuBarContent.swift" "$project_dir/tests/probes/menu_render_probe.swift" \
   -framework AppKit -framework QuartzCore -o "$build_dir/menu_render_probe"
-"$build_dir/menu_render_probe" "$build_dir/menu-previews" 2> "$build_dir/menu-render-probe.log"
+"$build_dir/menu_render_probe" "$output_dir" "$@" 2> "$build_dir/menu-render-probe.log"

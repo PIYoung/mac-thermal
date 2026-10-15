@@ -60,6 +60,7 @@ enum RenderDocPreview {
                 interfaces: 1, cpuSensors: 8, ssdSensors: 2, thermal: ThermalStatus(.nominal),
                 time: time.addingTimeInterval(seconds), uptime: 8_280 + seconds, resources: resources))
         }
+        panel.prepareForPresentation()
         view.layoutSubtreeIfNeeded()
         view.displayIfNeeded()
         CATransaction.flush()

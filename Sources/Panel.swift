@@ -159,6 +159,18 @@ private final class UsageBar: FlippedView {
     }
 }
 
+private struct ActivityHistory {
+    private(set) var endTime = Date()
+    private(set) var points: [(Date, Double)] = []
+
+    mutating func append(_ value: Double?, at time: Date) {
+        endTime = time
+        let cutoff = time.addingTimeInterval(-60)
+        points.removeAll { $0.0 < cutoff }
+        if let value, value.isFinite, value >= 0 { points.append((time, value)) }
+    }
+}
+
 private final class Sparkline: FlippedView {
     let color: NSColor
     var endTime = Date()
@@ -206,8 +218,8 @@ private final class CPUHistoryGraph: FlippedView {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
-    func append(_ percent: Double?, at time: TimeInterval?) {
-        history.append(percent, at: time)
+    func update(_ history: CPUUsageHistory, percent: Double?) {
+        self.history = history
         updateAccessibility(percent)
         needsDisplay = true
     }
@@ -215,6 +227,10 @@ private final class CPUHistoryGraph: FlippedView {
     func updateAccessibility(_ percent: Double?) {
         setAccessibilityValue(percent.map { L10n.format("현재 %.0f퍼센트", $0) } ?? L10n.text("측정 중"))
     }
+
+    #if PANEL_UPDATES_PROBE
+    var probeTimes: [TimeInterval] { history.points.map(\.time) }
+    #endif
 
     override func draw(_ dirtyRect: NSRect) {
         let plot = bounds.insetBy(dx: 2, dy: 2)
@@ -382,6 +398,24 @@ final class PanelController: NSViewController {
     private var showingMenuBarSettings = false
     private var languageObserver: NSObjectProtocol?
     private var latestSnapshot = Snapshot.pending
+    // Histories continue collecting while the panel or their tab is hidden.
+    // Updating the AppKit views is deferred until they will actually be shown.
+    private var cpuHistory = CPUUsageHistory()
+    private var uploadHistory = ActivityHistory()
+    private var downloadHistory = ActivityHistory()
+    private var diskReadHistory = ActivityHistory()
+    private var diskWriteHistory = ActivityHistory()
+    #if PANEL_UPDATES_PROBE
+    private var probeVisible = false
+    #endif
+
+    private var presentationIsVisible: Bool {
+        #if PANEL_UPDATES_PROBE
+        return probeVisible
+        #else
+        return view.window?.isVisible == true
+        #endif
+    }
     private var menuBarPreferences = MenuBarPreferences.load()
     private var updatingMenuBarControls = false
     private let motionIntensityValue = text("1.20×", size: 11, weight: .semibold, digits: true)
@@ -519,7 +553,7 @@ final class PanelController: NSViewController {
         languageObserver = NotificationCenter.default.addObserver(forName: .appLanguageDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.refreshLanguage()
         }
-        apply(.pending)
+        apply(latestSnapshot, recordHistory: false)
         refreshLanguage()
     }
 
@@ -536,7 +570,6 @@ final class PanelController: NSViewController {
         languageControl.selectItem(at: AppLanguage.allCases.firstIndex(of: L10n.language) ?? 0)
         updateMenuBarControls()
         showSelectedTab()
-        apply(latestSnapshot, recordHistory: false)
         updateLoginState()
     }
 
@@ -744,6 +777,7 @@ final class PanelController: NSViewController {
             content.layer?.removeAnimation(forKey: "tabContentReveal")
             content.isHidden = showingMenuBarSettings || index != tabs.selectedSegment
         }
+        if presentationIsVisible { presentLatestSnapshot() }
     }
 
     @objc private func changeTab() {
@@ -795,17 +829,47 @@ final class PanelController: NSViewController {
         return result
     }
 
-    private func updateHistory(_ graph: Sparkline, value: Double?, at time: Date) {
-        graph.endTime = time
-        let cutoff = time.addingTimeInterval(-60)
-        var points = graph.points.filter { $0.0 >= cutoff }
-        if let value, value.isFinite, value >= 0 { points.append((time, value)) }
-        graph.points = points
+    private func presentHistory(_ history: ActivityHistory, in graph: Sparkline) {
+        graph.endTime = history.endTime
+        graph.points = history.points
     }
 
     func apply(_ sample: Snapshot, recordHistory: Bool = true) {
         latestSnapshot = sample
+        if recordHistory {
+            cpuHistory.append(sample.cpuUsage, at: sample.uptime)
+            uploadHistory.append(sample.upload, at: sample.time)
+            downloadHistory.append(sample.download, at: sample.time)
+            diskReadHistory.append(sample.resources.disk.readBytesPerSecond, at: sample.time)
+            diskWriteHistory.append(sample.resources.disk.writeBytesPerSecond, at: sample.time)
+        }
+        guard isViewLoaded, presentationIsVisible else { return }
+        presentLatestSnapshot()
+    }
+
+    /// Render the latest collected values before opening, without adding samples.
+    /// Offscreen documentation rendering also uses this explicit presentation step.
+    func prepareForPresentation() {
+        _ = view
+        presentLatestSnapshot()
+    }
+
+    private func presentLatestSnapshot() {
         guard isViewLoaded else { return }
+        let sample = latestSnapshot
+        uptimeLabel.stringValue = SystemUptime.label(sample.uptime)
+        updated.stringValue = L10n.format("2초마다 갱신  ·  %@", timeFormatter.string(from: sample.time))
+        guard !showingMenuBarSettings else { return }
+        switch tabs.selectedSegment {
+        case 0: applySummary(sample)
+        case 1: applyMemory(sample.resources.memory)
+        case 2: applyProcesses(sample.resources.processes)
+        case 3: applyDisk(sample.resources.disk)
+        default: break
+        }
+    }
+
+    private func applySummary(_ sample: Snapshot) {
         let temperatureColor = sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor
         for (field, value) in [(cpuTemp, sample.cpuTemperature), (ssdTemp, sample.ssdTemperature)] {
             let attributed = NSMutableAttributedString(attributedString: temperatureText(value))
@@ -819,22 +883,14 @@ final class PanelController: NSViewController {
         cpuTemp.setAccessibilityLabel(L10n.format("CPU 온도 %@", sample.cpuTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
         ssdTemp.setAccessibilityLabel(L10n.format("SSD 온도 %@", sample.ssdTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
         cpuPercent.stringValue = sample.cpuUsage.map { String(format: "%.0f%%", $0) } ?? L10n.text("측정 중")
-        if recordHistory { cpuGraph.append(sample.cpuUsage, at: sample.uptime) }
-        else { cpuGraph.updateAccessibility(sample.cpuUsage) }
+        cpuGraph.update(cpuHistory, percent: sample.cpuUsage)
         cpuGraph.color = sample.thermal.level > 0 ? sample.thermal.color : PanelColor.blue
-        uptimeLabel.stringValue = SystemUptime.label(sample.uptime)
         thermalDetail.stringValue = sample.thermal.detail
         thermalDetail.textColor = sample.thermal.level > 0 ? sample.thermal.color : PanelColor.secondary
         upValue.attributedStringValue = rateText(sample.upload)
         downValue.attributedStringValue = rateText(sample.download)
-        if recordHistory {
-            updateHistory(upGraph, value: sample.upload, at: sample.time)
-            updateHistory(downGraph, value: sample.download, at: sample.time)
-        }
-        applyMemory(sample.resources.memory)
-        applyProcesses(sample.resources.processes)
-        applyDisk(sample.resources.disk, at: sample.time, recordHistory: recordHistory)
-        updated.stringValue = L10n.format("2초마다 갱신  ·  %@", timeFormatter.string(from: sample.time))
+        presentHistory(uploadHistory, in: upGraph)
+        presentHistory(downloadHistory, in: downGraph)
     }
 
     private func applyMemory(_ memory: MemorySnapshot) {
@@ -875,7 +931,7 @@ final class PanelController: NSViewController {
         }
     }
 
-    private func applyDisk(_ disk: DiskSnapshot, at time: Date, recordHistory: Bool) {
+    private func applyDisk(_ disk: DiskSnapshot) {
         diskFree.attributedStringValue = sizeText(disk.availableBytes, size: 31, binary: false)
         diskCapacity.stringValue = L10n.format("전체 %@", bytesString(disk.totalBytes, binary: false))
         let percentage = disk.totalBytes.flatMap { total in disk.availableBytes.map { total > 0 ? max(0, total - $0) / total * 100 : 0 } }
@@ -885,10 +941,8 @@ final class PanelController: NSViewController {
         let placeholder = disk.deviceCount > 0 ? L10n.text("측정 중") : L10n.text("정보 없음")
         diskRead.attributedStringValue = rateText(disk.readBytesPerSecond, placeholder: placeholder)
         diskWrite.attributedStringValue = rateText(disk.writeBytesPerSecond, placeholder: placeholder)
-        if recordHistory {
-            updateHistory(diskReadGraph, value: disk.readBytesPerSecond, at: time)
-            updateHistory(diskWriteGraph, value: disk.writeBytesPerSecond, at: time)
-        }
+        presentHistory(diskReadHistory, in: diskReadGraph)
+        presentHistory(diskWriteHistory, in: diskWriteGraph)
     }
 
     func updateLoginState() {
@@ -918,3 +972,38 @@ final class PanelController: NSViewController {
     @objc private func quitApp() { NSApp.terminate(nil) }
     @objc private func refreshNow() { refresh?() }
 }
+
+#if PANEL_UPDATES_PROBE
+// Synthetic offscreen checks only; none of these hooks are in release builds.
+extension PanelController {
+    func probeSetVisible(_ visible: Bool) { probeVisible = visible }
+    func probeSelectTab(_ index: Int) {
+        tabs.selectedSegment = index
+        showSelectedTab()
+    }
+    func probeToggleSettings() { toggleMenuBarSettings() }
+    var probeStrings: [String: String] {
+        ["cpu": cpuTemp.stringValue, "cpuPercent": cpuPercent.stringValue,
+         "memory": memoryUsed.stringValue, "memoryTotal": memoryTotal.stringValue,
+         "processes": processCount.stringValue, "disk": diskFree.stringValue,
+         "upload": upValue.stringValue, "diskRead": diskRead.stringValue,
+         "thermal": thermalDetail.stringValue, "uptime": uptimeLabel.stringValue,
+         "updated": updated.stringValue]
+    }
+    var probeHistoryTimes: [[TimeInterval]] {
+        [cpuHistory.points.map(\.time), uploadHistory.points.map { $0.0.timeIntervalSince1970 },
+         downloadHistory.points.map { $0.0.timeIntervalSince1970 },
+         diskReadHistory.points.map { $0.0.timeIntervalSince1970 },
+         diskWriteHistory.points.map { $0.0.timeIntervalSince1970 }]
+    }
+    var probePresentedHistoryTimes: [[TimeInterval]] {
+        [upGraph.points.map { $0.0.timeIntervalSince1970 },
+         downGraph.points.map { $0.0.timeIntervalSince1970 },
+         diskReadGraph.points.map { $0.0.timeIntervalSince1970 },
+         diskWriteGraph.points.map { $0.0.timeIntervalSince1970 }]
+    }
+    var probeCPUHistoryRuns: [[CPUUsageHistory.Point]] { cpuHistory.runs }
+    var probePresentedCPUHistoryTimes: [TimeInterval] { cpuGraph.probeTimes }
+    var probeSurfaceFrames: [NSRect] { tabViews.map(\.frame) + [menuBarSettingsView.frame] }
+}
+#endif
