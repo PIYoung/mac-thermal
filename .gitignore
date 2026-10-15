@@ -1,0 +1,11 @@
+build/
+dist/
+*.o
+sensor-probe
+metrics-probe
+releases/
+.DS_Store
+local-baseline.json
+*.dmg
+*.zip
+local-development-release-history.md

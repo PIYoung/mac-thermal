@@ -1,0 +1,16 @@
+# Releases
+
+## v2.3.0 — 2026-10-15
+
+First public release of Mac Thermal. Created with AI assistance using OpenAI Codex and iterative user feedback. MIT licensed.
+
+- CPU temperature/utilization, SSD read/write and network transfer rates in the menu bar.
+- Overview, Memory, Top 3 processes and SSD tabs; uptime and system thermal state.
+- Rhythm bars or orbiting dots, network flow and SSD activity waves; motion preferences and Reduce Motion support.
+- Korean default, English, Japanese and Simplified Chinese. The language selector is at the top of Settings.
+- Apple Silicon ARM64, macOS 14 or later. CPU sensors validated on Apple M4 Pro; other hardware compatibility is unverified.
+- DMG and ZIP downloads with SHA-256 checksums; local source build installer.
+
+The binary is ad-hoc signed and is not Developer ID signed or notarized. macOS may block a downloaded copy. Source builds require the macOS 26 SDK. See the README for installation and compatibility details.
+
+Only the current reviewed source and newly built application are published. Earlier local development builds are not part of this public release.

@@ -1,0 +1,57 @@
+name: Package release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release version matching Info.plist, for example v2.3.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import plistlib
+          import re
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
+              raise SystemExit('Expected a vMAJOR.MINOR.PATCH tag.')
+          with open('Info.plist', 'rb') as stream:
+              version = plistlib.load(stream)['CFBundleShortVersionString']
+          if tag != f'v{version}':
+              raise SystemExit(f'Tag {tag} does not match app version {version}.')
+          PY
+      - name: Build and run isolated checks
+        run: zsh scripts/check.sh
+      - name: Package DMG, ZIP, and checksums
+        run: zsh scripts/package-release.sh --skip-build
+      - name: Verify release checksums
+        working-directory: dist
+        run: shasum -a 256 -c SHA256SUMS
+      # Download and review these files, then publish a GitHub Release manually.
+      - name: Upload release files for maintainer review
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: Mac-Thermal-${{ inputs.tag }}-arm64
+          path: |
+            dist/Mac-Thermal-${{ inputs.tag }}-arm64.dmg
+            dist/Mac-Thermal-${{ inputs.tag }}-arm64.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
