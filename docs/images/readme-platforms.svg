@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="28" viewBox="0 0 360 28" role="img" aria-label="macOS 14+ · Apple Silicon · MIT License">
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="11" font-weight="500" text-anchor="middle">
+    <rect x="1" y="1" width="112" height="26" rx="13" fill="#eef4fa" stroke="#c5d4e5"/>
+    <text x="57" y="18" fill="#24517c">macOS 14+</text>
+    <rect x="123" y="1" width="124" height="26" rx="13" fill="#eef6f4" stroke="#c5dfd8"/>
+    <text x="185" y="18" fill="#246557">Apple Silicon</text>
+    <rect x="257" y="1" width="102" height="26" rx="13" fill="#f4f0fa" stroke="#d9ceeb"/>
+    <text x="308" y="18" fill="#664889">MIT License</text>
+  </g>
+</svg>

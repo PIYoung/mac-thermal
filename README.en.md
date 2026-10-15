@@ -1,39 +1,106 @@
-# Mac Thermal
+<p align="center">
+  <img src="docs/images/app-icon.png" alt="Mac Thermal" width="72" height="72">
+</p>
 
-[한국어](README.md) · **English** · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+<h1 align="center">Mac Thermal</h1>
 
-A free, open-source menu bar app for a quick look at your Mac's temperature and resource usage. Real measurements, with a little motion.
+<p align="center">
+  <strong>Your Mac's status, at a glance in the menu bar.</strong><br>
+  A free, open-source app that adds a little motion to temperatures, resource usage, and transfer rates.
+</p>
 
-**Made with AI.** The code, UI, translations, and documentation were created with OpenAI Codex and refined through iterative user feedback.
+<p align="center">
+  <img src="docs/images/readme-platforms.svg" alt="macOS 14 or later · Apple Silicon · MIT License" width="360" height="28">
+</p>
 
-![Mac Thermal CPU panel](docs/images/mac-thermal-cpu.png)
+<p align="center">
+  <a href="README.md">한국어</a> · <strong>English</strong> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-The real UI is rendered with synthetic example data. Glass effects vary with the macOS version.
+<p align="center">
+  <a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ Download</strong></a> ·
+  <a href="#install">Installation</a> ·
+  <a href="RELEASES.md">Changelog</a> ·
+  <a href="docs/DETAILS.md">Technical details</a>
+</p>
 
-## Features
+---
 
-- **In the menu bar:** CPU temperature and utilization, SSD read/write rates, and network upload/download rates.
-- **Indicators with motion:** CPU rhythm bars or orbiting dots, network flow in each transfer direction, and an SSD tank showing used capacity with waves driven by I/O activity.
-- **Details by resource:** CPU, Memory, SSD, and Network tabs show usage and graphs. The CPU and Memory tabs include their top three processes; CPU and SSD temperatures appear as supporting information. Time since boot is also available.
-- **Your preferences:** Instantly switch between Korean, English, Japanese, and Simplified Chinese at the top of Settings. Adjust motion, intensity, and launch at login. Korean is the default language.
-- **At home on macOS:** Light and dark appearance, Liquid Glass on macOS 26, Reduce Motion, and keyboard navigation.
-- **Local only:** No accounts, ads, analytics, tracking, server uploads, administrator helper, or fan control.
+## A glance at the menu bar
+
+Check CPU, SSD, and network activity without opening the panel. The numbers are measured values; the motion gives you a sense of how busy your Mac is.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/menubar.png">
+    <img src="docs/images/menubar-demo.gif" alt="Mac Thermal menu bar with CPU rhythm bars, SSD waves, and upload and download flow" width="520">
+  </picture>
+  <br>
+  <sub>Synthetic example rendered by the actual app. <a href="docs/images/menubar.png">View the still image</a></sub>
+</p>
+
+| CPU rhythm | SSD waves | Network flow |
+| :--- | :--- | :--- |
+| Temperature and utilization, with bars that move as activity rises. Orbiting dots are also available. | Read and write rates. The fill level shows used capacity; waves reflect I/O activity. | Upload and download rates, with flow in each transfer direction. The flow stops when transfers stop. |
+
+Menu bar text turns **orange or red** with the system's thermal state. Turn motion off or adjust its intensity in Settings. The app also follows macOS **Reduce Motion**.
+
+## Click for a closer look
+
+Click the menu bar to open a fixed-size panel. The CPU tab opens first; later, the app remembers the last tab you viewed. Click an image to enlarge it.
+
+<table>
+  <tr>
+    <th>CPU</th>
+    <th>Memory</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/images/panel-en-cpu.png"><img src="docs/images/panel-en-cpu.png" alt="CPU utilization graph, temperature, and top three processes" width="250"></a><br>
+      <sub>Utilization graph · Temperature · Top 3 processes</sub>
+    </td>
+    <td align="center">
+      <a href="docs/images/panel-en-memory.png"><img src="docs/images/panel-en-memory.png" alt="Memory usage, pressure, compression, swap, and top three processes" width="250"></a><br>
+      <sub>Memory pressure · Compression and swap · Top 3 processes</sub>
+    </td>
+  </tr>
+  <tr>
+    <th>SSD</th>
+    <th>Network</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/images/panel-en-ssd.png"><img src="docs/images/panel-en-ssd.png" alt="SSD free space, read and write graphs, and temperature" width="250"></a><br>
+      <sub>Free space · Read and write graphs · Temperature</sub>
+    </td>
+    <td align="center">
+      <a href="docs/images/panel-en-network.png"><img src="docs/images/panel-en-network.png" alt="Download and upload rates with graphs for the past minute" width="250"></a><br>
+      <sub>Download and upload · Past-minute graphs</sub>
+    </td>
+  </tr>
+</table>
+
+<sub>All previews use synthetic example data. Glass effects may vary with the macOS version.</sub>
+
+**Korean by default · 4 languages · Light and dark appearance · Uptime · Launch at login**<br>
+Use the top-right Settings button to change the language, menu bar motion, and automatic startup. No accounts, ads, analytics, or server uploads. Graph history stays in memory.
 
 ## Install
 
-Requires an **Apple Silicon Mac running macOS 14 or later**. Current releases are ARM64 only; Intel Macs are not supported.
+Runs on an **Apple Silicon Mac with macOS 14 or later**. Release binaries are ARM64 only; Intel Macs are not supported.
 
-1. [Download the latest DMG](https://github.com/PIYoung/mac-thermal/releases/latest/download/Mac-Thermal-v2.4.0-arm64.dmg).
-2. Open it and drag **Mac Thermal.app** into **Applications**.
+1. Download a **DMG** from the [latest release](https://github.com/PIYoung/mac-thermal/releases/latest). A ZIP is also available.
+2. Open the DMG and drag **Mac Thermal.app** into **Applications**.
 3. Launch the app and click its menu bar indicators. It does not show a Dock icon.
 
-A ZIP is also available on the [release page](https://github.com/PIYoung/mac-thermal/releases/latest). There is no automatic updater; install new versions from Releases.
+> **Before downloading** — The app is currently ad-hoc signed, without Apple Developer ID signing or notarization. If macOS blocks it, build from source below instead of disabling security settings. Verify file integrity against the release's `SHA256SUMS`.
 
-The current binary is **ad-hoc signed**, without Apple Developer ID signing or notarization. macOS Gatekeeper may block a downloaded copy. If it is blocked, build from source below instead of disabling security settings. You can verify downloaded files against the release's `SHA256SUMS`.
+There is no automatic updater. Install new versions from the [Releases page](https://github.com/PIYoung/mac-thermal/releases).
 
-### Build and install from source
+<details>
+<summary><strong>Build and install from source</strong></summary>
 
-Requires Apple Silicon and **Xcode 26, or compatible Command Line Tools with the macOS 26 SDK**. The deployment target is macOS 14; earlier than macOS 26, the app uses a standard translucent panel.
+Requires Apple Silicon and **Xcode 26, or compatible Command Line Tools with the macOS 26 SDK**. The deployment target is macOS 14 or later. Before macOS 26, the app uses a standard translucent panel.
 
 ```sh
 git clone https://github.com/PIYoung/mac-thermal.git
@@ -41,26 +108,33 @@ cd mac-thermal
 zsh scripts/install.sh --open
 ```
 
-This builds locally, installs to `~/Applications/Mac Thermal.app`, and launches it. Omit `--open` to install without launching. No `sudo` is used. To build only, run `zsh build.sh`. The result is `build/Mac Thermal.app`.
+Installs to `~/Applications/Mac Thermal.app` and launches it. Omit `--open` to install without launching. No `sudo` is used. To build only, run `zsh build.sh`. The result is `build/Mac Thermal.app`.
 
-## Use
+</details>
 
-Click the menu bar to open a fixed-size panel. The **Settings** icon at the top right toggles settings. The CPU tab opens initially; after that, the app remembers the last tab you viewed. Language, the selected tab, and motion preferences persist across launches. Manage automatic startup in **Settings → Launch at login**. First-launch registration happens automatically only when the app runs from `~/Applications`, the source installer's destination. A DMG installation in `/Applications` does not register automatically. If macOS requests approval, allow it in the system's Login Items settings.
+<details>
+<summary><strong>Automatic startup and measurement limits</strong></summary>
 
-Menu bar text turns orange or red when macOS reports elevated thermal pressure. This uses the system's thermal state rather than arbitrary temperature thresholds. The app does not control cooling or fan speed.
+- **Launch at login:** Toggle it in Settings. First-launch registration is automatic only when the app runs from `~/Applications`. A DMG installation in `/Applications` does not register automatically. If macOS requests approval, allow it in the system's Login Items settings.
+- **CPU temperature:** The highest readable core sensor value. Sensor readings have been validated on Apple M4 Pro; compatibility with other chips is unverified. Unavailable values display `—`.
+- **Thermal state:** Reported by macOS, rather than inferred from arbitrary temperature thresholds. The app does not control fans or cooling.
+- **Memory:** Usage, pressure, compression, and swap. Memory temperature is not provided.
+- **Top 3:** Rankings are per process, without aggregating an app's processes. CPU percentages are normalized across all logical cores.
+- **SSD and network:** SSD I/O covers the entire internal physical SSD. Network rates cover active `en*` interfaces, excluding VPN and loopback traffic.
+- **Updates:** Measurements update every two seconds; motion runs at up to 8fps. Motion pauses according to user settings, Reduce Motion, sleep, display-off, and idle states.
 
-## Before you use it
+See the [technical details](docs/DETAILS.md) for calculations and compatibility limits. This document is currently in Korean.
 
-- CPU temperature is the **highest readable core sensor**, not an average. It has been **validated on Apple M4 Pro**; sensor compatibility on other chips is unverified. Unavailable values display `—`.
-- RAM temperature is not provided. The memory tab shows usage, pressure, compression, and swap.
-- Top-three rankings are **per process**, without aggregating an app's processes. CPU percentages are normalized across all logical cores.
-- SSD I/O covers the entire internal physical SSD. Network rates cover active `en*` interfaces, excluding VPN and loopback traffic.
-- Measurements update every two seconds. Graphs stay in memory; animations run at up to 8fps.
+</details>
 
-See the [technical details](docs/DETAILS.md) for calculations, units, and compatibility limits. This document is currently in Korean.
+## Contribute
 
-## Contributing and license
+**Made with AI.** Code, UI, translations, and documentation were created with OpenAI Codex and refined through iterative user feedback.
 
-Report bugs, translation fixes, and feature ideas in [Issues](https://github.com/PIYoung/mac-thermal/issues), or read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a PR. For sensor reports, include your Mac chip and macOS version. Redact personal information and other apps' process names.
+[Bugs and feature ideas](https://github.com/PIYoung/mac-thermal/issues) · [Contributing guide](CONTRIBUTING.md) · [Security reports](SECURITY.md)
 
-The project source code is released under the [MIT License](LICENSE). Copyright and MIT notices for the Stats sensor protocol and key-mapping references are preserved in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). The app icon, graphs, and motion are independently implemented; no Stats UI assets are included. Apple symbols and fonts rendered by the system remain subject to their providers' terms. See [asset provenance](ASSET_PROVENANCE.md).
+For sensor reports, include your Mac chip and macOS version. Redact personal information and other apps' process names when sharing screenshots or logs.
+
+Released under the [MIT License](LICENSE). Copyright and MIT notices for the Stats sensor references are preserved in the [third-party notices](THIRD_PARTY_NOTICES.txt). The app icon, UI, graphs, and motion are independently implemented. System symbols and fonts remain subject to their providers' terms. [Code and asset provenance](ASSET_PROVENANCE.md)
+
+<sub>README layout inspired by <a href="https://github.com/othneildrew/Best-README-Template">Best-README-Template</a> (Unlicense). Introductory text and images were created for this project.</sub>

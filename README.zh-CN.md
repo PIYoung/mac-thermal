@@ -1,39 +1,106 @@
-# Mac Thermal
+<p align="center">
+  <img src="docs/images/app-icon.png" alt="Mac Thermal 应用图标" width="72" height="72">
+</p>
 
-[한국어](README.md) · [English](README.en.md) · [日本語](README.ja.md) · **简体中文**
+<h1 align="center">Mac Thermal</h1>
 
-一款免费的开源菜单栏应用，让你随时查看 Mac 的温度与资源使用情况。数据来自实际测量，配上轻巧的动态效果。
+<p align="center">
+  <strong>在菜单栏，一眼看清 Mac 的状态。</strong><br>
+  用轻巧的动态效果呈现温度、资源使用量与传输速度的免费开源应用。
+</p>
 
-**使用 AI 制作。** 代码、UI、翻译和文档借助 OpenAI Codex 编写，并根据用户的多轮反馈不断改进。
+<p align="center">
+  <img src="docs/images/readme-platforms.svg" alt="macOS 14 或更新版本 · Apple Silicon · MIT 许可证" width="360" height="28">
+</p>
 
-![Mac Thermal CPU 面板](docs/images/mac-thermal-cpu.png)
+<p align="center">
+  <a href="README.md">한국어</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <strong>简体中文</strong>
+</p>
 
-使用合成示例数据渲染实际界面。玻璃效果会因macOS版本而异。
+<p align="center">
+  <a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ 下载</strong></a> ·
+  <a href="#安装">安装指南</a> ·
+  <a href="RELEASES.md">更新记录</a> ·
+  <a href="docs/DETAILS.md">技术说明</a>
+</p>
 
-## 主要功能
+---
 
-- **菜单栏实时显示：** CPU 温度与使用率、SSD 读写速度、网络上传与下载速度。
-- **动态指标：** CPU 节奏条或环绕圆点、沿传输方向流动的网络效果，以及用液面高度表示已用容量、用波浪速度表示 I/O 活动的 SSD 图标。
-- **按资源查看详情：** CPU、内存、SSD、网络四个标签页显示使用情况与图表。CPU 和内存页分别列出占用最高的 3 个进程，CPU 与 SSD 温度作为辅助信息显示，也可查看开机时长。
-- **按需设置：** 在设置顶部即时切换韩语、英语、日语和简体中文，也可调整动画、强度和登录时自动启动。默认语言为韩语。
-- **融入 macOS：** 支持浅色与深色外观、macOS 26 的 Liquid Glass、减弱动态效果和键盘操作。
-- **仅在本地运行：** 无账号、广告、分析或跟踪、服务器上传、管理员辅助程序，也不控制风扇。
+## 在菜单栏随时查看
+
+无需一直打开面板，就能查看 CPU、SSD 和网络状态。数字来自实际测量，动态效果则让忙碌程度一目了然。
+
+<p align="center">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/menubar.png">
+    <img src="docs/images/menubar-demo.gif" alt="Mac Thermal 菜单栏中的 CPU 节奏条、SSD 波浪与上传下载流动效果" width="520">
+  </picture>
+  <br>
+  <sub>使用实际应用的渲染器和合成示例数据生成。<a href="docs/images/menubar.png">查看静态图片</a></sub>
+</p>
+
+| CPU 节奏 | SSD 波浪 | 网络流动 |
+| :--- | :--- | :--- |
+| 显示温度与使用率，节奏条随负载变化。也可选择环绕圆点样式。 | 显示读写速度。液面高度表示已用容量，波浪表示 I/O 活动。 | 分别呈现上传与下载的速度和方向。没有传输时，对应的流动效果也会停止。 |
+
+菜单栏文字会随系统热状态变为**橙色或红色**。可以在设置中关闭动态效果或调整强度，也会遵循 macOS 的**减弱动态效果**设置。
+
+## 点击查看各项资源详情
+
+点击菜单栏即可打开固定大小的面板。首次打开 CPU 页，之后会记住上次查看的标签页。点击图片可查看大图。
+
+<table>
+  <tr>
+    <th>CPU</th>
+    <th>内存</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/images/panel-zh-CN-cpu.png"><img src="docs/images/panel-zh-CN-cpu.png" alt="CPU 使用率图表、温度与占用最高的 3 个进程" width="250"></a><br>
+      <sub>使用率图表 · 温度 · 进程 TOP 3</sub>
+    </td>
+    <td align="center">
+      <a href="docs/images/panel-zh-CN-memory.png"><img src="docs/images/panel-zh-CN-memory.png" alt="内存使用量、压力、压缩与交换空间，以及占用最高的 3 个进程" width="250"></a><br>
+      <sub>内存压力 · 压缩与交换空间 · 进程 TOP 3</sub>
+    </td>
+  </tr>
+  <tr>
+    <th>SSD</th>
+    <th>网络</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/images/panel-zh-CN-ssd.png"><img src="docs/images/panel-zh-CN-ssd.png" alt="SSD 可用空间、读写速度图表与温度" width="250"></a><br>
+      <sub>可用空间 · 读写速度图表 · 温度</sub>
+    </td>
+    <td align="center">
+      <a href="docs/images/panel-zh-CN-network.png"><img src="docs/images/panel-zh-CN-network.png" alt="下载与上传速度及最近 1 分钟的图表" width="250"></a><br>
+      <sub>下载与上传 · 最近 1 分钟图表</sub>
+    </td>
+  </tr>
+</table>
+
+<sub>所有预览均使用合成示例数据。玻璃效果可能因 macOS 版本而异。</sub>
+
+**默认韩语 · 四种语言 · 浅色与深色外观 · 开机时长 · 登录时自动启动**<br>
+右上角的设置按钮可调整语言、菜单栏动态效果和自动启动。无需账号，无广告、分析或服务器上传；图表记录仅保留在内存中。
 
 ## 安装
 
-需要 **Apple Silicon Mac，运行 macOS 14 或更新版本**。当前发布包仅支持 ARM64，不支持 Intel Mac。
+需要 **Apple Silicon Mac，运行 macOS 14 或更新版本**。发布包仅支持 ARM64，不支持 Intel Mac。
 
-1. [下载最新 DMG](https://github.com/PIYoung/mac-thermal/releases/latest/download/Mac-Thermal-v2.4.0-arm64.dmg)。
+1. 从[最新发布页面](https://github.com/PIYoung/mac-thermal/releases/latest)下载 **DMG**。也提供 ZIP。
 2. 打开 DMG，将 **Mac Thermal.app** 拖入 **Applications** 文件夹。
 3. 启动应用，点击菜单栏中的指标。应用不显示 Dock 图标。
 
-也可以在[发布页面](https://github.com/PIYoung/mac-thermal/releases/latest)下载 ZIP。应用没有自动更新功能，新版本需从发布页面安装。
+> **下载前须知** — 当前应用采用 ad-hoc 签名，尚未使用 Apple Developer ID 签名或通过 Apple 公证。如果 macOS 阻止运行，请勿关闭系统安全设置，可按下方说明从源码构建。下载文件可与发布页面的 `SHA256SUMS` 对照校验。
 
-当前二进制文件采用 **ad-hoc 签名**，尚未使用 Apple Developer ID 签名或通过 Apple 公证。下载的应用可能会被 macOS Gatekeeper 阻止。如果无法打开，请按下方说明从源码构建，不要关闭系统安全设置。可通过发布页面的 `SHA256SUMS` 校验下载文件。
+应用没有自动更新功能。新版本需从[发布页面](https://github.com/PIYoung/mac-thermal/releases)安装。
 
-### 从源码构建并安装
+<details>
+<summary><strong>从源码构建并安装</strong></summary>
 
-需要 Apple Silicon Mac，以及**包含 macOS 26 SDK 的 Xcode 26，或兼容的 Command Line Tools**。应用的运行目标为 macOS 14 或更新版本；在 macOS 26 之前的系统上使用标准半透明面板。
+需要 Apple Silicon，以及**包含 macOS 26 SDK 的 Xcode 26 或兼容的 Command Line Tools**。运行目标为 macOS 14 或更新版本；在 macOS 26 之前的系统上使用标准半透明面板。
 
 ```sh
 git clone https://github.com/PIYoung/mac-thermal.git
@@ -41,26 +108,33 @@ cd mac-thermal
 zsh scripts/install.sh --open
 ```
 
-脚本在本地构建并安装到 `~/Applications/Mac Thermal.app`，然后启动应用。若只安装而不启动，请省略 `--open`。无需 `sudo`。若只需构建，请运行 `zsh build.sh`，输出为 `build/Mac Thermal.app`。
+安装到 `~/Applications/Mac Thermal.app` 并启动。省略 `--open` 则只安装。不使用 `sudo`。若只需构建，请运行 `zsh build.sh`，输出为 `build/Mac Thermal.app`。
 
-## 使用
+</details>
 
-点击菜单栏即可打开固定大小的面板。右上角的**设置**图标用于打开或关闭设置。首次打开 CPU 页，之后会记住上次查看的标签页。语言、所选标签页和动画设置会在下次启动时保留。请在**设置 → 登录时启动**中管理自动启动。只有从源码安装脚本的目标目录 `~/Applications` 运行时，应用才会在首次启动时自动注册。通过 DMG 安装到 `/Applications` 时不会自动注册。如果 macOS 要求批准，请在系统的登录项设置中允许。
+<details>
+<summary><strong>自动启动与数据口径</strong></summary>
 
-当 macOS 报告热状态升高时，菜单栏文字会变为橙色或红色。该状态来自系统热状态，而非自行设定的温度阈值。应用不调节散热或风扇转速。
+- **登录时自动启动：** 可在设置中开关。仅从 `~/Applications` 运行时，应用才会在首次启动时自动注册；通过 DMG 安装到 `/Applications` 时不会自动注册。如果 macOS 要求批准，请在系统的登录项设置中允许。
+- **CPU 温度：** 可读取核心传感器中的最高值。已在 Apple M4 Pro 上验证传感器读取，其他芯片的兼容性尚未确认。无法读取的数据会显示为 `—`。
+- **热状态：** 使用 macOS 报告的状态，不按自定温度阈值判断，也不控制风扇或散热。
+- **内存：** 显示使用量、压力、压缩与交换空间，不提供内存温度。
+- **TOP 3：** 按进程排名，不合并同一应用的多个进程。CPU 百分比按全部逻辑核心归一化。
+- **SSD 与网络：** SSD I/O 覆盖整个内置物理 SSD；网络统计有效的 `en*` 接口，不包含 VPN 或回环接口。
+- **刷新：** 每 2 秒测量一次，动态效果最高为 8fps。根据用户设置、减弱动态效果、睡眠、屏幕关闭和空闲状态停止动画。
 
-## 使用前须知
+计算方法与兼容范围详见[技术说明](docs/DETAILS.md)，该文档目前以韩语提供。
 
-- CPU 温度是可读取核心传感器中的**最高值**，不是平均值。目前已在 **Apple M4 Pro 上验证**；其他芯片的传感器兼容性尚未确认。无法读取的数据会显示为 `—`。
-- 不提供内存温度，内存页显示使用量、压力、压缩和交换空间。
-- TOP 3 按**进程**排名，不合并同一应用的多个进程。CPU 百分比按全部逻辑核心归一化。
-- SSD I/O 统计覆盖整个内置物理 SSD。网络速度统计有效的 `en*` 接口，不包含 VPN 或回环接口。
-- 每 2 秒采集一次数据。图表仅保留在内存中，动画最高为 8fps。
+</details>
 
-计算方法、单位与兼容性限制详见[技术说明](docs/DETAILS.md)。该文档目前以韩语提供。
+## 一起完善
 
-## 贡献与许可证
+**使用 AI 制作。** 代码、UI、翻译和文档由 OpenAI Codex 与用户通过多轮反馈共同完成。
 
-欢迎通过 [Issues](https://github.com/PIYoung/mac-thermal/issues) 提交问题、翻译修正和功能建议，提交 PR 前请阅读[贡献指南](CONTRIBUTING.md)。报告传感器问题时，请附上 Mac 芯片与 macOS 版本，并遮盖个人信息和其他应用的进程名称。
+[问题与功能建议](https://github.com/PIYoung/mac-thermal/issues) · [贡献指南](CONTRIBUTING.md) · [安全问题报告](SECURITY.md)
 
-项目源码以 [MIT 许可证](LICENSE)发布。参考 Stats 传感器协议及键映射部分的版权与 MIT 声明保留在 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) 中。应用图标、图表和动态效果均为独立实现，不包含 Stats 的 UI 素材。由系统渲染的 Apple 符号与字体仍受各提供方的条款约束。请参阅[代码与素材来源](ASSET_PROVENANCE.md)。
+报告传感器问题时，请附上 Mac 芯片与 macOS 版本。分享截图或日志前，请遮盖个人信息和其他应用的进程名称。
+
+项目以 [MIT 许可证](LICENSE)发布。参考 Stats 传感器实现的部分，其版权与 MIT 许可声明保留在[第三方声明](THIRD_PARTY_NOTICES.txt)中。应用图标、UI、图表与动态效果均为独立实现；系统符号与字体受各提供方的条款约束。[代码与素材来源](ASSET_PROVENANCE.md)
+
+<sub>README 布局参考：<a href="https://github.com/othneildrew/Best-README-Template">Best-README-Template</a>（Unlicense）。介绍文案和图片均由本项目制作。</sub>

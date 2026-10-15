@@ -1,39 +1,106 @@
-# Mac Thermal
+<p align="center">
+  <img src="docs/images/app-icon.png" alt="Mac Thermal" width="72" height="72">
+</p>
 
-**한국어** · [English](README.en.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+<h1 align="center">Mac Thermal</h1>
 
-작은 메뉴 막대 안에서 Mac의 온도와 자원 사용량을 한눈에 보는 무료 오픈소스 앱입니다. 실측값을 가벼운 움직임과 함께 표시합니다.
+<p align="center">
+  <strong>Mac의 상태를, 메뉴바에서 한눈에.</strong><br>
+  온도·자원 사용량·전송 속도를 작은 움직임으로 보여주는 무료 오픈소스 앱.
+</p>
 
-**AI로 제작했습니다.** 코드, UI, 번역과 문서는 OpenAI Codex를 활용하고 사용자의 반복적인 피드백을 반영해 만들었습니다.
+<p align="center">
+  <img src="docs/images/readme-platforms.svg" alt="macOS 14 이상 · Apple Silicon · MIT 라이선스" width="360" height="28">
+</p>
 
-![Mac Thermal CPU 패널](docs/images/mac-thermal-cpu.png)
+<p align="center">
+  <strong>한국어</strong> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-실제 UI를 합성 예시 데이터로 렌더링했습니다. macOS 버전에 따라 유리 효과가 다를 수 있습니다.
+<p align="center">
+  <a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ 다운로드</strong></a> ·
+  <a href="#설치">설치 안내</a> ·
+  <a href="RELEASES.md">업데이트 내역</a> ·
+  <a href="docs/DETAILS.md">기술 설명</a>
+</p>
 
-## 주요 기능
+---
 
-- **메뉴 막대:** CPU 온도·사용률, SSD 읽기·쓰기, 네트워크 업로드·다운로드 속도.
-- **움직이는 지표:** CPU 리듬 막대 또는 순환 점, 전송 방향으로 흐르는 네트워크, 사용 용량을 채우고 I/O 활동에 맞춰 물결치는 SSD.
-- **자원별로 자세히:** CPU·메모리·SSD·네트워크 탭으로 사용량과 그래프를 확인합니다. CPU·메모리 탭은 해당 자원을 많이 쓰는 프로세스 TOP 3를 함께 보여주고, CPU·SSD 온도는 보조 정보로 표시합니다. 부팅 후 경과 시간도 확인할 수 있습니다.
-- **내 취향대로:** 설정 맨 위에서 한국어·영어·일본어·중국어 간체를 즉시 전환하고, 움직임·강도·로그인 시 자동 실행을 설정합니다. 기본 언어는 한국어입니다.
-- **macOS에 맞게:** 밝은·어두운 모드, macOS 26의 Liquid Glass, 동작 줄이기와 키보드 탐색을 지원합니다.
-- **로컬에서만:** 계정, 광고, 분석·추적, 서버 전송, 관리자 helper, 팬 제어가 없습니다.
+## 메뉴바에서 바로 확인
+
+패널을 열지 않아도 CPU·SSD·네트워크를 확인할 수 있습니다. 숫자는 실측값이고, 움직임은 지금 얼마나 바쁜지 보여줍니다.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/menubar.png">
+    <img src="docs/images/menubar-demo.gif" alt="CPU 리듬 막대, SSD 물결, 업로드·다운로드 흐름을 보여주는 Mac Thermal 메뉴바" width="520">
+  </picture>
+  <br>
+  <sub>실제 앱의 렌더러로 만든 합성 예시입니다. <a href="docs/images/menubar.png">정지 이미지 보기</a></sub>
+</p>
+
+| CPU의 리듬 | SSD의 물결 | 네트워크의 흐름 |
+| :--- | :--- | :--- |
+| 온도·사용률을 표시하고, 바쁜 정도에 따라 막대가 움직입니다. 순환 점 스타일도 선택할 수 있습니다. | 읽기·쓰기 속도를 표시합니다. 채움 높이는 사용 용량, 물결은 I/O 활동을 나타냅니다. | 업로드·다운로드 속도와 방향을 흐름으로 표현합니다. 전송이 없으면 흐름도 멈춥니다. |
+
+열 상태에 따라 메뉴바 글자가 **주황색·빨간색**으로 바뀝니다. 설정에서 움직임을 끄거나 강도를 조절할 수 있고, macOS의 **동작 줄이기**도 따릅니다.
+
+## 클릭하면 자원별로 자세히
+
+메뉴바를 누르면 고정 크기 패널이 열립니다. 처음에는 CPU, 그다음부터는 마지막으로 본 탭이 열립니다. 이미지를 클릭하면 크게 볼 수 있습니다.
+
+<table>
+  <tr>
+    <th>CPU</th>
+    <th>메모리</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/images/panel-ko-cpu.png"><img src="docs/images/panel-ko-cpu.png" alt="CPU 사용률 그래프, 온도와 프로세스 TOP 3" width="250"></a><br>
+      <sub>사용률 그래프 · 온도 · 프로세스 TOP 3</sub>
+    </td>
+    <td align="center">
+      <a href="docs/images/panel-ko-memory.png"><img src="docs/images/panel-ko-memory.png" alt="메모리 사용량, 압박, 압축·스왑과 프로세스 TOP 3" width="250"></a><br>
+      <sub>메모리 압박 · 압축·스왑 · 프로세스 TOP 3</sub>
+    </td>
+  </tr>
+  <tr>
+    <th>SSD</th>
+    <th>네트워크</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/images/panel-ko-ssd.png"><img src="docs/images/panel-ko-ssd.png" alt="SSD 여유 공간, 읽기·쓰기 그래프와 온도" width="250"></a><br>
+      <sub>남은 공간 · 읽기·쓰기 그래프 · 온도</sub>
+    </td>
+    <td align="center">
+      <a href="docs/images/panel-ko-network.png"><img src="docs/images/panel-ko-network.png" alt="다운로드·업로드 속도와 최근 1분 그래프" width="250"></a><br>
+      <sub>다운로드·업로드 · 최근 1분 그래프</sub>
+    </td>
+  </tr>
+</table>
+
+<sub>모든 미리보기는 합성 예시 데이터입니다. macOS 버전에 따라 유리 효과가 다를 수 있습니다.</sub>
+
+**한국어 기본 · 4개 언어 · 밝은/어두운 모드 · 부팅 후 경과 시간 · 로그인 시 자동 실행**<br>
+오른쪽 위 설정 버튼에서 언어와 메뉴바 움직임, 자동 실행을 바꿀 수 있습니다. 계정·광고·분석·서버 전송 없이 동작하며, 그래프 기록은 메모리에만 유지합니다.
 
 ## 설치
 
-**Apple Silicon Mac · macOS 14 이상**이 필요합니다. 현재 배포 파일은 ARM64 전용입니다. Intel Mac은 지원하지 않습니다.
+**Apple Silicon Mac · macOS 14 이상**에서 실행됩니다. 배포 파일은 ARM64 전용이며 Intel Mac은 지원하지 않습니다.
 
-1. [최신 DMG 다운로드](https://github.com/PIYoung/mac-thermal/releases/latest/download/Mac-Thermal-v2.4.0-arm64.dmg).
+1. [최신 릴리즈](https://github.com/PIYoung/mac-thermal/releases/latest)에서 **DMG**를 다운로드합니다. ZIP도 제공합니다.
 2. DMG를 열고 **Mac Thermal.app**을 **Applications** 폴더로 드래그합니다.
-3. 앱을 실행하고 메뉴 막대의 지표를 클릭합니다. Dock 아이콘은 표시하지 않습니다.
+3. 앱을 실행한 뒤 메뉴바의 지표를 클릭합니다. Dock 아이콘은 표시하지 않습니다.
 
-ZIP이 필요하면 [릴리스 페이지](https://github.com/PIYoung/mac-thermal/releases/latest)에서 받을 수 있습니다. 자동 업데이트 기능은 없으며 새 버전은 릴리스에서 설치합니다.
+> **다운로드 전 확인** — 현재 앱은 ad-hoc 서명이며 Apple Developer ID 서명·공증을 받지 않았습니다. macOS가 실행을 차단하면 보안 설정을 해제하지 말고 아래 소스 빌드 방법을 사용하세요. 파일의 무결성은 릴리즈의 `SHA256SUMS`와 대조할 수 있습니다.
 
-현재 바이너리는 **ad-hoc 서명**되어 있으며 Apple Developer ID 서명·공증을 받지 않았습니다. 다운로드한 앱은 macOS Gatekeeper에 의해 차단될 수 있습니다. 실행이 차단되면 보안 설정을 해제하는 대신 아래 소스 빌드 방법을 사용하세요. 내려받은 파일은 릴리스의 `SHA256SUMS`와 대조할 수 있습니다.
+자동 업데이트 기능은 없습니다. 새 버전은 [릴리즈 페이지](https://github.com/PIYoung/mac-thermal/releases)에서 설치합니다.
 
-### 소스에서 빌드·설치
+<details>
+<summary><strong>소스에서 빌드·설치하기</strong></summary>
 
-Apple Silicon Mac과 **macOS 26 SDK를 포함한 Xcode 26 또는 호환 Command Line Tools**가 필요합니다. 실행 대상은 macOS 14 이상이며, macOS 26 이전에는 표준 반투명 패널을 사용합니다.
+Apple Silicon과 **macOS 26 SDK를 포함한 Xcode 26 또는 호환 Command Line Tools**가 필요합니다. 실행 대상은 macOS 14 이상이며, macOS 26 이전에는 표준 반투명 패널을 사용합니다.
 
 ```sh
 git clone https://github.com/PIYoung/mac-thermal.git
@@ -41,26 +108,33 @@ cd mac-thermal
 zsh scripts/install.sh --open
 ```
 
-로컬에서 빌드해 `~/Applications/Mac Thermal.app`에 설치한 뒤 실행합니다. 실행하지 않고 설치만 하려면 `--open`을 빼세요. `sudo`는 사용하지 않습니다. 빌드만 하려면 `zsh build.sh`를 실행하세요. 결과는 `build/Mac Thermal.app`입니다.
+`~/Applications/Mac Thermal.app`에 설치하고 실행합니다. `--open`을 빼면 설치만 합니다. `sudo`는 사용하지 않습니다. 빌드만 하려면 `zsh build.sh`를 실행하세요. 결과는 `build/Mac Thermal.app`입니다.
 
-## 사용하기
+</details>
 
-메뉴 막대를 클릭하면 고정 크기 패널이 열립니다. 오른쪽 위 **설정** 아이콘으로 설정을 열고 닫습니다. 처음에는 CPU 탭이 열리고, 이후에는 마지막으로 본 탭을 기억합니다. 언어·탭·움직임 설정은 다음 실행에도 유지됩니다. 로그인 시 자동 실행은 **설정 → 로그인 시 자동 실행**에서 관리합니다. 소스 설치 스크립트의 대상인 `~/Applications`에서 실행할 때만 첫 실행 시 자동으로 등록하며, DMG를 통해 `/Applications`에 설치한 경우에는 자동 등록하지 않습니다. macOS가 승인을 요청하면 시스템의 로그인 항목에서 허용해야 합니다.
+<details>
+<summary><strong>자동 실행과 표시 기준 알아보기</strong></summary>
 
-열 상태가 높아지면 메뉴 막대 글자가 주황색 또는 빨간색으로 바뀝니다. 이 상태는 macOS가 보고하는 열 상태이며, 임의의 온도 임계값이 아닙니다. 앱은 냉각이나 팬 속도를 조절하지 않습니다.
+- **로그인 시 자동 실행:** 설정에서 켜고 끕니다. `~/Applications`에서 실행할 때만 첫 실행 시 자동 등록하며, DMG로 `/Applications`에 설치한 경우에는 자동 등록하지 않습니다. macOS가 승인을 요청하면 시스템 로그인 항목에서 허용해야 합니다.
+- **CPU 온도:** 읽을 수 있는 코어 센서의 최댓값입니다. Apple M4 Pro에서 센서 읽기를 검증했으며 다른 칩의 호환성은 미확인입니다. 조회할 수 없는 값은 `—`로 표시합니다.
+- **열 상태:** macOS가 보고한 상태를 사용합니다. 임의의 온도 임계값으로 판단하지 않으며 팬·냉각을 제어하지 않습니다.
+- **메모리:** 사용량·압박·압축·스왑을 표시합니다. 메모리 온도는 제공하지 않습니다.
+- **TOP 3:** 앱의 프로세스를 합산하지 않는 프로세스별 순위입니다. CPU 비율은 전체 논리 코어 기준입니다.
+- **SSD·네트워크:** SSD I/O는 내부 물리 SSD 전체, 네트워크는 활성 `en*` 인터페이스 기준입니다. VPN·loopback은 합산하지 않습니다.
+- **갱신:** 2초마다 측정하며 움직임은 최대 8fps입니다. 사용자 설정·동작 줄이기·잠자기·화면 꺼짐·유휴 상태에 맞춰 움직임을 멈춥니다.
 
-## 알아둘 점
+계산 방법과 호환성의 자세한 범위는 [기술 설명](docs/DETAILS.md)을 확인하세요.
 
-- CPU 온도는 읽을 수 있는 코어 센서의 **최댓값**입니다. 현재 **Apple M4 Pro에서 검증**했으며 다른 칩의 센서 호환성은 확인하지 않았습니다. 조회할 수 없는 값은 `—`로 표시합니다.
-- 메모리 온도는 제공하지 않습니다. 메모리 사용량·압박·압축·스왑을 표시합니다.
-- TOP 3는 **프로세스별** 순위이며 앱의 여러 프로세스를 합산하지 않습니다. CPU 비율은 전체 논리 코어 기준입니다.
-- SSD I/O는 내부 물리 SSD 전체, 네트워크는 활성 `en*` 인터페이스 기준입니다. VPN·loopback은 합산하지 않습니다.
-- 지표는 2초마다 수집합니다. 그래프는 메모리에만 유지하고, 애니메이션은 최대 8fps입니다.
+</details>
 
-정확한 계산 방법, 표시 단위와 호환성 한계는 [기술 설명](docs/DETAILS.md)을 참고하세요.
+## 함께 만들기
 
-## 기여와 라이선스
+**AI로 제작했습니다.** 코드·UI·번역·문서는 OpenAI Codex와 사용자의 반복적인 피드백으로 만들었습니다.
 
-[이슈](https://github.com/PIYoung/mac-thermal/issues)로 버그·번역·기능 제안을 보내거나 [기여 안내](CONTRIBUTING.md)에 따라 PR을 보내주세요. 센서 문제를 제보할 때 Mac 칩과 macOS 버전을 알려주면 도움이 됩니다. 개인 정보와 다른 앱의 프로세스 이름은 가려 주세요.
+[버그·기능 제안](https://github.com/PIYoung/mac-thermal/issues) · [기여 안내](CONTRIBUTING.md) · [보안 제보](SECURITY.md)
 
-프로젝트 소스 코드는 [MIT 라이선스](LICENSE)로 배포합니다. Stats의 센서 프로토콜·키 매핑을 참고한 부분의 저작권과 MIT 고지는 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)에 보존합니다. 앱 아이콘·그래프·움직임은 자체 구현이며 Stats의 UI 자산을 포함하지 않습니다. 시스템에서 표시하는 Apple 심볼·글꼴에는 해당 제공자의 조건이 적용됩니다. [코드·자산 출처](ASSET_PROVENANCE.md)를 확인하세요.
+센서 문제는 Mac 칩과 macOS 버전을 함께 알려 주세요. 화면·로그를 공유할 때는 개인 정보와 다른 앱의 프로세스 이름을 가려 주세요.
+
+[MIT 라이선스](LICENSE)로 배포합니다. Stats 센서 참고 부분의 저작권·MIT 허가문은 [타사 고지](THIRD_PARTY_NOTICES.txt)에 보존합니다. 앱 아이콘·UI·그래프·움직임은 자체 구현이며, 시스템 심볼·글꼴에는 해당 제공자의 조건이 적용됩니다. [코드·자산 출처](ASSET_PROVENANCE.md)
+
+<sub>README 구성 참고: <a href="https://github.com/othneildrew/Best-README-Template">Best-README-Template</a> (Unlicense). 소개 문구와 이미지는 이 프로젝트에서 직접 작성했습니다.</sub>

@@ -59,6 +59,8 @@ App translations live in `Sources/PanelTranslations.swift` and `Sources/SystemTr
 
 The public READMEs are `README.md` (Korean), `README.en.md`, `README.ja.md`, and `README.zh-CN.md`. Update all four when installation requirements or user-facing behavior changes. Native-language corrections are welcome.
 
+Regenerate the original icon, menu bar GIF/static preview, and localized panel images with `zsh scripts/render-readme-assets.sh`. This uses the production renderers with synthetic values and disposable preferences; it does not capture the user's desktop or read live metrics. Keep the README's explicit image widths so the panel gallery stays compact, and preserve the static menu preview for readers who reduce motion. Store artwork locally rather than adding external badge or image services.
+
 ## AI assistance
 
 Mac Thermal was created with OpenAI Codex and iterative user feedback. AI-assisted contributions are welcome. Explain what you changed and verified, and review generated code, translations, and license claims before submitting them. AI output still needs the same testing and source attribution as any other contribution.
