@@ -3,6 +3,7 @@ import Foundation
 // Original translations for Mac Thermal. Entries are English, Japanese, Simplified Chinese.
 extension L10n {
     static let panelTranslations: [String: [String]] = [
+        "메뉴바에서 CPU, GPU 또는 둘 다 표시합니다": ["Show CPU, GPU, or both in the menu bar", "メニューバーにCPU、GPU、または両方を表示します", "在菜单栏显示CPU、GPU或两者"],
         "GPU 사용률": ["GPU usage", "GPU使用率", "GPU使用率"],
         "GPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트": ["GPU usage over the last minute, vertical scale from 0 to 100 percent", "過去1分のGPU使用率グラフ、縦軸は0〜100パーセント", "最近1分钟的GPU使用率图表，纵轴为0到100%"],
         "GPU 모델": ["GPU model", "GPUモデル", "GPU型号"],

@@ -1,5 +1,15 @@
 # Releases
 
+## v2.5.1 — 2026-10-19
+
+CPU and GPU together, with more reliable panel opening. Build 18.
+
+- Display CPU and GPU together by default, alongside SSD and network. Keep CPU-only and GPU-only options and preserve existing explicit choices.
+- Add only the GPU slot width in combined mode; apply mode changes immediately without moving an already-open panel.
+- Bound panel-opening retries even when the activation notification is missing, and cancel stale callbacks after close or rapid reopen.
+- Keep native Settings popups open by dismissing the panel on app deactivation instead of key-focus changes alone.
+- Verify all three menu modes, cancellation/activation edge cases, native popup behavior, and the unchanged panel size. Refresh the four-language documentation and menu demonstration.
+
 ## v2.5.0 — 2026-10-19
 
 GPU monitoring and animated menu bar tiles. Build 17.

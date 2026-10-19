@@ -48,7 +48,8 @@ struct MenuRenderProbe {
         guard let image = MenuBarContent.preview(sample: sample, preferences: preferences, dark: dark, phase: phase, sleeping: sleeping) else {
             throw ProbeError.failed("preview returned nil")
         }
-        try check((220...264).contains(image.size.width) && image.size.height == 22,
+        let shift: CGFloat = primary == .cpuAndGPU ? 72 : 0
+        try check(((220 + shift)...(264 + shift)).contains(image.size.width) && image.size.height == 22,
             "logical image size outside compact bounds: \(image.size)")
         if let expectedSize { try check(image.size == expectedSize, "image size changed across phases: \(expectedSize) -> \(image.size)") }
         reportSize?(image.size)
@@ -92,10 +93,10 @@ struct MenuRenderProbe {
             }
         }
         defaults.removeObject(forKey: "menuBarPrimaryMetricV1")
-        try check(MenuBarPreferences.load(defaults: defaults).primaryMetric == .cpu, "existing preferences did not retain CPU")
+        try check(MenuBarPreferences.load(defaults: defaults).primaryMetric == .cpuAndGPU, "missing preference did not default to CPU + GPU")
         for invalidMetric: Any in [1234, -1, "gpu", 0.5, Double.infinity] {
             defaults.set(invalidMetric, forKey: "menuBarPrimaryMetricV1")
-            try check(MenuBarPreferences.load(defaults: defaults).primaryMetric == .cpu, "invalid primary metric did not fall back")
+            try check(MenuBarPreferences.load(defaults: defaults).primaryMetric == .cpuAndGPU, "invalid primary metric did not fall back")
         }
         defaults.set(1234, forKey: "menuBarAnimationStyleV2")
         defaults.set(Double.infinity, forKey: "menuBarMotionIntensityV2")
@@ -107,7 +108,7 @@ struct MenuRenderProbe {
         try check(MenuBarPreferences.load(defaults: defaults).intensity == 1.5, "high intensity not clamped")
         MenuBarPreferences(style: .orbit, motionEnabled: true, intensity: .nan).save(defaults: defaults)
         try check(MenuBarPreferences.load(defaults: defaults).intensity == 1.2, "nonfinite save not normalized")
-        print("PASS isolated preferences: CPU/rhythm defaults, old settings migration, CPU/GPU roundtrip, invalid values, finite/clamped intensity")
+        print("PASS isolated preferences: CPU + GPU/rhythm defaults, preserved stored CPU/GPU choices, three-mode roundtrip, invalid values, finite/clamped intensity")
     }
 
     static func gpuChecks(in directory: URL, reduceMotion: Bool) throws {
@@ -149,7 +150,9 @@ struct MenuRenderProbe {
                 let sleepA = try render(fixture(50), style: style, dark: dark, phase: 0.08, primary: .gpu, sleeping: true)
                 let sleepB = try render(fixture(50), style: style, dark: dark, phase: 0.39, primary: .gpu, sleeping: true)
                 try check(sleepA == sleepB, "sleeping did not freeze GPU/SSD/network")
-                let switches: [(MenuBarPrimaryMetric, MenuBarPrimaryMetric)] = [(.cpu, .gpu), (.gpu, .cpu)]
+                let switches = MenuBarPrimaryMetric.allCases.flatMap { old in
+                    MenuBarPrimaryMetric.allCases.filter { $0 != old }.map { (old, $0) }
+                }
                 for (old, new) in switches {
                     let before = MenuBarPreferences(style: style, primaryMetric: old)
                     let after = MenuBarPreferences(style: style, primaryMetric: new)
@@ -168,14 +171,74 @@ struct MenuRenderProbe {
             }
         }
         print("PASS GPU grid: 0/1/50/100 and invalid values, load-based speed, light/dark, active/off/reduced/sleep motion, unchanged dimensions")
-        print("PASS immediate CPU/GPU preference switching: fresh text and matching raster without a new sample")
+        print("PASS immediate CPU/GPU/CPU + GPU preference switching: fresh text and matching raster without a new sample")
+    }
+
+    static func simultaneousChecks(in directory: URL, reduceMotion: Bool) throws {
+        let active = Fixture(name: "both", cpu: 37, cpuTemperature: 74, capacityUsed: 61,
+            read: 4_600_000, write: 19_500, upload: 7_000, download: 26_000,
+            gpu: 50, gpuCoreCount: 20).sample
+        let regions: [(String, CGRect)] = [
+            ("CPU", CGRect(x: 0, y: 0, width: 26, height: 22)),
+            ("GPU", CGRect(x: 76, y: 0, width: 26, height: 22)),
+            ("SSD", CGRect(x: 160, y: 0, width: 13, height: 22)),
+            ("network", CGRect(x: 253, y: 0, width: 15, height: 22))
+        ]
+        for dark in [false, true] {
+            for style in MenuBarAnimationStyle.allCases {
+                var singleSize = NSSize.zero
+                _ = try render(active, style: style, dark: dark, phase: 0.08, primary: .cpu,
+                    reportSize: { singleSize = $0 })
+                let bothSize = NSSize(width: singleSize.width + 72, height: singleSize.height)
+                let prefix = "both-\(dark ? "dark" : "light")-\(style.rawValue)"
+                _ = try render(active, style: style, dark: dark, phase: 0.08, primary: .cpuAndGPU,
+                    output: directory.appendingPathComponent(prefix + ".png"), expectedSize: bothSize)
+                for (name, region) in regions {
+                    let a = try render(active, style: style, dark: dark, phase: 0.08, primary: .cpuAndGPU,
+                        region: region, expectedSize: bothSize)
+                    let b = try render(active, style: style, dark: dark, phase: 0.39, primary: .cpuAndGPU,
+                        region: region, expectedSize: bothSize)
+                    try check(reduceMotion ? a == b : a != b, "simultaneous \(name) phase comparison failed")
+                    let offA = try render(active, style: style, dark: dark, phase: 0.08, motion: false,
+                        primary: .cpuAndGPU, region: region, expectedSize: bothSize)
+                    let offB = try render(active, style: style, dark: dark, phase: 0.39, motion: false,
+                        primary: .cpuAndGPU, region: region, expectedSize: bothSize)
+                    try check(offA == offB, "simultaneous \(name) motion-off failed")
+                }
+                // Existing SSD/network pixels must only shift, never overlap or change.
+                let rates = CGRect(x: 88, y: 0, width: singleSize.width - 88, height: 22)
+                let singleRates = try render(active, style: style, dark: dark, phase: 0.17,
+                    primary: .cpu, region: rates)
+                let bothRates = try render(active, style: style, dark: dark, phase: 0.17,
+                    primary: .cpuAndGPU, region: rates.offsetBy(dx: 72, dy: 0))
+                try check(singleRates == bothRates, "simultaneous mode changed or cropped SSD/network content")
+                for (cpu, gpu) in [(0.0, 0.0), (37, 0), (0, 50)] {
+                    let fixture = Fixture(name: "isolated", cpu: cpu, cpuTemperature: 74, capacityUsed: 0,
+                        read: 0, write: 0, upload: 0, download: 0, gpu: gpu, gpuCoreCount: 20).sample
+                    for (name, region) in regions.prefix(2) {
+                        let a = try render(fixture, style: style, dark: dark, phase: 0.08,
+                            primary: .cpuAndGPU, region: region)
+                        let b = try render(fixture, style: style, dark: dark, phase: 0.39,
+                            primary: .cpuAndGPU, region: region)
+                        let moving = (name == "CPU" ? cpu : gpu) > 0 && !reduceMotion
+                        try check(moving ? a != b : a == b, "simultaneous isolated activity failed for \(name)")
+                    }
+                }
+                let sleepA = try render(active, style: style, dark: dark, phase: 0.08,
+                    primary: .cpuAndGPU, sleeping: true)
+                let sleepB = try render(active, style: style, dark: dark, phase: 0.39,
+                    primary: .cpuAndGPU, sleeping: true)
+                try check(sleepA == sleepB, "sleep did not freeze simultaneous mode")
+            }
+        }
+        print("PASS simultaneous CPU + GPU: both regions animate independently, idle/off/sleep freeze, SSD/network exact shifted pixels, compact width +72pt")
     }
 
     static func contactSheet(in directory: URL) throws {
         let rows = [("rhythm", "idle-empty"), ("rhythm", "mixed"), ("rhythm", "serious-max-labels"),
                     ("orbit", "mixed"), ("orbit", "busy-full"), ("orbit", "very-large"),
-                    ("gpu", "idle"), ("gpu", "one"), ("gpu", "half"), ("gpu", "full")]
-        guard let context = CGContext(data: nil, width: 1200, height: rows.count * 90,
+                    ("gpu", "idle"), ("gpu", "one"), ("gpu", "half"), ("gpu", "full"), ("both", "0")]
+        guard let context = CGContext(data: nil, width: 1500, height: rows.count * 90,
             bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             throw ProbeError.failed("contact sheet context unavailable")
@@ -186,11 +249,11 @@ struct MenuRenderProbe {
         for (index, row) in rows.enumerated() {
             let y = CGFloat((rows.count - 1 - index) * 90)
             for dark in [false, true] {
-                let x: CGFloat = dark ? 600 : 0
+                let x: CGFloat = dark ? 750 : 0
                 context.setFillColor(NSColor(calibratedWhite: dark ? 0.12 : 0.94, alpha: 1).cgColor)
-                context.fill(CGRect(x: x, y: y, width: 600, height: 90))
+                context.fill(CGRect(x: x, y: y, width: 750, height: 90))
                 let appearance = dark ? "dark" : "light"
-                let name = row.0 == "gpu" ? "gpu-\(appearance)-0-\(row.1)" : "\(appearance)-\(row.0)-\(row.1)"
+                let name = row.0 == "both" ? "both-\(appearance)-\(row.1)" : row.0 == "gpu" ? "gpu-\(appearance)-0-\(row.1)" : "\(appearance)-\(row.0)-\(row.1)"
                 (name as NSString).draw(at: NSPoint(x: x + 12, y: y + 61), withAttributes: [
                     .font: NSFont.systemFont(ofSize: 14),
                     .foregroundColor: dark ? NSColor.white : NSColor.black])
@@ -335,6 +398,7 @@ struct MenuRenderProbe {
         if CommandLine.arguments.contains("--benchmark") { try benchmark(fixtures[2].sample) }
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         try gpuChecks(in: directory, reduceMotion: reduceMotion)
+        try simultaneousChecks(in: directory, reduceMotion: reduceMotion)
         try regionMotionChecks(active: fixtures[2].sample, idle: fixtures[0].sample, reduceMotion: reduceMotion)
         var count = 0
         for dark in [false, true] {

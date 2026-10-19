@@ -7,7 +7,6 @@ import UniformTypeIdentifiers
 // The surrounding rounded field is original presentation artwork, not OS chrome.
 @main
 enum RenderReadmeAssets {
-    private static let canvasSize = CGSize(width: 576, height: 92)
     private static let frameCount = 24
     private static let framesPerSecond = 8.0
 
@@ -24,6 +23,7 @@ enum RenderReadmeAssets {
     }
 
     private static func composed(_ image: NSImage) -> CGImage {
+        let canvasSize = CGSize(width: image.size.width > 264 ? 720 : 576, height: 92)
         guard let context = CGContext(data: nil, width: Int(canvasSize.width),
             height: Int(canvasSize.height), bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
@@ -45,7 +45,7 @@ enum RenderReadmeAssets {
         let contentRect = CGRect(x: floor((canvasSize.width - CGFloat(content.width)) / 2),
             y: floor((canvasSize.height - CGFloat(content.height)) / 2),
             width: CGFloat(content.width), height: CGFloat(content.height))
-        precondition(contentRect.width <= 528 && contentRect.height == 44,
+        precondition(contentRect.width <= 672 && contentRect.height == 44,
             "Unexpected production menu painter size")
         context.interpolationQuality = .none
         context.draw(content, in: contentRect)
@@ -69,8 +69,8 @@ enum RenderReadmeAssets {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         L10n.setLanguage(.english, defaults: defaults)
-        for metric in MenuBarPrimaryMetric.allCases {
-            let name = metric == .cpu ? "menubar" : "menubar-gpu"
+        for metric in [MenuBarPrimaryMetric.cpuAndGPU, .gpu] {
+            let name = metric == .cpuAndGPU ? "menubar" : "menubar-gpu"
             let preferences = MenuBarPreferences(style: .rhythm, motionEnabled: true, intensity: 1.2, primaryMetric: metric)
             let painter = MenuBarContent.previewRenderer(sample: sample, preferences: preferences, dark: true)
             let output = directory.appendingPathComponent("\(name)-demo.gif")
@@ -108,7 +108,7 @@ enum RenderReadmeAssets {
                 guard let frame = CGImageSourceCreateImageAtIndex(encoded, index, nil) else {
                     fatalError("Cannot decode menu GIF frame")
                 }
-                precondition(frame.width == 576 && frame.height == 92, "Menu GIF dimensions changed")
+                precondition(frame.width == (metric == .cpuAndGPU ? 720 : 576) && frame.height == 92, "Menu GIF dimensions changed")
                 if let data = frame.dataProvider?.data { encodedFrames.insert(data as Data) }
                 let metadata = CGImageSourceCopyPropertiesAtIndex(encoded, index, nil) as? [CFString: Any]
                 let gif = metadata?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
@@ -118,7 +118,7 @@ enum RenderReadmeAssets {
                 "Menu GIF timing changed")
             let bytes = try Data(contentsOf: output).count
             precondition(bytes < 250_000, "Menu GIF exceeds documentation size budget")
-            print("Rendered synthetic menu GIF: 576×92, \(frameCount) frames, 8 fps, 3 seconds, \(bytes) bytes")
+            print("Rendered synthetic menu GIF: \(metric == .cpuAndGPU ? 720 : 576)×92, \(frameCount) frames, 8 fps, 3 seconds, \(bytes) bytes")
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 print("System Reduce Motion is enabled; the production painter intentionally remains still")
             } else {

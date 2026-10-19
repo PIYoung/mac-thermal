@@ -451,12 +451,12 @@ final class PanelController: NSViewController {
     }()
     private lazy var primaryMetricControl: NSPopUpButton = {
         let control = NSPopUpButton(frame: .zero, pullsDown: false)
-        control.addItems(withTitles: ["CPU", "GPU"])
+        control.addItems(withTitles: ["CPU", "GPU", "CPU + GPU"])
         control.target = self
         control.action = #selector(changeMenuBarPreferences)
         control.controlSize = .regular
         localizedAccessibilityLabel(control, "메뉴바 표시")
-        localizedToolTip(control, "메뉴바 첫 항목을 CPU 또는 GPU로 선택합니다")
+        localizedToolTip(control, "메뉴바에서 CPU, GPU 또는 둘 다 표시합니다")
         return control
     }()
     private lazy var menuBarMotionSwitch: NSSwitch = {
@@ -679,7 +679,7 @@ final class PanelController: NSViewController {
         updatingMenuBarControls = true
         defer { updatingMenuBarControls = false }
         animationStyleControl.selectItem(at: menuBarPreferences.style.rawValue)
-        animationStyleControl.isEnabled = menuBarPreferences.primaryMetric == .cpu
+        animationStyleControl.isEnabled = menuBarPreferences.primaryMetric != .gpu
         primaryMetricControl.selectItem(at: menuBarPreferences.primaryMetric.rawValue)
         menuBarMotionSwitch.state = menuBarPreferences.motionEnabled ? .on : .off
         motionIntensitySlider.doubleValue = menuBarPreferences.intensity
@@ -1101,6 +1101,7 @@ extension PanelController {
         updateMenuBarControls()
     }
     var probePrimaryMetric: Int { primaryMetricControl.indexOfSelectedItem }
+    var probePrimaryMetricTitles: [String] { primaryMetricControl.itemTitles }
     var probeCPUStyleEnabled: Bool { animationStyleControl.isEnabled }
     var probeStrings: [String: String] {
         ["cpu": cpuTemp.stringValue, "cpuPercent": cpuPercent.stringValue,

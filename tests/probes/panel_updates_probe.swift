@@ -260,10 +260,14 @@ enum PanelUpdatesProbe {
             }
             panel.probeToggleSettings()
             checkContentBounds(panel.view)
+            precondition(panel.probePrimaryMetricTitles == ["CPU", "GPU", "CPU + GPU"])
             panel.probeConfigureMenuBar(.gpu)
             precondition(panel.probePrimaryMetric == 1 && !panel.probeCPUStyleEnabled)
             panel.probeConfigureMenuBar(.cpu)
             precondition(panel.probePrimaryMetric == 0 && panel.probeCPUStyleEnabled)
+            panel.probeConfigureMenuBar(.cpuAndGPU)
+            precondition(panel.probePrimaryMetric == 2 && panel.probeCPUStyleEnabled)
+            checkContentBounds(panel.view)
             panel.probeToggleSettings()
         }
         precondition(panel.probeHistoryTimes == timesBeforeLanguage, "Language and tab changes must not record samples")

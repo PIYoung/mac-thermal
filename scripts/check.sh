@@ -13,6 +13,7 @@ zsh "$project_dir/scripts/run_process_ranking_probe.sh"
 zsh "$project_dir/scripts/run_thermal_fallback_probe.sh"
 zsh "$project_dir/scripts/run_gpu_metrics_probe.sh"
 zsh "$project_dir/scripts/run_panel_updates_probe.sh"
+zsh "$project_dir/scripts/run_panel_presentation_probe.sh"
 
 # These probes use isolated preference suites and synthetic history samples.
 # They do not enumerate other processes, read sensors, or change app settings.
@@ -24,4 +25,4 @@ xcrun swiftc -O -target arm64-apple-macosx14.0 \
   -framework AppKit -o "$check_dir/ui-metrics-probe"
 "$check_dir/ui-metrics-probe"
 
-print -- "Build, localization, CPU/GPU menu rendering, process ranking, thermal fallback, GPU parsing, panel updates, uptime, and usage history checks passed."
+print -- "Build, localization, CPU/GPU menu rendering, process ranking, thermal fallback, GPU parsing, panel updates, bounded panel opening, uptime, and usage history checks passed."

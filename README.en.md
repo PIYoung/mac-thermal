@@ -28,7 +28,7 @@
 
 ## A glance at the menu bar
 
-Check CPU or GPU, SSD, and network activity without opening the panel. The numbers are measured values; the motion gives you a sense of how busy your Mac is.
+Check CPU, GPU, SSD, and network activity together without opening the panel. The numbers are measured values; the motion gives you a sense of how busy your Mac is.
 
 <p align="center">
   <picture>
@@ -45,7 +45,7 @@ Check CPU or GPU, SSD, and network activity without opening the panel. The numbe
 
 Menu bar text turns **orange or red** with the system's thermal state. Turn motion off or adjust its intensity in Settings. The app also follows macOS **Reduce Motion**.
 
-Choose **Settings → Menu bar metric → GPU** to replace the first item with a 4×3 tile grid. More tiles light up and the gentle brightness wave speeds up as utilization rises; it stops at 0%. The 12 tiles are usage steps, not physical cores. CPU remains the default.
+The menu bar defaults to **CPU + GPU together**: CPU temperature and usage beside a 4×3 GPU tile grid and utilization. Choose CPU alone or GPU alone under **Settings → Menu bar metric** if preferred. More tiles light up and the gentle brightness wave speeds up as utilization rises; it stops at 0%. The 12 tiles are usage steps, not physical cores.
 
 <p align="center">
   <picture>

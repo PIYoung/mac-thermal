@@ -3,7 +3,7 @@ import QuartzCore
 
 /// Native status button: cached text and bounded raster work at eight fps.
 final class MenuBarContent: NSObject {
-    static let imageSize = NSSize(width: 264, height: 22)
+    static let imageSize = NSSize(width: 336, height: 22)
     private weak var button: NSStatusBarButton?
     private var sample = Snapshot.pending
     private var baseImage: CGImage?
@@ -23,6 +23,8 @@ final class MenuBarContent: NSObject {
     private var previewAppearance: NSAppearance?
     private var textSignature = ""
     private var displayWidth = MenuBarContent.imageSize.width
+    private var additionalWidth: CGFloat { preferences.primaryMetric == .cpuAndGPU ? 72 : 0 }
+    private var canvasSize: NSSize { NSSize(width: 264 + additionalWidth, height: Self.imageSize.height) }
 
     var preferences = MenuBarPreferences.load() {
         didSet {
@@ -108,7 +110,8 @@ final class MenuBarContent: NSObject {
     }
 
     private var hasActivity: Bool {
-        (validPercentage(preferences.primaryMetric == .cpu ? sample.cpuUsage : sample.resources.gpu.utilizationPercent) ?? 0) > 0 ||
+        (preferences.primaryMetric.showsCPU && (validPercentage(sample.cpuUsage) ?? 0) > 0) ||
+        (preferences.primaryMetric.showsGPU && (validPercentage(sample.resources.gpu.utilizationPercent) ?? 0) > 0) ||
         [sample.upload, sample.download, sample.resources.disk.readBytesPerSecond, sample.resources.disk.writeBytesPerSecond].contains { (validRate($0) ?? 0) > 0 }
     }
 
@@ -136,10 +139,10 @@ final class MenuBarContent: NSObject {
         lastTick = now
         let load = validPercentage(sample.cpuUsage) ?? 0
         let intensity = max(0.75, min(1.5, preferences.intensity))
-        if preferences.primaryMetric == .cpu, load > 0 {
+        if preferences.primaryMetric.showsCPU, load > 0 {
             cpuPhase = (cpuPhase + elapsed / max(0.8, (3.9 - load * 0.029) / intensity)).truncatingRemainder(dividingBy: 100)
         }
-        if preferences.primaryMetric == .gpu, let gpuLoad = validPercentage(sample.resources.gpu.utilizationPercent), gpuLoad > 0 {
+        if preferences.primaryMetric.showsGPU, let gpuLoad = validPercentage(sample.resources.gpu.utilizationPercent), gpuLoad > 0 {
             gpuPhase = (gpuPhase + elapsed / Self.gpuWavePeriod(load: gpuLoad, intensity: intensity)).truncatingRemainder(dividingBy: 1)
         }
         if let upload = validRate(sample.upload), upload > 0 { uploadPhase = (uploadPhase + elapsed / flowPeriod(upload, intensity: intensity)).truncatingRemainder(dividingBy: 1) }
@@ -161,13 +164,10 @@ final class MenuBarContent: NSObject {
 
     private var labels: [String] {
         let cpu = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? "—%"
-        let primary: [String]
-        if preferences.primaryMetric == .gpu {
-            let gpu = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? "—%"
-            primary = ["GPU " + gpu, sample.resources.gpu.coreCount.flatMap { $0 > 0 ? L10n.format("%d코어", $0) : nil } ?? "—"]
-        } else {
-            primary = ["CPU " + cpu, sample.cpuTemperature.map { String(format: "%.0f°C", $0) } ?? "—"]
-        }
+        let gpu = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? "—%"
+        let cpuLabels = ["CPU " + cpu, sample.cpuTemperature.map { String(format: "%.0f°C", $0) } ?? "—"]
+        let gpuLabels = ["GPU " + gpu, sample.resources.gpu.coreCount.flatMap { $0 > 0 ? L10n.format("%d코어", $0) : nil } ?? "—"]
+        let primary = (preferences.primaryMetric.showsCPU ? cpuLabels : []) + (preferences.primaryMetric.showsGPU ? gpuLabels : [])
         return primary + [
                 "R " + rateLabel(sample.resources.disk.readBytesPerSecond), "W " + rateLabel(sample.resources.disk.writeBytesPerSecond),
                 "↑ " + rateLabel(sample.upload), "↓ " + rateLabel(sample.download)]
@@ -220,7 +220,7 @@ final class MenuBarContent: NSObject {
     }
 
     private func context() -> CGContext? {
-        let width = Int(Self.imageSize.width * scale)
+        let width = Int(canvasSize.width * scale)
         let height = Int(Self.imageSize.height * scale)
         guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
@@ -240,17 +240,22 @@ final class MenuBarContent: NSObject {
             let lines = preparedLabels ?? labels
             // Text only changes with a new sample or appearance. Measuring it in
             // the animation painter repeated formatting and font layout eight times a second.
-            let top = (lines[4] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
-            let bottom = (lines[5] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
-            displayWidth = min(Self.imageSize.width, max(220, ceil(200 + max(top, bottom) + 4)))
-            for (index, x, width) in [(0, CGFloat(30), CGFloat(43)), (2, 106, 59), (4, 200, 59)] {
+            let networkIndex = lines.count - 2
+            let shift = additionalWidth
+            let top = (lines[networkIndex] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
+            let bottom = (lines[networkIndex + 1] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
+            displayWidth = min(264 + shift, max(220 + shift, ceil(200 + shift + max(top, bottom) + 4)))
+            let groups: [(Int, CGFloat, CGFloat)] = shift > 0
+                ? [(0, 30, 43), (2, 106, 43), (4, 178, 59), (6, 272, 59)]
+                : [(0, 30, 43), (2, 106, 59), (4, 200, 59)]
+            for (index, x, width) in groups {
                 drawText(lines[index], at: NSPoint(x: x, y: 10.4), width: width, size: 9.3, color: color)
                 drawText(lines[index + 1], at: NSPoint(x: x, y: 0.2), width: width, size: 8.6, color: color)
             }
             NSGraphicsContext.restoreGraphicsState()
             context.setFillColor(color.withAlphaComponent(0.17).cgColor)
-            context.fill(CGRect(x: 79.5, y: 5, width: 0.5, height: 12))
-            context.fill(CGRect(x: 172.5, y: 5, width: 0.5, height: 12))
+            let separators: [CGFloat] = shift > 0 ? [75.5, 151.5, 244.5] : [79.5, 172.5]
+            for x in separators { context.fill(CGRect(x: x, y: 5, width: 0.5, height: 12)) }
         }
         baseImage = context.makeImage()
     }
@@ -276,16 +281,25 @@ final class MenuBarContent: NSObject {
     private func composite() -> NSImage? {
         if baseImage == nil { rebuildBase() }
         guard let context = context(), let baseImage else { return nil }
-        context.draw(baseImage, in: CGRect(origin: .zero, size: Self.imageSize))
+        context.draw(baseImage, in: CGRect(origin: .zero, size: canvasSize))
         let animated = motionAllowed && !systemSleeping && !displaySleeping && hasActivity
-        if preferences.primaryMetric == .gpu {
+        if preferences.primaryMetric == .cpuAndGPU {
+            drawCPU(in: context, phase: animated ? cpuPhase : 0)
+            context.saveGState()
+            context.translateBy(x: 76, y: 0)
+            drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
+            context.restoreGState()
+        } else if preferences.primaryMetric == .gpu {
             drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
         } else {
             drawCPU(in: context, phase: animated ? cpuPhase : 0)
         }
+        context.saveGState()
+        context.translateBy(x: additionalWidth, y: 0)
         drawCapacity(in: context, phase: animated ? diskPhase : 0, animated: animated)
         drawFlow(in: context, x: 181, bytes: sample.upload, phase: animated ? uploadPhase : 0.45, upward: true, animated: animated)
         drawFlow(in: context, x: 190, bytes: sample.download, phase: animated ? downloadPhase : 0.45, upward: false, animated: animated)
+        context.restoreGState()
         let width = displayWidth
         guard let image = context.makeImage()?.cropping(to: CGRect(x: 0, y: 0, width: width * scale, height: Self.imageSize.height * scale)) else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: width, height: Self.imageSize.height))

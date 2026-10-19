@@ -76,7 +76,7 @@ func speed(_ value: Double?, compact: Bool = false) -> String {
     return String(format: "%.0fB%@", value, suffix)
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let menuContent = MenuBarContent(frame: .zero)
     private let panel = PanelController()
@@ -85,8 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var timer: DispatchSourceTimer?
     private var screenObserver: NSObjectProtocol?
     private var lastSample = Snapshot.pending
-    private var pendingPanelShow = false
-    private var showAttempt = 0
+    private var panelRequest = PanelPresentationRequest()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Read synchronously while the launch Apple event is still current.
@@ -106,12 +105,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         panel.refresh = { [weak self] in self?.requestSample() }
         panel.menuBarPreferencesChanged = { [weak self] preferences in
-            self?.menuContent.preferences = preferences
+            guard let self else { return }
+            self.menuContent.preferences = preferences
+            self.statusItem.length = self.menuContent.contentWidth
         }
         _ = panel.view
-        dashboard.delegate = self
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.dashboard.orderOut(nil)
+            self?.hidePanel()
         }
         render(lastSample)
         let timer = DispatchSource.makeTimerSource(queue: sampleQueue)
@@ -157,38 +157,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func togglePanel() {
-        if dashboard.isVisible || pendingPanelShow { hidePanel() }
+        if dashboard.isVisible || panelRequest.pending { hidePanel() }
         else { requestPanelShow() }
     }
 
     private func requestPanelShow() {
-        guard !dashboard.isVisible else { return }
-        pendingPanelShow = true
-        showAttempt = 0
+        guard !dashboard.isVisible else { panelRequest.cancel(); return }
+        let token = panelRequest.begin()
         if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
-        DispatchQueue.main.async { [weak self] in self?.showPendingPanel() }
+        DispatchQueue.main.async { [weak self] in self?.showPendingPanel(token: token) }
     }
 
-    private func showPendingPanel() {
-        guard pendingPanelShow, NSApp.isActive else { return }
-        guard let button = statusItem.button, button.window != nil else {
-            if showAttempt < 5 {
-                showAttempt += 1
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.showPendingPanel() }
-            } else { pendingPanelShow = false }
-            return
+    private func showPendingPanel(token: UInt) {
+        let button = statusItem.button
+        switch panelRequest.evaluate(token: token, hasAnchor: button?.window != nil,
+                                     isActive: NSApp.isActive, isVisible: dashboard.isVisible) {
+        case .show:
+            if let button { dashboard.show(below: button) }
+        case .retry:
+            if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.showPendingPanel(token: token)
+            }
+        case .ignore, .finished, .abandon:
+            break
         }
-        pendingPanelShow = false
-        if !dashboard.isVisible { dashboard.show(below: button) }
     }
 
     private func hidePanel() {
-        pendingPanelShow = false
+        panelRequest.cancel()
         dashboard.orderOut(nil)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in self?.showPendingPanel() }
+        guard let token = panelRequest.token else { return }
+        DispatchQueue.main.async { [weak self] in self?.showPendingPanel(token: token) }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -200,14 +203,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hidePanel()
     }
 
-    func windowDidResignKey(_ notification: Notification) {
-        // Defer until the current click completes so clicking the status item still toggles.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, !self.pendingPanelShow, !self.dashboard.isKeyWindow,
-                  self.dashboard.attachedSheet == nil, NSApp.modalWindow == nil else { return }
-            self.hidePanel()
-        }
-    }
+    // Native popup menus temporarily take key focus. App deactivation, the
+    // status item and Escape dismiss the panel; losing key status alone does not.
 
     func applicationWillTerminate(_ notification: Notification) {
         menuContent.stop()
