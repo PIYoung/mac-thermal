@@ -9,6 +9,16 @@ enum LoginItemManager {
     static func openSettings() {}
 }
 
+private final class EntryFixture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scans = 0
+    private var expectedScopes = 0
+    private var executions = 0
+    var counts: (Int, Int, Int) { lock.lock(); defer { lock.unlock() }; return (scans, expectedScopes, executions) }
+    func recordScan(expected: Bool) { lock.lock(); scans += 1; if expected { expectedScopes += 1 }; lock.unlock() }
+    func recordExecution() { lock.lock(); executions += 1; lock.unlock() }
+}
+
 private final class ExecutionFixture: @unchecked Sendable {
     let started = DispatchSemaphore(value: 0)
     let finish = DispatchSemaphore(value: 0)
@@ -38,6 +48,92 @@ enum DiskCleanupUIProbe {
             if !(child is NSControl), !(child is NSScrollView) { checkBounds(child) }
         }
     }
+    private static func automaticEntryChecks() throws {
+        let manager = FileManager.default
+        let root = URL(fileURLWithPath: "/private/tmp/MacThermalAutoEntry-" + UUID().uuidString, isDirectory: true)
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        for name in ["Installer.dmg", "Installer.pkg", "Large.bin"] {
+            let url = root.appendingPathComponent(name)
+            try Data("Disposable automatic entry fixture".utf8).write(to: url)
+            if name == "Large.bin" {
+                let handle = try FileHandle(forWritingTo: url)
+                try handle.truncate(atOffset: 125_000_000)
+                try handle.close()
+            }
+        }
+        let future = Date().addingTimeInterval(45 * 86_400)
+        let plan = try DiskCleanup.scan(rootURL: root, cancellation: DiskCleanupCancellation(), now: future)
+        let installers = Set(plan.candidates.filter { $0.reason == .oldInstaller }.map(\.id))
+        precondition(plan.candidates.count == 3 && installers.count == 2)
+        let suite = "local.mac-thermal.auto-entry.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fixture = EntryFixture()
+        let operations = DiskCleanupViewOperations(scan: { _, expected, _, _ in
+            fixture.recordScan(expected: expected != nil)
+            return plan
+        }, execute: { _, _, _, _ in
+            fixture.recordExecution()
+            return DiskCleanupResult(items: [], cancelled: false)
+        })
+        let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 344, height: 317), operations: operations, defaults: defaults)
+        precondition(fixture.counts.0 == 0, "Constructing the view must never scan")
+        view.onEntry()
+        precondition(fixture.counts.0 == 0, "No approved folder means no scan and no Downloads fallback")
+        waitUntil { view.probeStage == "idle" }
+        view.probeAcceptFolder(root)
+        view.onEntry()
+        view.onEntry()
+        waitUntil { view.probeStage == "review" }
+        precondition(fixture.counts.0 == 1 && fixture.counts.2 == 0, "Repeated entry must not duplicate a running scan or execute Trash")
+        precondition(view.probeRecommendedIDs == installers && view.probeSelectedIDs == installers,
+            "Only old installers may be automatically recommended and checked")
+        precondition(!view.probeSelectedIDs.contains(plan.candidates.first { $0.reason == .oldLargeFile }!.id))
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults)?.rootURL == plan.rootURL)
+        let selectedRow = plan.candidates.firstIndex { $0.id == installers.first! }!
+        view.probeToggleCandidate(at: selectedRow)
+        let edited = view.probeSelectedIDs
+        view.onEntry()
+        precondition(fixture.counts.0 == 1 && view.probeSelectedIDs == edited,
+            "Returning to review must not erase manual deselection")
+        view.probePressPrimary()
+        precondition(view.probeStage == "confirmation" && view.probeConfirmedIDs == edited && fixture.counts.2 == 0)
+        view.onEntry()
+        precondition(view.probeConfirmedIDs == edited && fixture.counts.0 == 1)
+        let reopened = DiskCleanupView(frame: view.frame, operations: operations, defaults: defaults)
+        precondition(fixture.counts.0 == 1, "Application construction must not scan a remembered folder")
+        reopened.onEntry()
+        waitUntil { reopened.probeStage == "review" }
+        precondition(fixture.counts.0 == 2 && fixture.counts.1 == 1 && fixture.counts.2 == 0,
+            "Explicit entry must pass remembered scope to the scanner")
+        precondition(reopened.probeSelectedIDs == installers, "Checkbox state must not persist across new views")
+        reopened.probeForgetFolder()
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
+        reopened.onEntry()
+        precondition(reopened.probeStage == "idle" && fixture.counts.0 == 2, "Forgetting must remove approval without any fallback scan")
+
+        let partial = try DiskCleanup.scan(rootURL: root, cancellation: DiskCleanupCancellation(),
+            limits: DiskCleanupLimits(maximumEntries: 20_000, maximumCandidates: 1, maximumDepth: 20, maximumSeconds: 8), now: future)
+        let cancellation = DiskCleanupCancellation()
+        let stopped = try DiskCleanup.scan(rootURL: root, cancellation: cancellation, now: future) { _ in cancellation.cancel() }
+        for incomplete in [partial, stopped] {
+            let state = EntryFixture()
+            let incompleteOperations = DiskCleanupViewOperations(scan: { _, _, _, _ in state.recordScan(expected: false); return incomplete },
+                execute: { _, _, _, _ in state.recordExecution(); return DiskCleanupResult(items: [], cancelled: false) })
+            let review = DiskCleanupView(frame: view.frame, operations: incompleteOperations, defaults: defaults)
+            review.probeAcceptFolder(root)
+            waitUntil { review.probeStage == "review" }
+            precondition(review.probeSelectedIDs.isEmpty && review.probeRecommendedIDs.isEmpty,
+                "Incomplete scans must not precheck candidates")
+            review.onEntry()
+            precondition(state.counts.0 == 1 && state.counts.2 == 0, "Stopped scans must stay stopped on reentry")
+            DiskCleanup.forgetRememberedFolder(defaults: defaults)
+        }
+        let remaining = try manager.contentsOfDirectory(atPath: root.path)
+        precondition(remaining.count == 3)
+        print("Automatic cleanup entry passed: one-time folder approval, stable remembered scope, no launch scan/fallback, old-installer recommendations only, manual edits/confirmation retained, incomplete scans unselected, explicit forget and no Trash calls")
+    }
     static func main() throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
@@ -59,13 +155,14 @@ enum DiskCleanupUIProbe {
         let suite = "local.mac-thermal.cleanup-ui.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
+        try automaticEntryChecks()
         let originalLanguage = L10n.language
         defer { L10n.setLanguage(originalLanguage, defaults: defaults) }
 
         for language in AppLanguage.allCases {
             L10n.setLanguage(language, defaults: defaults)
             let execution = ExecutionFixture()
-            var operations = DiskCleanupViewOperations(scan: { _, _, _ in plan }, execute: { confirmedPlan, ids, cancellation, _ in
+            var operations = DiskCleanupViewOperations(scan: { _, _, _, _ in plan }, execute: { confirmedPlan, ids, cancellation, _ in
                 execution.record(ids)
                 execution.started.signal()
                 _ = execution.finish.wait(timeout: .now() + 3)
@@ -78,7 +175,7 @@ enum DiskCleanupUIProbe {
                 return DiskCleanupResult(items: items, cancelled: cancellation.isCancelled)
             })
             operations.availableBytes = { _ in 2_000_000_000 }
-            let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 344, height: 317), operations: operations)
+            let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 344, height: 317), operations: operations, defaults: defaults)
             view.probeSetPlan(partialPlan)
             view.layoutSubtreeIfNeeded()
             precondition(visibleLabels(view).contains(where: { $0.contains(L10n.text("검사 한도에 도달해 일부 항목만 표시합니다")) }),
@@ -86,6 +183,10 @@ enum DiskCleanupUIProbe {
             view.probeSetPlan(plan)
             view.layoutSubtreeIfNeeded()
             checkBounds(view)
+            precondition(view.probeHeaderHeight <= 45 && view.probeListHeight >= 170,
+                "Removing the duplicate title must reclaim list space")
+            precondition(!visibleLabels(view).contains(L10n.text("디스크 정리")),
+                "Cleanup must not repeat the title inside its subpage")
             precondition(view.probeStage == "review" && view.probeCandidateCount == 12)
             precondition(view.probeSelectedIDs.isEmpty && !view.probePrimaryEnabled,
                 "No candidate may be selected automatically")
@@ -125,10 +226,13 @@ enum DiskCleanupUIProbe {
         L10n.setLanguage(.korean, defaults: defaults)
         let panel = PanelController(defaults: defaults)
         let window = DashboardWindow(controller: panel)
+        precondition(panel.probeDiskCleanupView == nil, "App/panel construction must not create or scan cleanup")
         let initialFrame = window.frame
         panel.probeOpenDiskCleanup()
         let cleanup = panel.probeDiskCleanupView!
+        waitUntil { cleanup.probeStage == "idle" }
         cleanup.probeSetPlan(plan)
+        precondition(cleanup.probeStage == "review" && cleanup.probeCandidateCount == 12)
         cleanup.probeToggleCandidate(at: 2)
         let expected = cleanup.probeSelectedIDs
         panel.probeSelectTab(0)

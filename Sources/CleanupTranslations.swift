@@ -3,6 +3,15 @@ import Foundation
 // Original project translations: English, Japanese, Simplified Chinese.
 extension L10n {
     static let cleanupTranslations: [String: [String]] = [
+        "기억한 폴더 확인 중": ["Checking saved folder", "記憶したフォルダを確認中", "正在检查已保存的文件夹"],
+        "기억한 폴더가 변경되었거나 사용할 수 없습니다. 폴더를 다시 선택하세요": ["The saved folder changed or is unavailable. Choose the folder again.", "記憶したフォルダが変更されたか使用できません。再度選択してください。", "已保存的文件夹已更改或不可用，请重新选择。"],
+        "추천": ["Suggested", "推奨", "推荐"],
+        "추천 자동 선택: 오래된 설치 파일만 · 대용량 파일은 직접 선택": ["Old installers prechecked · select large files yourself", "古いインストーラのみ自動選択 · 大容量は手動選択", "仅预选旧安装文件 · 大文件请自行选择"],
+        "생성·수정 모두 30일 이상 지난 설치 파일 또는 100MB 이상 파일을 찾습니다. 오래된 설치 파일만 미리 선택하고, 이동은 최종 확인 후 진행합니다.": ["Find installers or files of 100MB or more created and modified 30+ days ago. Only old installers are prechecked; moving files requires final confirmation.", "作成・変更から30日以上のインストーラや100MB以上のファイルを探します。古いインストーラだけを事前選択し、最終確認後に移動します。", "查找创建和修改均满30天的安装文件或至少100MB的文件。仅预选旧安装文件，最终确认后才会移动。"],
+        "선택한 폴더를 기억하고 다음 정리 때 자동 검사합니다": ["Remember this folder and scan it next time you open cleanup", "選択したフォルダを記憶し、次回の整理時に自動検査します", "记住所选文件夹，下次打开清理时自动扫描"],
+        "폴더 관리": ["Manage folder", "フォルダ管理", "管理文件夹"],
+        "기억한 폴더 해제": ["Forget folder", "フォルダの記憶を解除", "忘记文件夹"],
+        "기억한 폴더를 해제했습니다. 새 폴더를 선택하세요": ["Folder forgotten. Choose a new folder.", "フォルダの記憶を解除しました。新しいフォルダを選んでください。", "已忘记文件夹，请选择新的文件夹。"],
         "디스크 정리": ["Disk cleanup", "ディスク整理", "磁盘清理"],
         "내장 SSD": ["Internal SSD", "内蔵SSD", "内置SSD"],
         "SSD 사용 %@, 전체 %@": ["SSD used %@, total %@", "SSD使用量%@、合計%@", "SSD已用%@，总计%@"],

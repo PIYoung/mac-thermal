@@ -52,6 +52,8 @@ struct DiskCleanupProbe {
         try identityAndScope()
         try selectionCancellationAndFailure()
         try limitsAndInvalidRoots()
+        try rememberedFolderRoundtrip()
+        try rememberedFolderChangedScopes()
         print("Disk cleanup fixtures passed: metadata candidates; recent/hidden/package/cloud/project exclusions; no symlink traversal; identity/parent/marker changes; exact subset; cancellation; partial failure; bounded scan and no-op. All Trash actions were injected moves inside owned temporary fixtures.")
     }
 
@@ -203,5 +205,122 @@ struct DiskCleanupProbe {
         try fixture.fm.createSymbolicLink(at: link, withDestinationURL: fixture.root)
         do { _ = try fixture.scan(link); preconditionFailure("Symbolic selected root accepted") }
         catch let error as DiskCleanupError { precondition(error.reason == .symbolicLink) }
+    }
+
+    private static func rememberedFolderRoundtrip() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let suite = "MacThermal.Cleanup.RememberedProbe." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "diskCleanupRememberedFolderV1"
+        try fixture.file("reviewed-file-not-persisted.dmg")
+        let plan = try fixture.scan()
+        guard let remembered = DiskCleanup.rememberFolder(from: plan, defaults: defaults) else {
+            preconditionFailure("Valid owned folder must be remembered")
+        }
+        precondition(remembered.rootURL.path == plan.rootURL.path)
+        precondition(Set(defaults.persistentDomain(forName: suite)!.keys) == [key])
+        let data = defaults.data(forKey: key)!
+        let stored = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as! [String: Any]
+        precondition(Set(stored.keys) == ["version", "rootPath", "bookmark", "ancestors"])
+        let ancestors = stored["ancestors"] as! [[String: Any]]
+        precondition(ancestors.allSatisfy { Set($0.keys) == ["path", "volumeUUID", "inode", "owner", "kind", "birthSeconds", "birthNanoseconds"] })
+        precondition(data.range(of: Data("reviewed-file-not-persisted.dmg".utf8)) == nil)
+        precondition(plan.candidates.allSatisfy { data.range(of: Data($0.id.uuidString.utf8)) == nil })
+        // Normal directory contents changes must not revoke the remembered scope.
+        try fixture.file("fresh-file.dmg", modifiedDays: 1, createdDays: 1)
+        let restored = DiskCleanup.restoreRememberedFolder(defaults: defaults)!
+        let rescanned = try DiskCleanup.scan(rootURL: restored.rootURL,
+            cancellation: DiskCleanupCancellation(), now: fixture.now, expectedFolder: restored)
+        precondition(rescanned.candidates.map(\.relativePath) == ["reviewed-file-not-persisted.dmg"])
+        precondition(rescanned.candidates.first?.id != plan.candidates.first?.id)
+        let cancelled = DiskCleanupCancellation()
+        cancelled.cancel()
+        let cancelledPlan = try fixture.scan(cancellation: cancelled)
+        precondition(DiskCleanup.rememberFolder(from: cancelledPlan, defaults: defaults) == nil)
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults)?.rootURL.path == restored.rootURL.path,
+            "Cancelled analysis must leave an earlier approved folder intact")
+        do {
+            _ = try DiskCleanup.scan(rootURL: fixture.outside, cancellation: DiskCleanupCancellation(), expectedFolder: restored)
+            preconditionFailure("Remembered scope must not approve another root")
+        } catch let error as DiskCleanupError { precondition(error.reason == .changed) }
+        DiskCleanup.forgetRememberedFolder(defaults: defaults)
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
+
+        for corrupt: Any in [Data([0, 1, 2]), "not-a-bookmark-record", Data(repeating: 0, count: 131_073)] {
+            defaults.set(corrupt, forKey: key)
+            precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
+            precondition(defaults.object(forKey: key) == nil)
+        }
+        var altered = stored
+        altered["rootPath"] = fixture.outside.path
+        defaults.set(try PropertyListSerialization.data(fromPropertyList: altered, format: .binary, options: 0), forKey: key)
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil && defaults.object(forKey: key) == nil)
+        print("Remembered cleanup scope passed: bookmark/identity roundtrip, content changes, exact-root scan binding, isolated settings, folder-only persistence, explicit forgetting and corrupt-record rejection.")
+    }
+
+    private static func rememberedFolderChangedScopes() throws {
+        let suite = "MacThermal.Cleanup.ScopeProbe." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "diskCleanupRememberedFolderV1"
+
+        let replaced = try Fixture()
+        defer { replaced.clean() }
+        try replaced.file("old.dmg")
+        let originalPlan = try replaced.scan()
+        let originalToken = DiskCleanup.rememberFolder(from: originalPlan, defaults: defaults)!
+        try replaced.fm.moveItem(at: replaced.root, to: replaced.outside.appendingPathComponent("moved-root"))
+        try replaced.fm.createDirectory(at: replaced.root, withIntermediateDirectories: true)
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
+        precondition(defaults.object(forKey: key) == nil)
+        do {
+            _ = try DiskCleanup.scan(rootURL: replaced.root, cancellation: DiskCleanupCancellation(), expectedFolder: originalToken)
+            preconditionFailure("Root replacement after restore must not become a newly approved scope")
+        } catch let error as DiskCleanupError { precondition(error.reason == .changed) }
+        precondition(DiskCleanup.rememberFolder(from: originalPlan, defaults: defaults) == nil)
+
+        let parentSwap = try Fixture()
+        defer { parentSwap.clean() }
+        let parent = parentSwap.root.appendingPathComponent("Parent")
+        let chosen = parent.appendingPathComponent("Chosen")
+        try parentSwap.file("old.dmg", in: chosen)
+        let plan = try parentSwap.scan(chosen)
+        let token = DiskCleanup.rememberFolder(from: plan, defaults: defaults)!
+        let movedParent = parentSwap.outside.appendingPathComponent("PreviousParent")
+        try parentSwap.fm.moveItem(at: parent, to: movedParent)
+        try parentSwap.fm.createDirectory(at: parent, withIntermediateDirectories: true)
+        try parentSwap.fm.moveItem(at: movedParent.appendingPathComponent("Chosen"), to: chosen)
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
+        do {
+            _ = try DiskCleanup.scan(rootURL: chosen, cancellation: DiskCleanupCancellation(), expectedFolder: token)
+            preconditionFailure("Same root inode under a replaced parent must be rejected")
+        } catch let error as DiskCleanupError { precondition(error.reason == .changed) }
+        precondition(DiskCleanup.rememberFolder(from: plan, defaults: defaults) == nil)
+
+        let symlink = try Fixture()
+        defer { symlink.clean() }
+        try symlink.file("old.dmg")
+        let symlinkPlan = try symlink.scan()
+        let symlinkToken = DiskCleanup.rememberFolder(from: symlinkPlan, defaults: defaults)!
+        try symlink.fm.moveItem(at: symlink.root, to: symlink.outside.appendingPathComponent("Original"))
+        try symlink.fm.createSymbolicLink(at: symlink.root, withDestinationURL: symlink.outside)
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
+        do {
+            _ = try DiskCleanup.scan(rootURL: symlink.root, cancellation: DiskCleanupCancellation(), expectedFolder: symlinkToken)
+            preconditionFailure("Replaced symbolic root must be rejected")
+        } catch is DiskCleanupError {}
+
+        let project = try Fixture()
+        defer { project.clean() }
+        try project.file("old.dmg")
+        let projectPlan = try project.scan()
+        precondition(DiskCleanup.rememberFolder(from: projectPlan, defaults: defaults) != nil)
+        try project.file(".git")
+        precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
+        precondition(defaults.object(forKey: key) == nil)
+        precondition(DiskCleanup.rememberFolder(from: projectPlan, defaults: defaults) == nil)
+        print("Remembered cleanup changes passed: moved/replaced root, same-root inode under swapped parent, symbolic root, restore-to-scan gap, changed-plan rejection and project marker introduced after scan.")
     }
 }

@@ -101,11 +101,11 @@ Use the top-right Settings button to change the language, menu bar motion, and a
 
 ## Disk cleanup
 
-Choose a local folder that is not cloud-synced from **Disk cleanup** at the top right of the SSD card. It lists DMG/PKG installers and files of at least 100 MB whose creation and modification dates are both at least 30 days old as candidates. Age and size do not mean a file is unnecessary, and every checkbox starts unchecked.
+Choose a local folder that is not cloud-synced from **Disk cleanup** at the top right of the SSD card. It lists DMG/PKG installers and files of at least 100 MB whose creation and modification dates are both at least 30 days old as candidates. The selected folder is remembered and scanned on your next cleanup entry; manage or forget it from the folder menu. Age and size do not mean a file is unnecessary. After a complete scan, only old installers are prechecked as suggestions; large files remain unchecked. Stopped or limited scans never precheck files.
 
 Review each file's location, size, modification date, and candidate reason. Confirm the selected count and size before **moving the files to Trash**. System and known cloud locations, hidden files, symbolic links, package contents, version-controlled projects, and blanket cache removal are excluded. Stop scanning or remaining moves at any time; results distinguish moved, skipped, and failed items.
 
-Bytes moved to Trash are not reclaimed space. The app never empties Trash or permanently deletes files; open Trash from the result to review them. Third-party sync folders in arbitrary locations cannot all be identified and must be excluded by the user. Scan lists stay in memory, file contents are not read, and no data is uploaded.
+Bytes moved to Trash are not reclaimed space. The app never empties Trash or permanently deletes files; open Trash from the result to review them. Third-party sync folders in arbitrary locations cannot all be identified and must be excluded by the user. Only the approved folder bookmark and identity are stored locally; changed or unverifiable locations require selection again. Candidate lists, checkboxes and confirmations stay in memory, file contents are not read, and no data is uploaded.
 
 ## Install
 

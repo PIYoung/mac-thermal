@@ -115,6 +115,31 @@ struct DiskCleanupPlan {
     fileprivate let records: [UUID: CleanupFileRecord]
 }
 
+fileprivate struct CleanupRememberedAncestor: Codable, Equatable {
+    let path: String
+    let volumeUUID: String
+    let inode: UInt64
+    let owner: UInt32
+    let kind: UInt16
+    let birthSeconds: Int64
+    let birthNanoseconds: Int64
+}
+
+fileprivate struct CleanupRememberedRecord: Codable {
+    let version: Int
+    let rootPath: String
+    let bookmark: Data
+    let ancestors: [CleanupRememberedAncestor]
+}
+
+/// Only the user-approved folder scope survives across entries. This carries
+/// its stable identity into the next scan; it never carries reviewed files,
+/// selected IDs, confirmation, or permission to execute a later Trash action.
+struct DiskCleanupRememberedFolder {
+    let rootURL: URL
+    fileprivate let record: CleanupRememberedRecord
+}
+
 enum DiskCleanupItemStatus {
     case moved, skipped, failed
 }
@@ -135,6 +160,7 @@ struct DiskCleanupResult {
 /// Explicit, bounded local-folder inspection. No file contents, browser data,
 /// cache trees, permissions, startup tasks, or permanent removal are touched.
 enum DiskCleanup {
+    private static let rememberedFolderKey = "diskCleanupRememberedFolderV1"
     private static let ageThreshold: TimeInterval = 30 * 24 * 60 * 60
     private static let largeFileBytes: Int64 = 100_000_000
     private static let resourceKeys: Set<URLResourceKey> = [
@@ -280,8 +306,136 @@ enum DiskCleanup {
         }
     }
 
+    private static func stableAncestors(_ ancestors: [CleanupAncestor]) throws -> [CleanupRememberedAncestor] {
+        guard !ancestors.isEmpty, ancestors.count <= 64 else { throw DiskCleanupError(reason: .invalidRoot) }
+        // Device numbers are useful for one live scan but can change on reboot.
+        // The persisted identity uses each ancestor's stable volume UUID instead.
+        var volumeUUIDs: [dev_t: String] = [:]
+        var result: [CleanupRememberedAncestor] = []
+        for ancestor in ancestors {
+            var value = stat()
+            guard lstat(ancestor.url.path, &value) == 0,
+                  CleanupNodeIdentity(value) == ancestor.identity,
+                  value.st_mode & S_IFMT == S_IFDIR else { throw DiskCleanupError(reason: .changed) }
+            guard value.st_birthtimespec.tv_sec > 0,
+                  (0..<1_000_000_000).contains(value.st_birthtimespec.tv_nsec) else {
+                throw DiskCleanupError(reason: .unsupportedVolume)
+            }
+            let volumeUUID: String
+            if let cached = volumeUUIDs[value.st_dev] {
+                volumeUUID = cached
+            } else {
+                let values = try ancestor.url.resourceValues(forKeys: [.volumeUUIDStringKey])
+                guard let uuid = values.volumeUUIDString.flatMap(UUID.init(uuidString:)) else {
+                    throw DiskCleanupError(reason: .unsupportedVolume)
+                }
+                volumeUUID = uuid.uuidString
+                volumeUUIDs[value.st_dev] = volumeUUID
+            }
+            result.append(CleanupRememberedAncestor(path: ancestor.url.path,
+                volumeUUID: volumeUUID, inode: UInt64(value.st_ino), owner: value.st_uid,
+                kind: value.st_mode & S_IFMT, birthSeconds: Int64(value.st_birthtimespec.tv_sec),
+                birthNanoseconds: Int64(value.st_birthtimespec.tv_nsec)))
+        }
+        return result
+    }
+
+    private static func validateRememberedRecord(_ record: CleanupRememberedRecord,
+                                                  root: URL, ancestors: [CleanupAncestor]) throws {
+        guard record.version == 1, record.rootPath == root.path,
+              record.rootPath.utf8.count <= 4_096,
+              record.ancestors.count == ancestors.count,
+              record.ancestors.last?.path == root.path,
+              !record.bookmark.isEmpty, record.bookmark.count <= 65_536 else {
+            throw DiskCleanupError(reason: .changed)
+        }
+        guard try stableAncestors(ancestors) == record.ancestors else {
+            throw DiskCleanupError(reason: .changed)
+        }
+    }
+
+    static func forgetRememberedFolder(defaults: UserDefaults) {
+        defaults.removeObject(forKey: rememberedFolderKey)
+    }
+
+    static func rememberFolder(from plan: DiskCleanupPlan,
+                               defaults: UserDefaults) -> DiskCleanupRememberedFolder? {
+        // Cancelling analysis does not revoke a previously approved folder.
+        // A deliberately changed folder is forgotten explicitly by the UI.
+        guard !plan.cancelled else { return nil }
+        do {
+            guard verifyAncestors(plan.rootAncestors) == nil else {
+                throw DiskCleanupError(reason: .changed)
+            }
+            let root = try canonicalRoot(plan.rootURL)
+            guard root.path == plan.rootURL.path else { throw DiskCleanupError(reason: .changed) }
+            let ancestors = try ancestorChain(root)
+            guard ancestors.count == plan.rootAncestors.count,
+                  zip(ancestors, plan.rootAncestors).allSatisfy({ current, approved in
+                      current.url.path == approved.url.path && current.identity == approved.identity
+                  }) else { throw DiskCleanupError(reason: .changed) }
+            try verifySelectedScope(ancestors)
+            let descriptor = open(root.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard descriptor >= 0 else { throw DiskCleanupError(reason: statReason()) }
+            defer { close(descriptor) }
+            var value = stat()
+            guard fstat(descriptor, &value) == 0,
+                  CleanupNodeIdentity(value) == plan.rootAncestors.last?.identity else {
+                throw DiskCleanupError(reason: .changed)
+            }
+            let identities = try stableAncestors(ancestors)
+            // Ordinary bookmarks record a location. No security-scoped option,
+            // access extension, permission request, or bookmark refresh is used.
+            let bookmark = try root.bookmarkData(options: .minimalBookmark,
+                                                includingResourceValuesForKeys: nil, relativeTo: nil)
+            let record = CleanupRememberedRecord(version: 1, rootPath: root.path,
+                bookmark: bookmark, ancestors: identities)
+            try validateRememberedRecord(record, root: root, ancestors: ancestors)
+            let encoder = PropertyListEncoder()
+            encoder.outputFormat = .binary
+            let data = try encoder.encode(record)
+            guard data.count <= 131_072, verifyAncestors(plan.rootAncestors) == nil else {
+                throw DiskCleanupError(reason: .changed)
+            }
+            defaults.set(data, forKey: rememberedFolderKey)
+            return DiskCleanupRememberedFolder(rootURL: root, record: record)
+        } catch {
+            forgetRememberedFolder(defaults: defaults)
+            return nil
+        }
+    }
+
+    static func restoreRememberedFolder(defaults: UserDefaults) -> DiskCleanupRememberedFolder? {
+        guard let stored = defaults.object(forKey: rememberedFolderKey) else { return nil }
+        do {
+            guard let data = stored as? Data, data.count <= 131_072 else {
+                throw DiskCleanupError(reason: .invalidRoot)
+            }
+            let record = try PropertyListDecoder().decode(CleanupRememberedRecord.self, from: data)
+            guard record.version == 1, record.rootPath.hasPrefix("/"),
+                  record.rootPath.utf8.count <= 4_096,
+                  !record.bookmark.isEmpty, record.bookmark.count <= 65_536,
+                  !record.ancestors.isEmpty, record.ancestors.count <= 64 else {
+                throw DiskCleanupError(reason: .invalidRoot)
+            }
+            var stale = false
+            let resolved = try URL(resolvingBookmarkData: record.bookmark,
+                options: [.withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &stale)
+            guard !stale else { throw DiskCleanupError(reason: .changed) }
+            let root = try canonicalRoot(resolved)
+            let ancestors = try ancestorChain(root)
+            try verifySelectedScope(ancestors)
+            try validateRememberedRecord(record, root: root, ancestors: ancestors)
+            return DiskCleanupRememberedFolder(rootURL: root, record: record)
+        } catch {
+            forgetRememberedFolder(defaults: defaults)
+            return nil
+        }
+    }
+
     static func scan(rootURL: URL, cancellation: DiskCleanupCancellation,
                      limits: DiskCleanupLimits = .default, now: Date = Date(),
+                     expectedFolder: DiskCleanupRememberedFolder? = nil,
                      progress: (DiskCleanupProgress) -> Void = { _ in }) throws -> DiskCleanupPlan {
         let root = try canonicalRoot(rootURL)
         let rootAncestors = try ancestorChain(root)
@@ -295,6 +449,9 @@ enum DiskCleanup {
             throw DiskCleanupError(reason: .changed)
         }
         guard !hasProjectMarker(rootDescriptor) else { throw DiskCleanupError(reason: .protectedLocation) }
+        if let expectedFolder {
+            try validateRememberedRecord(expectedFolder.record, root: root, ancestors: rootAncestors)
+        }
 
         let started = ProcessInfo.processInfo.systemUptime
         var lastProgress = started

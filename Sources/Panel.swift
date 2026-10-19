@@ -1089,7 +1089,7 @@ final class PanelController: NSViewController {
         let cleanup: DiskCleanupView
         if let existing = diskCleanupView { cleanup = existing }
         else {
-            cleanup = DiskCleanupView(frame: diskMonitorView.bounds)
+            cleanup = DiskCleanupView(frame: diskMonitorView.bounds, defaults: tabDefaults)
             cleanup.didClose = { [weak self] in self?.closeDiskCleanup() }
             cleanup.didFinish = { [weak self] in self?.refresh?() }
             tabViews[3].addSubview(cleanup)
@@ -1097,6 +1097,7 @@ final class PanelController: NSViewController {
         }
         diskMonitorView.isHidden = true
         cleanup.isHidden = false
+        cleanup.onEntry()
     }
 
     private func closeDiskCleanup() {
