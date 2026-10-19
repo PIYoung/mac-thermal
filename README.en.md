@@ -45,7 +45,7 @@ Check CPU, GPU, SSD, and network activity together without opening the panel. Th
 
 Menu bar text turns **orange or red** with the system's thermal state. Turn motion off or adjust its intensity in Settings. The app also follows macOS **Reduce Motion**.
 
-The menu bar defaults to **CPU + GPU together**: CPU temperature and usage beside a 4×3 GPU tile grid and utilization. Choose CPU alone or GPU alone under **Settings → Menu bar metric** if preferred. More tiles light up and the gentle brightness wave speeds up as utilization rises; it stops at 0%. The 12 tiles are usage steps, not physical cores.
+The menu bar shows **CPU, GPU, SSD, and network by default**. Use the individual checkboxes under **Settings → Menu bar metric** to choose what you see. Groups fit their content with compact gaps, including between SSD and network; hidden items leave no empty slot. More tiles light up and the gentle brightness wave speeds up as utilization rises; it stops at 0%. The 12 tiles are usage steps, not physical cores.
 
 <p align="center">
   <picture>

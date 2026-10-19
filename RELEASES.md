@@ -1,5 +1,15 @@
 # Releases
 
+## v2.6.0 — Unreleased
+
+Choose individual menu bar metrics with a more compact layout. Build 19.
+
+- Show CPU, GPU, SSD, and network by default, with four independent checkboxes in Settings. Save choices across launches and migrate the old primary-metric preference.
+- Fit each visible group to its actual text width with compact, consistent spacing, including between SSD and network. Hidden groups leave no reserved space.
+- Keep a small clickable MT button when every metric is unchecked so Settings remains accessible.
+- Animate only visible active metrics, preserving the 8fps cap, Reduce Motion, sleep behavior, and fixed panel position.
+- Validate all 16 visibility combinations, persistence, migration, checkbox actions, four-language layout, and unchanged panel dimensions.
+
 ## v2.5.1 — 2026-10-19
 
 CPU and GPU together, with more reliable panel opening. Build 18.

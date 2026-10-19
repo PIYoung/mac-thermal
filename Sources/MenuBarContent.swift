@@ -22,15 +22,23 @@ final class MenuBarContent: NSObject {
     private var lastTick: TimeInterval?
     private var previewAppearance: NSAppearance?
     private var textSignature = ""
-    private var displayWidth = MenuBarContent.imageSize.width
-    private var additionalWidth: CGFloat { preferences.primaryMetric == .cpuAndGPU ? 72 : 0 }
-    private var canvasSize: NSSize { NSSize(width: 264 + additionalWidth, height: Self.imageSize.height) }
+    private var displayWidth: CGFloat = 18
+    private struct GroupLayout {
+        let metric: MenuBarMetric
+        let origin: CGFloat
+        let width: CGFloat
+        let textOffset: CGFloat
+        let textWidth: CGFloat
+    }
+    private var layout: [GroupLayout] = []
+    private var orderedMetrics: [MenuBarMetric] { MenuBarMetric.allCases.filter(preferences.visibleMetrics.contains) }
+    private var canvasSize: NSSize { NSSize(width: displayWidth, height: Self.imageSize.height) }
 
     var preferences = MenuBarPreferences.load() {
         didSet {
             guard preferences != oldValue else { return }
             lastTick = nil
-            if preferences.primaryMetric != oldValue.primaryMetric {
+            if preferences.visibleMetrics != oldValue.visibleMetrics {
                 textSignature = ""
                 rebuildBase()
             }
@@ -84,7 +92,7 @@ final class MenuBarContent: NSObject {
         appearanceChanged()
     }
 
-    var contentWidth: CGFloat { ceil((button?.image?.size.width ?? Self.imageSize.width) + 6) }
+    var contentWidth: CGFloat { ceil((button?.image?.size.width ?? displayWidth) + 6) }
 
     func update(sample: Snapshot) {
         self.sample = sample
@@ -110,9 +118,10 @@ final class MenuBarContent: NSObject {
     }
 
     private var hasActivity: Bool {
-        (preferences.primaryMetric.showsCPU && (validPercentage(sample.cpuUsage) ?? 0) > 0) ||
-        (preferences.primaryMetric.showsGPU && (validPercentage(sample.resources.gpu.utilizationPercent) ?? 0) > 0) ||
-        [sample.upload, sample.download, sample.resources.disk.readBytesPerSecond, sample.resources.disk.writeBytesPerSecond].contains { (validRate($0) ?? 0) > 0 }
+        (preferences.visibleMetrics.contains(.cpu) && (validPercentage(sample.cpuUsage) ?? 0) > 0) ||
+        (preferences.visibleMetrics.contains(.gpu) && (validPercentage(sample.resources.gpu.utilizationPercent) ?? 0) > 0) ||
+        (preferences.visibleMetrics.contains(.ssd) && [sample.resources.disk.readBytesPerSecond, sample.resources.disk.writeBytesPerSecond].contains { (validRate($0) ?? 0) > 0 }) ||
+        (preferences.visibleMetrics.contains(.network) && [sample.upload, sample.download].contains { (validRate($0) ?? 0) > 0 })
     }
 
     private func configureAnimation() {
@@ -139,16 +148,16 @@ final class MenuBarContent: NSObject {
         lastTick = now
         let load = validPercentage(sample.cpuUsage) ?? 0
         let intensity = max(0.75, min(1.5, preferences.intensity))
-        if preferences.primaryMetric.showsCPU, load > 0 {
+        if preferences.visibleMetrics.contains(.cpu), load > 0 {
             cpuPhase = (cpuPhase + elapsed / max(0.8, (3.9 - load * 0.029) / intensity)).truncatingRemainder(dividingBy: 100)
         }
-        if preferences.primaryMetric.showsGPU, let gpuLoad = validPercentage(sample.resources.gpu.utilizationPercent), gpuLoad > 0 {
+        if preferences.visibleMetrics.contains(.gpu), let gpuLoad = validPercentage(sample.resources.gpu.utilizationPercent), gpuLoad > 0 {
             gpuPhase = (gpuPhase + elapsed / Self.gpuWavePeriod(load: gpuLoad, intensity: intensity)).truncatingRemainder(dividingBy: 1)
         }
-        if let upload = validRate(sample.upload), upload > 0 { uploadPhase = (uploadPhase + elapsed / flowPeriod(upload, intensity: intensity)).truncatingRemainder(dividingBy: 1) }
-        if let download = validRate(sample.download), download > 0 { downloadPhase = (downloadPhase + elapsed / flowPeriod(download, intensity: intensity)).truncatingRemainder(dividingBy: 1) }
+        if preferences.visibleMetrics.contains(.network), let upload = validRate(sample.upload), upload > 0 { uploadPhase = (uploadPhase + elapsed / flowPeriod(upload, intensity: intensity)).truncatingRemainder(dividingBy: 1) }
+        if preferences.visibleMetrics.contains(.network), let download = validRate(sample.download), download > 0 { downloadPhase = (downloadPhase + elapsed / flowPeriod(download, intensity: intensity)).truncatingRemainder(dividingBy: 1) }
         let diskActivity = (validRate(sample.resources.disk.readBytesPerSecond) ?? 0) + (validRate(sample.resources.disk.writeBytesPerSecond) ?? 0)
-        if diskActivity > 0 {
+        if preferences.visibleMetrics.contains(.ssd), diskActivity > 0 {
             let period = diskActivity < 100_000 ? 5.0 : diskActivity < 5_000_000 ? 3.0 : diskActivity < 50_000_000 ? 1.6 : 1.0
             diskPhase = (diskPhase + elapsed / max(0.9, period / sqrt(intensity))).truncatingRemainder(dividingBy: 1)
         }
@@ -163,14 +172,20 @@ final class MenuBarContent: NSObject {
     }
 
     private var labels: [String] {
-        let cpu = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? "—%"
-        let gpu = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? "—%"
-        let cpuLabels = ["CPU " + cpu, sample.cpuTemperature.map { String(format: "%.0f°C", $0) } ?? "—"]
-        let gpuLabels = ["GPU " + gpu, sample.resources.gpu.coreCount.flatMap { $0 > 0 ? L10n.format("%d코어", $0) : nil } ?? "—"]
-        let primary = (preferences.primaryMetric.showsCPU ? cpuLabels : []) + (preferences.primaryMetric.showsGPU ? gpuLabels : [])
-        return primary + [
-                "R " + rateLabel(sample.resources.disk.readBytesPerSecond), "W " + rateLabel(sample.resources.disk.writeBytesPerSecond),
-                "↑ " + rateLabel(sample.upload), "↓ " + rateLabel(sample.download)]
+        orderedMetrics.flatMap { metric -> [String] in
+            switch metric {
+            case .cpu:
+                let cpu = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? "—%"
+                return ["CPU " + cpu, sample.cpuTemperature.map { String(format: "%.0f°C", $0) } ?? "—"]
+            case .gpu:
+                let gpu = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? "—%"
+                return ["GPU " + gpu, sample.resources.gpu.coreCount.flatMap { $0 > 0 ? L10n.format("%d코어", $0) : nil } ?? "—"]
+            case .ssd:
+                return ["R " + rateLabel(sample.resources.disk.readBytesPerSecond), "W " + rateLabel(sample.resources.disk.writeBytesPerSecond)]
+            case .network:
+                return ["↑ " + rateLabel(sample.upload), "↓ " + rateLabel(sample.download)]
+            }
+        }
     }
 
     private var ssdUsedPercent: Double? {
@@ -204,19 +219,32 @@ final class MenuBarContent: NSObject {
         return max(0.8, period / sqrt(intensity))
     }
 
+    private var accessibilityLines: [String] {
+        var lines = orderedMetrics.flatMap { metric -> [String] in
+            switch metric {
+            case .cpu:
+                let percent = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? L10n.text("측정 중")
+                return [L10n.format("CPU %@ · 사용률 %@", temperature(sample.cpuTemperature), percent)]
+            case .gpu:
+                let percent = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
+                return [L10n.format("GPU 사용률 %@", percent)]
+            case .ssd:
+                let used = ssdUsedPercent.map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
+                return [L10n.format("SSD 읽기 %@ · 쓰기 %@", rateLabel(sample.resources.disk.readBytesPerSecond), rateLabel(sample.resources.disk.writeBytesPerSecond)),
+                        L10n.format("SSD 사용 용량 %@ · 온도 %@", used, temperature(sample.ssdTemperature))]
+            case .network:
+                return [L10n.format("업로드 %@ · 다운로드 %@", rateLabel(sample.upload), rateLabel(sample.download))]
+            }
+        }
+        if lines.isEmpty { lines = [L10n.text("표시 항목 없음 · 아이콘을 눌러 패널 열기")] }
+        return lines
+    }
+
     private func updateAccessibility() {
         guard let button else { return }
-        let cpu = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? L10n.text("측정 중")
-        let gpu = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
-        let used = ssdUsedPercent.map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
-        let read = rateLabel(sample.resources.disk.readBytesPerSecond)
-        let write = rateLabel(sample.resources.disk.writeBytesPerSecond)
-        button.toolTip = L10n.format("Mac Thermal · %@\nCPU %@ / 사용률 %@\nGPU 사용률 %@\nSSD 읽기 %@ · 쓰기 %@\nSSD 사용 용량 %@ · 온도 %@\n업로드 %@ · 다운로드 %@\n메뉴바 %@ · 클릭하면 패널과 메뉴바 설정",
-            sample.thermal.title, temperature(sample.cpuTemperature), cpu, gpu, read, write, used,
-            temperature(sample.ssdTemperature), rateLabel(sample.upload), rateLabel(sample.download), preferences.primaryMetric.title)
-        button.setAccessibilityLabel(L10n.format("Mac Thermal, CPU %@, 사용률 %@, GPU 사용률 %@, SSD 읽기 %@, 쓰기 %@, 저장 공간 사용 %@, 업로드 %@, 다운로드 %@, 열 상태 %@, 메뉴바 %@",
-            temperature(sample.cpuTemperature), cpu, gpu, read, write, used,
-            rateLabel(sample.upload), rateLabel(sample.download), sample.thermal.title, preferences.primaryMetric.title))
+        let lines = accessibilityLines
+        button.toolTip = L10n.format("Mac Thermal · %@\n%@\n클릭하면 패널과 메뉴바 설정", sample.thermal.title, lines.joined(separator: "\n"))
+        button.setAccessibilityLabel(L10n.format("Mac Thermal, 열 상태 %@, %@, 클릭하면 패널과 메뉴바 설정", sample.thermal.title, lines.joined(separator: ", ")))
     }
 
     private func context() -> CGContext? {
@@ -230,34 +258,42 @@ final class MenuBarContent: NSObject {
 
     private func rebuildBase(labels preparedLabels: [String]? = nil) {
         scale = max(1, button?.window?.backingScaleFactor ?? 2)
-        guard let context = context() else { return }
         let appearance = previewAppearance ?? button?.effectiveAppearance ?? NSAppearance.currentDrawing()
         appearance.performAsCurrentDrawingAppearance {
             let color = sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor
             ink = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
+            let lines = preparedLabels ?? labels
+            // Measure each selected group's actual two-line text once per sample.
+            // No hidden slot or fixed-width storage tail is retained between groups.
+            layout = []
+            var cursor: CGFloat = 2
+            for (index, metric) in orderedMetrics.enumerated() {
+                let top = (lines[index * 2] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
+                let bottom = (lines[index * 2 + 1] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
+                let offset: CGFloat = metric == .ssd ? 18 : metric == .network ? 20 : 29
+                let cap: CGFloat = metric == .cpu || metric == .gpu ? 52 : 55
+                let textWidth = min(cap, ceil(max(top, bottom)))
+                let width = offset + textWidth
+                layout.append(GroupLayout(metric: metric, origin: cursor, width: width, textOffset: offset, textWidth: textWidth))
+                cursor += width + 7
+            }
+            displayWidth = layout.isEmpty ? 18 : ceil(cursor - 7 + 2)
+            guard let context = context() else { baseImage = nil; return }
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-            let lines = preparedLabels ?? labels
-            // Text only changes with a new sample or appearance. Measuring it in
-            // the animation painter repeated formatting and font layout eight times a second.
-            let networkIndex = lines.count - 2
-            let shift = additionalWidth
-            let top = (lines[networkIndex] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
-            let bottom = (lines[networkIndex + 1] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
-            displayWidth = min(264 + shift, max(220 + shift, ceil(200 + shift + max(top, bottom) + 4)))
-            let groups: [(Int, CGFloat, CGFloat)] = shift > 0
-                ? [(0, 30, 43), (2, 106, 43), (4, 178, 59), (6, 272, 59)]
-                : [(0, 30, 43), (2, 106, 59), (4, 200, 59)]
-            for (index, x, width) in groups {
-                drawText(lines[index], at: NSPoint(x: x, y: 10.4), width: width, size: 9.3, color: color)
-                drawText(lines[index + 1], at: NSPoint(x: x, y: 0.2), width: width, size: 8.6, color: color)
+            if layout.isEmpty { drawText("MT", at: NSPoint(x: 3, y: 5.5), width: 12, size: 9.3, color: color) }
+            for (index, group) in layout.enumerated() {
+                let x = group.origin + group.textOffset
+                drawText(lines[index * 2], at: NSPoint(x: x, y: 10.4), width: group.textWidth, size: 9.3, color: color)
+                drawText(lines[index * 2 + 1], at: NSPoint(x: x, y: 0.2), width: group.textWidth, size: 8.6, color: color)
             }
             NSGraphicsContext.restoreGraphicsState()
             context.setFillColor(color.withAlphaComponent(0.17).cgColor)
-            let separators: [CGFloat] = shift > 0 ? [75.5, 151.5, 244.5] : [79.5, 172.5]
-            for x in separators { context.fill(CGRect(x: x, y: 5, width: 0.5, height: 12)) }
+            for group in layout.dropLast() {
+                context.fill(CGRect(x: group.origin + group.width + 3.25, y: 5, width: 0.5, height: 12))
+            }
+            baseImage = context.makeImage()
         }
-        baseImage = context.makeImage()
     }
 
     private func drawText(_ value: String, at point: NSPoint, width: CGFloat, size: CGFloat, color: NSColor) {
@@ -283,23 +319,19 @@ final class MenuBarContent: NSObject {
         guard let context = context(), let baseImage else { return nil }
         context.draw(baseImage, in: CGRect(origin: .zero, size: canvasSize))
         let animated = motionAllowed && !systemSleeping && !displaySleeping && hasActivity
-        if preferences.primaryMetric == .cpuAndGPU {
-            drawCPU(in: context, phase: animated ? cpuPhase : 0)
+        for group in layout {
             context.saveGState()
-            context.translateBy(x: 76, y: 0)
-            drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
+            context.translateBy(x: group.origin, y: 0)
+            switch group.metric {
+            case .cpu: drawCPU(in: context, phase: animated ? cpuPhase : 0)
+            case .gpu: drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
+            case .ssd: drawCapacity(in: context, phase: animated ? diskPhase : 0, animated: animated)
+            case .network:
+                drawFlow(in: context, x: 0, bytes: sample.upload, phase: animated ? uploadPhase : 0.45, upward: true, animated: animated)
+                drawFlow(in: context, x: 9, bytes: sample.download, phase: animated ? downloadPhase : 0.45, upward: false, animated: animated)
+            }
             context.restoreGState()
-        } else if preferences.primaryMetric == .gpu {
-            drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
-        } else {
-            drawCPU(in: context, phase: animated ? cpuPhase : 0)
         }
-        context.saveGState()
-        context.translateBy(x: additionalWidth, y: 0)
-        drawCapacity(in: context, phase: animated ? diskPhase : 0, animated: animated)
-        drawFlow(in: context, x: 181, bytes: sample.upload, phase: animated ? uploadPhase : 0.45, upward: true, animated: animated)
-        drawFlow(in: context, x: 190, bytes: sample.download, phase: animated ? downloadPhase : 0.45, upward: false, animated: animated)
-        context.restoreGState()
         let width = displayWidth
         guard let image = context.makeImage()?.cropping(to: CGRect(x: 0, y: 0, width: width * scale, height: Self.imageSize.height * scale)) else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: width, height: Self.imageSize.height))
@@ -362,7 +394,7 @@ final class MenuBarContent: NSObject {
     }
 
     private func drawCapacity(in context: CGContext, phase: Double, animated: Bool) {
-        let rect = CGRect(x: 88, y: 2, width: 13, height: 18)
+        let rect = CGRect(x: 0, y: 2, width: 13, height: 18)
         let outline = CGPath(roundedRect: rect, cornerWidth: 3, cornerHeight: 3, transform: nil)
         context.setFillColor(ink.copy(alpha: 0.15) ?? ink)
         context.addPath(outline)
@@ -449,5 +481,30 @@ final class MenuBarContent: NSObject {
         content.downloadPhase = phase
         content.diskPhase = phase
         return content.composite()
+    }
+
+    /// Inspect the cached layout and activity gate without adding a status item.
+    static func previewLayout(sample: Snapshot, preferences: MenuBarPreferences) -> [MenuBarMetric: CGRect] {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        content.preferences = preferences
+        content.rebuildBase()
+        return Dictionary(uniqueKeysWithValues: content.layout.map {
+            ($0.metric, CGRect(x: $0.origin, y: 0, width: $0.width, height: Self.imageSize.height))
+        })
+    }
+
+    static func previewHasActivity(sample: Snapshot, preferences: MenuBarPreferences) -> Bool {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        content.preferences = preferences
+        return content.hasActivity
+    }
+
+    static func previewAccessibility(sample: Snapshot, preferences: MenuBarPreferences) -> String {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        content.preferences = preferences
+        return content.accessibilityLines.joined(separator: "\n")
     }
 }

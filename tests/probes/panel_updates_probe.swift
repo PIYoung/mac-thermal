@@ -260,14 +260,13 @@ enum PanelUpdatesProbe {
             }
             panel.probeToggleSettings()
             checkContentBounds(panel.view)
-            precondition(panel.probePrimaryMetricTitles == ["CPU", "GPU", "CPU + GPU"])
-            panel.probeConfigureMenuBar(.gpu)
-            precondition(panel.probePrimaryMetric == 1 && !panel.probeCPUStyleEnabled)
-            panel.probeConfigureMenuBar(.cpu)
-            precondition(panel.probePrimaryMetric == 0 && panel.probeCPUStyleEnabled)
-            panel.probeConfigureMenuBar(.cpuAndGPU)
-            precondition(panel.probePrimaryMetric == 2 && panel.probeCPUStyleEnabled)
-            checkContentBounds(panel.view)
+            precondition(panel.probeMetricTitles == ["CPU", "GPU", "SSD", L10n.text("네트워크")])
+            precondition(panel.probeMetricLabelsFit, "All four native checkbox labels must fit in every language")
+            precondition(panel.probeVisibleMetrics == Set(MenuBarMetric.allCases))
+            panel.probeClickMetric(.cpu)
+            precondition(!panel.probeVisibleMetrics.contains(.cpu) && !panel.probeCPUStyleEnabled)
+            panel.probeClickMetric(.cpu)
+            precondition(panel.probeVisibleMetrics.contains(.cpu) && panel.probeCPUStyleEnabled)
             panel.probeToggleSettings()
         }
         precondition(panel.probeHistoryTimes == timesBeforeLanguage, "Language and tab changes must not record samples")
@@ -288,6 +287,57 @@ enum PanelUpdatesProbe {
         precondition(window.frame == initialFrame && panel.probeSurfaceFrames == initialSurfaceFrames)
         precondition(PanelController.surfaceSize == NSSize(width: 380, height: 468))
         print("Resource tab migration/persistence, embedded rankings, selected-tab-only updates, hidden histories, settings/reopen, four-language bounds, and fixed frame checks passed")
+    }
+
+    private static func menuMetricChecks(defaults: UserDefaults) {
+        let all = Set(MenuBarMetric.allCases)
+        precondition(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all,
+            "Fresh installs must show all four menu bar metrics")
+        let original = MenuBarPreferences(style: .orbit, motionEnabled: true, intensity: 1.35, visibleMetrics: all)
+        original.save(defaults: defaults)
+        let panel = PanelController(defaults: defaults)
+        let window = DashboardWindow(controller: panel)
+        let frame = window.frame
+        let surfaceFrames = panel.probeSurfaceFrames
+        panel.probeToggleSettings()
+        var callbacks: [MenuBarPreferences] = []
+        panel.menuBarPreferencesChanged = { callbacks.append($0) }
+        var expected = all
+        func checkSelection() {
+            let preferences = panel.probeMenuBarPreferences
+            precondition(panel.probeVisibleMetrics == expected)
+            precondition(preferences.visibleMetrics == expected)
+            precondition(MenuBarPreferences.load(defaults: defaults) == preferences,
+                "A real checkbox action must persist immediately")
+            precondition(callbacks.last == preferences, "A real checkbox action must notify the menu renderer immediately")
+            precondition(preferences.style == original.style && preferences.motionEnabled == original.motionEnabled
+                && preferences.intensity == original.intensity, "Visibility changes must retain animation preferences")
+            precondition(panel.probeCPUStyleEnabled == expected.contains(.cpu))
+            precondition(panel.probeMotionControlEnabled == !expected.isEmpty)
+            precondition(panel.probeIntensityControlEnabled == !expected.isEmpty)
+            precondition(window.frame == frame && panel.probeSurfaceFrames == surfaceFrames)
+            checkContentBounds(panel.view)
+        }
+        for metric in MenuBarMetric.allCases {
+            expected.remove(metric)
+            panel.probeClickMetric(metric)
+            checkSelection()
+        }
+        precondition(expected.isEmpty && callbacks.count == 4, "All four items can be switched off independently")
+        let reopened = PanelController(defaults: defaults)
+        _ = reopened.view
+        reopened.probeToggleSettings()
+        precondition(reopened.probeVisibleMetrics.isEmpty, "An explicitly empty selection must survive reopening")
+        precondition(!reopened.probeMotionControlEnabled && !reopened.probeIntensityControlEnabled)
+        precondition(reopened.probeMenuBarPreferences.motionEnabled,
+            "Disabling unavailable controls must preserve the user's motion preference")
+        for metric in MenuBarMetric.allCases {
+            expected.insert(metric)
+            panel.probeClickMetric(metric)
+            checkSelection()
+        }
+        precondition(expected == all && callbacks.count == 8)
+        print("Native menu checkbox actions passed: independent visibility, immediate callbacks/persistence, empty selection/reopen, preserved motion preferences, and fixed bounds")
     }
 
     private static func gpuChecks(defaults: UserDefaults) {
@@ -342,6 +392,10 @@ enum PanelUpdatesProbe {
         withDefaults { defaults in
             L10n.setLanguage(.korean, defaults: defaults)
             gpuChecks(defaults: defaults)
+        }
+        withDefaults { defaults in
+            L10n.setLanguage(.korean, defaults: defaults)
+            menuMetricChecks(defaults: defaults)
         }
         withDefaults { defaults in
             L10n.setLanguage(.korean, defaults: defaults)

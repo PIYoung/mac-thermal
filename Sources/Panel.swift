@@ -428,7 +428,7 @@ final class PanelController: NSViewController {
         return view.window?.isVisible == true
         #endif
     }
-    private var menuBarPreferences = MenuBarPreferences.load()
+    private var menuBarPreferences: MenuBarPreferences
     private var updatingMenuBarControls = false
     private let motionIntensityValue = text("1.20×", size: 11, weight: .semibold, digits: true)
     private lazy var menuBarSettingsButton: NSButton = {
@@ -449,15 +449,15 @@ final class PanelController: NSViewController {
         localizedToolTip(control, "리듬 막대 또는 순환 점으로 CPU가 바쁜 정도를 표시합니다")
         return control
     }()
-    private lazy var primaryMetricControl: NSPopUpButton = {
-        let control = NSPopUpButton(frame: .zero, pullsDown: false)
-        control.addItems(withTitles: ["CPU", "GPU", "CPU + GPU"])
-        control.target = self
-        control.action = #selector(changeMenuBarPreferences)
-        control.controlSize = .regular
-        localizedAccessibilityLabel(control, "메뉴바 표시")
-        localizedToolTip(control, "메뉴바에서 CPU, GPU 또는 둘 다 표시합니다")
-        return control
+    private lazy var metricControls: [MenuBarMetric: NSButton] = {
+        Dictionary(uniqueKeysWithValues: MenuBarMetric.allCases.map { metric in
+            let control = NSButton(checkboxWithTitle: metric.title, target: self, action: #selector(changeMenuBarPreferences))
+            control.controlSize = .small
+            control.font = .systemFont(ofSize: 11)
+            localizedAccessibilityLabel(control, metric == .network ? "네트워크" : metric.rawValue.uppercased())
+            localizedToolTip(control, "메뉴바에 표시할 항목을 선택합니다")
+            return (metric, control)
+        })
     }()
     private lazy var menuBarMotionSwitch: NSSwitch = {
         let control = NSSwitch()
@@ -492,10 +492,12 @@ final class PanelController: NSViewController {
     private static let tabLabels = ["CPU", "GPU", "메모리", "SSD", "네트워크"]
     init(defaults: UserDefaults = .standard) {
         tabDefaults = defaults
+        menuBarPreferences = .load(defaults: defaults)
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) {
         tabDefaults = .standard
+        menuBarPreferences = .load()
         super.init(coder: coder)
     }
     private func restoredTab() -> Int {
@@ -614,6 +616,7 @@ final class PanelController: NSViewController {
         tabs.updateLabels(Self.tabLabels.map(L10n.text))
         animationStyleControl.removeAllItems()
         animationStyleControl.addItems(withTitles: [MenuBarAnimationStyle.rhythm.title, MenuBarAnimationStyle.orbit.title])
+        for metric in MenuBarMetric.allCases { metricControls[metric]?.title = metric.title }
         languageControl.selectItem(at: AppLanguage.allCases.firstIndex(of: L10n.language) ?? 0)
         updateMenuBarControls()
         showSelectedTab()
@@ -633,34 +636,37 @@ final class PanelController: NSViewController {
         place(text("언어", size: 11, weight: .semibold), in: language, 36, 13, 95, 18)
         place(languageControl, in: language, 139, 8, 192, 28)
 
-        let primary = GlassCard()
-        place(primary, in: menuBarSettingsView, 0, 50, 344, 44)
-        place(symbol("menubar.rectangle", color: PanelColor.blue), in: primary, 15, 15, 14, 14)
-        place(text("메뉴바 표시", size: 11, weight: .semibold), in: primary, 36, 13, 145, 18)
-        place(primaryMetricControl, in: primary, 188, 8, 143, 28)
+        let metrics = GlassCard()
+        place(metrics, in: menuBarSettingsView, 0, 50, 344, 58)
+        place(symbol("menubar.rectangle", color: PanelColor.blue), in: metrics, 15, 9, 14, 14)
+        place(text("메뉴바 표시", size: 11, weight: .semibold), in: metrics, 36, 7, 290, 18)
+        for (index, metric) in MenuBarMetric.allCases.enumerated() {
+            guard let control = metricControls[metric] else { continue }
+            place(control, in: metrics, 15 + CGFloat(index) * 66, 30, index == 3 ? 116 : 66, 20)
+        }
 
         let style = GlassCard()
-        place(style, in: menuBarSettingsView, 0, 100, 344, 56)
+        place(style, in: menuBarSettingsView, 0, 114, 344, 54)
         place(symbol("waveform", color: PanelColor.blue), in: style, 15, 7, 14, 14)
         place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 36, 5, 290, 18)
         place(animationStyleControl, in: style, 13, 25, 318, 26)
 
         let motion = GlassCard()
-        place(motion, in: menuBarSettingsView, 0, 162, 344, 50)
-        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 16, 5, 265, 18)
-        place(menuBarMotionSwitch, in: motion, 292, 3, 36, 22)
-        place(text("CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기", size: 9, color: PanelColor.secondary), in: motion, 16, 29, 313, 14)
+        place(motion, in: menuBarSettingsView, 0, 174, 344, 44)
+        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 16, 3, 265, 18)
+        place(menuBarMotionSwitch, in: motion, 292, 1, 36, 22)
+        place(text("CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기", size: 9, color: PanelColor.secondary), in: motion, 16, 25, 313, 14)
 
         let intensity = GlassCard()
-        place(intensity, in: menuBarSettingsView, 0, 218, 344, 58)
-        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 16, 3, 240, 18)
+        place(intensity, in: menuBarSettingsView, 0, 224, 344, 52)
+        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 16, 1, 240, 18)
         motionIntensityValue.alignment = .right
-        place(motionIntensityValue, in: intensity, 278, 4, 50, 17)
-        place(motionIntensitySlider, in: intensity, 15, 23, 314, 18)
-        place(text("차분하게", size: 9, color: PanelColor.secondary), in: intensity, 17, 41, 140, 14)
+        place(motionIntensityValue, in: intensity, 278, 2, 50, 17)
+        place(motionIntensitySlider, in: intensity, 15, 19, 314, 18)
+        place(text("차분하게", size: 9, color: PanelColor.secondary), in: intensity, 17, 37, 140, 13)
         let energetic = text("활기차게", size: 9, color: PanelColor.secondary)
         energetic.alignment = .right
-        place(energetic, in: intensity, 186, 41, 141, 14)
+        place(energetic, in: intensity, 186, 37, 141, 13)
 
         let login = GlassCard()
         place(login, in: menuBarSettingsView, 0, 282, 344, 42)
@@ -679,23 +685,26 @@ final class PanelController: NSViewController {
         updatingMenuBarControls = true
         defer { updatingMenuBarControls = false }
         animationStyleControl.selectItem(at: menuBarPreferences.style.rawValue)
-        animationStyleControl.isEnabled = menuBarPreferences.primaryMetric != .gpu
-        primaryMetricControl.selectItem(at: menuBarPreferences.primaryMetric.rawValue)
+        animationStyleControl.isEnabled = menuBarPreferences.visibleMetrics.contains(.cpu)
+        for metric in MenuBarMetric.allCases {
+            metricControls[metric]?.state = menuBarPreferences.visibleMetrics.contains(metric) ? .on : .off
+        }
         menuBarMotionSwitch.state = menuBarPreferences.motionEnabled ? .on : .off
+        menuBarMotionSwitch.isEnabled = !menuBarPreferences.visibleMetrics.isEmpty
         motionIntensitySlider.doubleValue = menuBarPreferences.intensity
-        motionIntensitySlider.isEnabled = menuBarPreferences.motionEnabled
+        motionIntensitySlider.isEnabled = menuBarPreferences.motionEnabled && !menuBarPreferences.visibleMetrics.isEmpty
         motionIntensityValue.stringValue = String(format: "%.2f×", menuBarPreferences.intensity)
-        motionIntensityValue.textColor = menuBarPreferences.motionEnabled ? .labelColor : PanelColor.secondary
+        motionIntensityValue.textColor = motionIntensitySlider.isEnabled ? .labelColor : PanelColor.secondary
     }
 
     @objc private func changeMenuBarPreferences() {
         guard !updatingMenuBarControls,
-              let style = MenuBarAnimationStyle(rawValue: animationStyleControl.indexOfSelectedItem),
-              let primaryMetric = MenuBarPrimaryMetric(rawValue: primaryMetricControl.indexOfSelectedItem) else { return }
-        let preferences = MenuBarPreferences(style: style, motionEnabled: menuBarMotionSwitch.state == .on, intensity: motionIntensitySlider.doubleValue, primaryMetric: primaryMetric)
+              let style = MenuBarAnimationStyle(rawValue: animationStyleControl.indexOfSelectedItem) else { return }
+        let visibleMetrics = Set(MenuBarMetric.allCases.filter { metricControls[$0]?.state == .on })
+        let preferences = MenuBarPreferences(style: style, motionEnabled: menuBarMotionSwitch.state == .on, intensity: motionIntensitySlider.doubleValue, visibleMetrics: visibleMetrics)
         guard preferences != menuBarPreferences else { return }
         menuBarPreferences = preferences
-        menuBarPreferences.save()
+        menuBarPreferences.save(defaults: tabDefaults)
         updateMenuBarControls()
         menuBarPreferencesChanged?(menuBarPreferences)
     }
@@ -703,7 +712,7 @@ final class PanelController: NSViewController {
     @objc private func toggleMenuBarSettings() {
         showingMenuBarSettings.toggle()
         if showingMenuBarSettings {
-            menuBarPreferences = .load()
+            menuBarPreferences = .load(defaults: tabDefaults)
             updateMenuBarControls()
             updateLoginState()
         }
@@ -1096,13 +1105,18 @@ extension PanelController {
         changeTab()
     }
     func probeToggleSettings() { toggleMenuBarSettings() }
-    func probeConfigureMenuBar(_ metric: MenuBarPrimaryMetric) {
-        menuBarPreferences.primaryMetric = metric
-        updateMenuBarControls()
+    func probeClickMetric(_ metric: MenuBarMetric) { metricControls[metric]?.performClick(nil) }
+    var probeMenuBarPreferences: MenuBarPreferences { menuBarPreferences }
+    var probeVisibleMetrics: Set<MenuBarMetric> {
+        Set(MenuBarMetric.allCases.filter { metricControls[$0]?.state == .on })
     }
-    var probePrimaryMetric: Int { primaryMetricControl.indexOfSelectedItem }
-    var probePrimaryMetricTitles: [String] { primaryMetricControl.itemTitles }
+    var probeMetricTitles: [String] { MenuBarMetric.allCases.compactMap { metricControls[$0]?.title } }
+    var probeMetricLabelsFit: Bool {
+        metricControls.values.allSatisfy { ($0.cell?.cellSize.width ?? 0) <= $0.frame.width }
+    }
     var probeCPUStyleEnabled: Bool { animationStyleControl.isEnabled }
+    var probeMotionControlEnabled: Bool { menuBarMotionSwitch.isEnabled }
+    var probeIntensityControlEnabled: Bool { motionIntensitySlider.isEnabled }
     var probeStrings: [String: String] {
         ["cpu": cpuTemp.stringValue, "cpuPercent": cpuPercent.stringValue,
          "gpuPercent": gpuPercent.stringValue, "gpuModel": gpuModel.stringValue,
