@@ -14,6 +14,16 @@ struct DiskCleanupViewOperations {
         execute: { DiskCleanup.execute(plan: $0, selectedIDs: $1, cancellation: $2, progress: $3) })
 }
 
+private final class CleanupPrimaryButtonCell: NSButtonCell {
+    override func drawBezel(withFrame frame: NSRect, in controlView: NSView) {
+        let color: NSColor = isEnabled
+            ? (isHighlighted ? NSColor.systemBlue.blended(withFraction: 0.16, of: .black) ?? .systemBlue : .systemBlue)
+            : .quaternaryLabelColor
+        color.setFill()
+        NSBezierPath(roundedRect: frame.insetBy(dx: 0, dy: 2), xRadius: 6, yRadius: 6).fill()
+    }
+}
+
 private func cleanupLabel(size: CGFloat = 10, weight: NSFont.Weight = .regular, secondary: Bool = false, lines: Int = 1) -> NSTextField {
     let field = NSTextField(labelWithString: "")
     field.font = .systemFont(ofSize: size, weight: weight)
@@ -170,7 +180,13 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     private let table = NSTableView()
     private var languageObserver: NSObjectProtocol?
     private lazy var back = NSButton(title: "", target: self, action: #selector(closePage))
-    private lazy var primary = NSButton(title: "", target: self, action: #selector(primaryAction))
+    private lazy var primary: NSButton = {
+        let button = NSButton(frame: .zero)
+        button.cell = CleanupPrimaryButtonCell(textCell: "")
+        button.target = self
+        button.action = #selector(primaryAction)
+        return button
+    }()
     private lazy var secondary = NSButton(title: "", target: self, action: #selector(secondaryAction))
     private lazy var changeFolder: NSPopUpButton = {
         let control = NSPopUpButton(frame: .zero, pullsDown: true)
@@ -209,7 +225,6 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             button.controlSize = .small
             button.font = .systemFont(ofSize: 10, weight: .medium)
         }
-        primary.bezelColor = .controlAccentColor
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("cleanup-file"))
         column.width = 324
         table.addTableColumn(column)
