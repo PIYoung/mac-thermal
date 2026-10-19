@@ -1,6 +1,6 @@
 # Releases
 
-## v2.6.0 — Unreleased
+## v2.6.0 — 2026-10-19
 
 Choose individual menu bar metrics and review disk cleanup candidates. Build 24.
 
