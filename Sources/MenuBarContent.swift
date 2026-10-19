@@ -34,7 +34,7 @@ final class MenuBarContent: NSObject {
     }
     private var layout: [GroupLayout] = []
     private var orderedMetrics: [MenuBarMetric] {
-        MenuBarMetric.allCases.filter { preferences.visibleMetrics.contains($0) && ($0 != .codex || codexActivity.isVisible) }
+        MenuBarMetric.menuOrder.filter { preferences.visibleMetrics.contains($0) && ($0 != .codex || codexActivity.isVisible) }
     }
     private var canvasSize: NSSize { NSSize(width: displayWidth, height: Self.imageSize.height) }
 
@@ -104,15 +104,15 @@ final class MenuBarContent: NSObject {
         if !motionAllowed || systemSleeping || displaySleeping || !preferences.visibleMetrics.contains(.codex) {
             codexActivity.cancelGesture()
         }
-        // Visibility can change without a resource sample or preference change.
-        textSignature = ""
+        // Metric identities in the signature cover visibility changes; token
+        // updates affect the gesture/tooltip without rebuilding icon-only text.
         update(sample: sample)
     }
 
     func update(sample: Snapshot) {
         self.sample = sample
         let lines = labels
-        let signature = lines.joined(separator: "|") + "|\(sample.thermal.level)"
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)"
         if signature != textSignature || baseImage == nil {
             textSignature = signature
             rebuildBase(labels: lines)
@@ -203,7 +203,7 @@ final class MenuBarContent: NSObject {
             case .network:
                 return ["↑ " + rateLabel(sample.upload), "↓ " + rateLabel(sample.download)]
             case .codex:
-                return ["CX " + codexActivity.tokenLabel, codexActivity.recentLabel(now: sample.time)]
+                return ["", ""]
             }
         }
     }
@@ -258,7 +258,7 @@ final class MenuBarContent: NSObject {
                 let state = codexActivity.tokens.map { L10n.format("%lld 토큰", $0) } ?? L10n.text("확인 불가")
                 return [L10n.format("Codex · 오늘 토큰 (UTC) %@ · %@", state, codexActivity.recentLabel(now: sample.time)),
                         L10n.text("이 Mac의 로컬 기록에 남은 UTC 오늘 토큰입니다. 계정 전체 사용량이 아닙니다."),
-                        L10n.text("움직임은 새 토큰 기록을 뜻합니다. 작업 중·완료 상태를 나타내지 않습니다.")] +
+                        L10n.text("새 토큰 기록을 감지하면 움직이고 추가 기록이 없으면 10초 뒤 멈춥니다. 실시간 토큰 소비·작업 완료 여부는 확인할 수 없습니다.")] +
                         (codexActivity.snapshot.incomplete && codexActivity.canShowUsage ? [L10n.text("일부 로컬 기록만 집계했습니다")] : [])
             }
         }
@@ -294,10 +294,15 @@ final class MenuBarContent: NSObject {
             layout = []
             var cursor: CGFloat = 2
             for (index, metric) in orderedMetrics.enumerated() {
+                if metric == .codex {
+                    layout.append(GroupLayout(metric: metric, origin: cursor, width: 26, textOffset: 26, textWidth: 0))
+                    cursor += 26 + 7
+                    continue
+                }
                 let top = (lines[index * 2] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
                 let bottom = (lines[index * 2 + 1] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
                 let offset: CGFloat = metric == .ssd ? 18 : metric == .network ? 20 : 29
-                let cap: CGFloat = metric == .codex ? 62 : metric == .cpu || metric == .gpu ? 52 : 55
+                let cap: CGFloat = metric == .cpu || metric == .gpu ? 52 : 55
                 let textWidth = min(cap, ceil(max(top, bottom)))
                 let width = offset + textWidth
                 layout.append(GroupLayout(metric: metric, origin: cursor, width: width, textOffset: offset, textWidth: textWidth))
@@ -308,7 +313,7 @@ final class MenuBarContent: NSObject {
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
             if layout.isEmpty { drawText("MT", at: NSPoint(x: 3, y: 5.5), width: 12, size: 9.3, color: color) }
-            for (index, group) in layout.enumerated() {
+            for (index, group) in layout.enumerated() where group.metric != .codex {
                 let x = group.origin + group.textOffset
                 drawText(lines[index * 2], at: NSPoint(x: x, y: 10.4), width: group.textWidth, size: 9.3, color: color)
                 drawText(lines[index * 2 + 1], at: NSPoint(x: x, y: 0.2), width: group.textWidth, size: 8.6, color: color)
@@ -366,7 +371,7 @@ final class MenuBarContent: NSObject {
     }
 
     /// Original 26pt robot and keyboard, drawn entirely from basic shapes.
-    /// A four-pose hand gesture runs for 1.25s only after a fresh usage record.
+    /// Four typing poses run for a bounded interval after a fresh usage record.
     private func drawCodex(in context: CGContext, frame: Int) {
         context.setStrokeColor(ink)
         context.setFillColor(ink)

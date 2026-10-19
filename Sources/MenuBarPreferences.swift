@@ -10,6 +10,9 @@ enum MenuBarAnimationStyle: Int, CaseIterable {
 enum MenuBarMetric: String, CaseIterable {
     case cpu, gpu, ssd, network, codex
 
+    /// Menu presentation order is independent of settings and saved identifiers.
+    static let menuOrder: [Self] = [.codex, .cpu, .gpu, .ssd, .network]
+
     var title: String {
         switch self {
         case .cpu: return "CPU"

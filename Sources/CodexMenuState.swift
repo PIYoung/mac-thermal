@@ -1,8 +1,9 @@
 import Foundation
 
-/// A new local usage record triggers a short finite gesture. Neither app runtime
+/// A new local usage record triggers a bounded activity gesture. Neither app runtime
 /// nor a recent timestamp is treated as evidence of a task's live state.
 struct CodexMenuActivity {
+    static let activityDuration: TimeInterval = 10
     private(set) var snapshot = CodexMonitorSnapshot.pending
     private(set) var gestureEndsAt: TimeInterval = 0
     private var hasBaseline = false
@@ -14,15 +15,6 @@ struct CodexMenuActivity {
         guard canShowUsage, let value = snapshot.dailyTokens, value >= 0,
               !(snapshot.incomplete && value == 0) else { return nil }
         return value
-    }
-    var tokenLabel: String {
-        guard let value = tokens else { return "—" }
-        var number = Double(value)
-        let units = ["", "K", "M", "G", "T", "P", "E"]
-        var index = 0
-        while number >= 999.5 && index < units.count - 1 { number /= 1_000; index += 1 }
-        let text = String(format: index > 0 && number < 100 ? "%.1f%@" : "%.0f%@", number, units[index])
-        return (snapshot.incomplete ? "~" : "") + text
     }
     func recentLabel(now: Date) -> String {
         guard snapshot.recordsEnabled else { return L10n.text("읽기 꺼짐") }
@@ -58,6 +50,6 @@ struct CodexMenuActivity {
               previous.lastRecordAt.map({ last > $0 }) ?? (previous.recordsCount == 0),
               let count = tokens, let oldCount = previous.dailyTokens, count != oldCount,
               (0...30).contains(now.timeIntervalSince(last)) else { return }
-        gestureEndsAt = uptime + 1.25
+        gestureEndsAt = uptime + Self.activityDuration
     }
 }

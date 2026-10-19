@@ -246,18 +246,23 @@ struct MenuRenderProbe {
         var next = record(tokens: 123_457)
         next.lastRecordAt = now.addingTimeInterval(1)
         state.receive(next, now: now.addingTimeInterval(1), uptime: 11)
-        try check(state.isAnimating(at: 11) && !state.isAnimating(at: 12.25), "gesture must stop after 1.25s")
+        try check(state.isAnimating(at: 11) && !state.isAnimating(at: 21), "activity must stop after 10s without another record")
         state.receive(next, now: now.addingTimeInterval(2), uptime: 12)
-        try check(state.gestureEndsAt == 12.25, "duplicate snapshot restarted gesture")
+        try check(state.gestureEndsAt == 21, "duplicate snapshot restarted gesture")
+        var newer = next
+        newer.lastRecordAt = now.addingTimeInterval(8)
+        newer.dailyTokens = 123_458
+        state.receive(newer, now: now.addingTimeInterval(8), uptime: 18)
+        try check(state.isAnimating(at: 25) && !state.isAnimating(at: 28), "fresh records must renew the finite activity window")
         state.cancelGesture()
-        var old = next
-        old.lastRecordAt = now.addingTimeInterval(2)
-        old.dailyTokens = 123_458
+        var old = newer
+        old.lastRecordAt = now.addingTimeInterval(9)
+        old.dailyTokens = 123_459
         state.receive(old, now: now.addingTimeInterval(90), uptime: 90)
         try check(!state.isAnimating(at: 90), "old catch-up records animate")
         var off = record(); off.recordsEnabled = false
         state.receive(off, now: now, uptime: 100)
-        try check(state.tokens == nil && state.tokenLabel == "—" && !state.isAnimating(at: 100), "OFF exposes stale usage")
+        try check(state.tokens == nil && !state.isAnimating(at: 100), "OFF exposes stale usage")
         state.receive(record(), now: now, uptime: 101)
         try check(!state.isAnimating(at: 101), "re-enable replayed catch-up gesture")
         var closed = record(); closed.appStartedAt = nil
@@ -268,7 +273,7 @@ struct MenuRenderProbe {
         try check(state.tokens == nil, "partial zero presented as confirmed zero")
         partial.dailyTokens = 123_456
         state.receive(partial, now: now, uptime: 104)
-        try check(state.tokenLabel == "~123K", "partial totals must be visible in the menu")
+        try check(state.tokens == 123_456 && state.snapshot.incomplete, "partial metadata must remain available to the tooltip")
         let suite = "menu-codex-probe-\(UUID().uuidString)"
         let isolated = UserDefaults(suiteName: suite)!
         defer { isolated.removePersistentDomain(forName: suite) }
@@ -281,8 +286,16 @@ struct MenuRenderProbe {
                     let (optionalImage, layout, text) = MenuBarContent.previewCodex(sample: sample(), snapshot: record(), preferences: prefs, dark: dark, frame: 1)
                     try check(Set(layout.keys) == visible, "Codex layout selection mismatch")
                     let image = optionalImage!
-                    try check(image.size.width <= 436, "paired menu exceeds content cap")
-                    let frames = MenuBarMetric.allCases.compactMap { layout[$0] }
+                    try check(image.size.width <= 374, "icon-only menu exceeds compact content cap")
+                    if let icon = layout[.codex] {
+                        try check(icon.minX == 2 && icon.width == 26, "Codex must be a compact leading icon without a text slot")
+                        var changed = record(120, tokens: 9_999_999_999)
+                        changed.incomplete = true
+                        let unchanged = MenuBarContent.previewCodex(sample: sample(), snapshot: changed, preferences: prefs, dark: dark, frame: 0).0!
+                        let idle = MenuBarContent.previewCodex(sample: sample(), snapshot: record(), preferences: prefs, dark: dark, frame: 0).0!
+                        try check(unchanged.size == idle.size && (try pixels(unchanged)) == pixels(idle), "token/age text still leaks into menu pixels or width")
+                    }
+                    let frames = MenuBarMetric.menuOrder.compactMap { layout[$0] }
                     for (left, right) in zip(frames, frames.dropFirst()) { try check(right.minX - left.maxX == 7, "Codex spacing is not 7pt") }
                     if let end = frames.last { try check(end.maxX + 2 == image.size.width, "Codex leaves a trailing gap") }
                     try check(text.contains("Codex") == visible.contains(.codex), "hidden Codex announced to VoiceOver")
