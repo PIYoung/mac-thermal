@@ -172,7 +172,24 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     private lazy var back = NSButton(title: "", target: self, action: #selector(closePage))
     private lazy var primary = NSButton(title: "", target: self, action: #selector(primaryAction))
     private lazy var secondary = NSButton(title: "", target: self, action: #selector(secondaryAction))
-    private lazy var changeFolder = NSButton(image: NSImage(systemSymbolName: "folder.badge.gearshape", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(requestFolderChange))
+    private lazy var changeFolder: NSPopUpButton = {
+        let control = NSPopUpButton(frame: .zero, pullsDown: true)
+        control.controlSize = .small
+        control.imagePosition = .imageOnly
+        control.imageScaling = .scaleProportionallyDown
+        (control.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let label = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
+        label.image = NSImage(systemSymbolName: "folder.badge.gearshape", accessibilityDescription: nil)
+        label.isHidden = true
+        let choose = menu.addItem(withTitle: "", action: #selector(chooseAnotherFolder), keyEquivalent: "")
+        choose.target = self
+        let forget = menu.addItem(withTitle: "", action: #selector(forgetFolder), keyEquivalent: "")
+        forget.target = self
+        control.menu = menu
+        return control
+    }()
     var didClose: (() -> Void)?
     var didFinish: (() -> Void)?
 
@@ -286,6 +303,11 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         changeFolder.isEnabled = !isBusy && !pickerInFlight
         changeFolder.toolTip = L10n.text("폴더 관리")
         changeFolder.setAccessibilityLabel(L10n.text("폴더 관리"))
+        changeFolder.item(at: 0)?.title = L10n.text("폴더 관리")
+        changeFolder.item(at: 1)?.title = L10n.text("폴더 변경")
+        changeFolder.item(at: 2)?.title = L10n.text("기억한 폴더 해제")
+        changeFolder.item(at: 1)?.isEnabled = !isBusy && !pickerInFlight
+        changeFolder.item(at: 2)?.isEnabled = canForgetFolder
         notice.stringValue = L10n.text("휴지통으로 옮겨도 바로 공간이 늘어나지는 않습니다. 휴지통은 자동으로 비우지 않습니다.")
         primary.isEnabled = true
         secondary.isEnabled = true
@@ -428,17 +450,6 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         case .restoring, .scanning, .executing:
             cancellation?.cancel(); stopRequested = true; render(animated: false)
         }
-    }
-    @objc private func requestFolderChange() {
-        guard !isBusy, !pickerInFlight else { return }
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let choose = menu.addItem(withTitle: L10n.text("폴더 변경"), action: #selector(chooseAnotherFolder), keyEquivalent: "")
-        choose.target = self
-        let forget = menu.addItem(withTitle: L10n.text("기억한 폴더 해제"), action: #selector(forgetFolder), keyEquivalent: "")
-        forget.target = self
-        forget.isEnabled = canForgetFolder
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: changeFolder.bounds.maxY + 2), in: changeFolder)
     }
     @objc private func chooseAnotherFolder() { chooseFolder() }
     @objc private func forgetFolder() {

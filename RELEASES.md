@@ -2,7 +2,7 @@
 
 ## v2.6.0 — Unreleased
 
-Choose individual menu bar metrics and review disk cleanup candidates. Build 21.
+Choose individual menu bar metrics and review disk cleanup candidates. Build 22.
 
 - Show CPU, GPU, SSD, and network by default, with four independent checkboxes in Settings. Save choices across launches and migrate the old primary-metric preference.
 - Fit each visible group to its actual text width with compact, consistent spacing, including between SSD and network. Hidden groups leave no reserved space.
