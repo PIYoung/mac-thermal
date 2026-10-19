@@ -4,232 +4,273 @@ import Darwin
 
 @main
 struct CodexMonitorProbe {
+    static var checks = 0
+    static let session = "11111111-1111-4111-8111-111111111111"
+    static let turnA = "22222222-2222-4222-8222-222222222222"
+    static let turnB = "33333333-3333-4333-8333-333333333333"
+    static let now = date("2026-10-19T12:00:00Z")
+    static let day = date("2026-10-19T00:00:00Z")
+    static func date(_ text: String) -> Date { ISO8601DateFormatter().date(from: text)! }
+    static func require(_ value: @autoclosure () -> Bool, _ label: String) {
+        checks += 1
+        if !value() { fputs("FAIL: \(label)\n", stderr); exit(1) }
+    }
+    static func line(_ type: String, _ timestamp: String, _ payload: [String: Any]) -> Data {
+        var data = try! JSONSerialization.data(withJSONObject: ["type": type, "timestamp": timestamp, "payload": payload], options: [.sortedKeys])
+        data.append(10); return data
+    }
+    static func meta(_ timestamp: String = "2026-10-19T01:00:00Z", id: String = session, fork: Bool = false) -> Data {
+        var payload: [String: Any] = ["id": id, "body": "PRIVATE_BODY_SHOULD_NEVER_LEAVE_PARSER"]
+        if fork { payload["forked_from_id"] = session }
+        return line("session_meta", timestamp, payload)
+    }
+    static func context(_ timestamp: String = "2026-10-19T01:00:00Z", model: String = "gpt-6.1-sol", turn: String = turnA) -> Data {
+        line("turn_context", timestamp, ["model": model, "turn_id": turn, "instructions": "PRIVATE_INSTRUCTIONS"])
+    }
+    static func numbers(_ total: Int, cached: Int = 0, output: Int = 0, reasoning: Int = 0) -> [String: Any] {
+        ["input_tokens": total - output, "cached_input_tokens": cached, "output_tokens": output,
+         "reasoning_output_tokens": reasoning, "total_tokens": total]
+    }
+    static func token(_ timestamp: String, total: Int, last: Int? = nil, cached: Int = 0, output: Int = 0, reasoning: Int = 0) -> Data {
+        line("event_msg", timestamp, ["type": "token_count", "info": [
+            "total_token_usage": numbers(total, cached: cached, output: output, reasoning: reasoning),
+            "last_token_usage": numbers(last ?? total)
+        ]])
+    }
+    static func feed(_ state: CodexLocalRecordState, _ bytes: Data, limit: Int = 100) {
+        for record in bytes.split(separator: 10) {
+            state.consume(Data(record), now: now, dayStart: day, dayEnd: day.addingTimeInterval(86_400), maxRecords: limit)
+        }
+    }
     static func main() throws {
-        protocolAndFrames()
-        observations()
-        usageAndQuotas()
-        quotaBucketSelection()
-        try socketSecurity()
-        lifecycle()
-        print("Codex monitor fixtures passed: read-only methods/opt-outs, bounded frames, absent-app lifecycle, stale delivery cancellation, numeric filtering, account/model attribution baselines, dedup/rollback/thread isolation, union activity time, approval exclusion and secure socket metadata. No live daemon, credentials, conversation history, model call or account endpoint was accessed.")
-    }
+        require(CodexTokenNumbers.integer(true) == nil, "boolean counter rejected")
+        require(CodexTokenNumbers.integer(1.5) == nil, "fractional counter rejected")
+        require(CodexTokenNumbers.integer(-1) == nil, "negative counter rejected")
+        require(CodexTokenNumbers.parse(numbers(100, cached: 101)) == nil, "invalid cached subset rejected")
+        require(CodexTokenNumbers.parse(numbers(100, output: 10, reasoning: 11)) == nil, "invalid reasoning subset rejected")
+        require(CodexLocalRecordState.model("gpt-6.1-sol") != nil, "model identifier accepted")
+        require(CodexLocalRecordState.model("/private/task") == nil, "path model rejected")
+        require(CodexLocalRecordState.model("private message text") == nil, "text model rejected")
 
-    private static func protocolAndFrames() {
-        precondition(CodexReadProtocol.integer(true) == nil)
-        precondition(CodexReadProtocol.integer(-1) == nil)
-        precondition(CodexReadProtocol.integer(1.5) == nil)
-        precondition(CodexReadProtocol.integer(Double.nan) == nil)
-        precondition(CodexReadProtocol.integer(0) == 0)
-        precondition(CodexReadProtocol.percentage(42.5) == 42.5)
-        precondition(CodexReadProtocol.percentage(true) == nil)
-        precondition(CodexReadProtocol.percentage(Double.nan) == nil)
-        precondition(CodexReadProtocol.percentage(Double.infinity) == nil)
-        precondition(CodexReadProtocol.identifier("gpt-6.1-sol") != nil)
-        precondition(CodexReadProtocol.identifier("/Users/private-file") == nil)
-        precondition(CodexReadProtocol.identifier("a title with text") == nil)
-        for method in ["turn/start", "thread/resume", "thread/read", "thread/list", "config/write", "account/login/start", "thread/settings/update"] {
-            precondition(CodexReadProtocol.request(id: 1, method: method, parameters: [:]) == nil)
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let base = meta() + context() + token("2026-10-19T01:00:01Z", total: 100)
+        let path = try fixture.write("2026/10/19/one.jsonl", base)
+        let reader = CodexLocalRecordsReader(root: fixture.root)
+        var first = reader.scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(first.dailyTokens == 100 && first.recordsCount == 1, "first complete local usage")
+        require(first.models.first?.model == "gpt-6.1-sol" && first.currentModel == "gpt-6.1-sol", "verified model context")
+        require(first.lastRecordAt == date("2026-10-19T01:00:01Z"), "numeric record timestamp")
+        require(!first.incomplete && first.recordsEnabled && first.connection == .connected, "complete source status")
+        let again = reader.scan(now: now.addingTimeInterval(1), cancellation: CodexRecordsCancellation())!
+        require(again.dailyTokens == 100 && again.recordsCount == 1 && reader.bytesReadLastScan == 0, "unchanged file does not replay or reread")
+        try fixture.append(path, token("2026-10-19T01:00:02Z", total: 100))
+        let duplicate = reader.scan(now: now.addingTimeInterval(2), cancellation: CodexRecordsCancellation())!
+        require(duplicate.dailyTokens == 100 && duplicate.recordsCount == 1, "duplicate cumulative notification adds zero")
+        try fixture.append(path, context("2026-10-19T01:00:03Z", model: "gpt-6-astra", turn: turnB) + token("2026-10-19T01:00:04Z", total: 160, last: 60))
+        let switched = reader.scan(now: now.addingTimeInterval(3), cancellation: CodexRecordsCancellation())!
+        require(switched.dailyTokens == 160 && switched.models.count == 2, "model switch shares one session baseline")
+        require(switched.models.first(where: { $0.model == "gpt-6-astra" })?.totalTokens == 60, "new model receives delta only")
+        try fixture.append(path, token("2026-10-19T01:00:01Z", total: 110, last: 10) + token("2026-10-19T01:00:05Z", total: 50) + token("2026-10-19T01:00:06Z", total: 180, last: 20))
+        let rollback = reader.scan(now: now.addingTimeInterval(4), cancellation: CodexRecordsCancellation())!
+        require(rollback.dailyTokens == 180 && rollback.incomplete, "old events and rollback never replay historical totals")
+
+        let previous = try Fixture(); defer { previous.remove() }
+        let previousData = meta("2026-10-18T23:00:00Z") + context("2026-10-18T23:00:00Z") + token("2026-10-18T23:59:00Z", total: 1_000) + token("2026-10-19T00:00:01Z", total: 1_025, last: 25)
+        try previous.write("2026/10/18/long-lived.jsonl", previousData)
+        let previousReader = CodexLocalRecordsReader(root: previous.root)
+        let today = previousReader.scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(today.dailyTokens == 25 && today.recordsCount == 1, "old folder session contributes current UTC day deltas")
+        let tomorrow = previousReader.scan(now: now.addingTimeInterval(86_400), cancellation: CodexRecordsCancellation())!
+        require(tomorrow.dailyTokens == 0 && tomorrow.models.isEmpty, "UTC rollover clears previous day counts")
+
+        let copied = try Fixture(); defer { copied.remove() }
+        try copied.write("2026/10/19/a.jsonl", base)
+        try copied.write("2026/10/19/b.jsonl", base)
+        let copiedSnapshot = CodexLocalRecordsReader(root: copied.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(copiedSnapshot.dailyTokens == 100 && copiedSnapshot.recordsCount == 1, "copied same-turn history deduplicated across files")
+        try copied.write("2026/10/19/c.jsonl", meta(id: "44444444-4444-4444-8444-444444444444") + context(turn: "55555555-5555-4555-8555-555555555555") + token("2026-10-19T01:00:01Z", total: 100))
+        let independent = CodexLocalRecordsReader(root: copied.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(independent.dailyTokens == 200 && independent.recordsCount == 2, "independent same numeric events are not incorrectly deduplicated")
+
+        let conflict = try Fixture(); defer { conflict.remove() }
+        try conflict.write("2026/10/19/a.jsonl", base + token("2026-10-19T01:00:02Z", total: 200, last: 100))
+        let conflictingCopy = meta() + context() + token("2026-10-19T01:00:02Z", total: 200)
+        try conflict.write("2026/10/19/b.jsonl", conflictingCopy)
+        try conflict.write("2026/10/19/c.jsonl", conflictingCopy)
+        let conflicted = CodexLocalRecordsReader(root: conflict.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(conflicted.dailyTokens == 100 && conflicted.incomplete, "conflicting copied baseline excluded even with third copy")
+
+        let nullableFork = try Fixture(); defer { nullableFork.remove() }
+        let nullMeta = line("session_meta", "2026-10-19T01:00:00Z", ["id": session, "forked_from_id": NSNull()])
+        try nullableFork.write("2026/10/19/null.jsonl", nullMeta + context() + token("2026-10-19T01:00:01Z", total: 100))
+        let nullForkSnapshot = CodexLocalRecordsReader(root: nullableFork.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(nullForkSnapshot.dailyTokens == 100 && !nullForkSnapshot.incomplete, "null fork metadata equals absent optional")
+        let malformedFork = try Fixture(); defer { malformedFork.remove() }
+        try malformedFork.write("2026/10/19/bad.jsonl", line("session_meta", "2026-10-19T01:00:00Z", ["id": session, "forked_from_id": true]) + context() + token("2026-10-19T01:00:01Z", total: 100))
+        let malformedForkSnapshot = CodexLocalRecordsReader(root: malformedFork.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(malformedForkSnapshot.dailyTokens == nil && malformedForkSnapshot.incomplete, "malformed nonnull fork metadata fails conservatively")
+
+        let fork = try Fixture(); defer { fork.remove() }
+        let forked = base + meta("2026-10-19T02:00:00Z", id: "66666666-6666-4666-8666-666666666666", fork: true)
+            + context("2026-10-19T02:00:00Z", model: "gpt-6-astra", turn: turnB)
+            + token("2026-10-19T02:00:01Z", total: 130, last: 30)
+            + token("2026-10-19T02:00:02Z", total: 150, last: 20)
+        try fork.write("2026/10/19/fork.jsonl", forked)
+        let forkedSnapshot = CodexLocalRecordsReader(root: fork.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(forkedSnapshot.dailyTokens == 20 && forkedSnapshot.incomplete, "fork copied prefix excluded and first inherited baseline conservatively excluded")
+
+        let unknown = try Fixture(); defer { unknown.remove() }
+        try unknown.write("2026/10/19/unknown.jsonl", meta() + token("2026-10-19T01:00:01Z", total: 100))
+        let unknownSnapshot = CodexLocalRecordsReader(root: unknown.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(unknownSnapshot.dailyTokens == nil && unknownSnapshot.models.isEmpty && unknownSnapshot.incomplete, "missing model is unavailable rather than false zero")
+
+        let invalid = try Fixture(); defer { invalid.remove() }
+        let malformedContext = line("turn_context", "2026-10-19T01:00:02Z", ["model": "/private/not-model", "turn_id": turnB])
+        try invalid.write("2026/10/19/invalid.jsonl", base + malformedContext + token("2026-10-19T01:00:03Z", total: 160, last: 60))
+        let invalidSnapshot = CodexLocalRecordsReader(root: invalid.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(invalidSnapshot.dailyTokens == 100 && invalidSnapshot.models.count == 1 && invalidSnapshot.incomplete, "invalid new context cannot inherit old model attribution")
+        let invalidSession = try Fixture(); defer { invalidSession.remove() }
+        try invalidSession.write("2026/10/19/invalid.jsonl", base + line("session_meta", "2026-10-19T01:00:02Z", ["id": "invalid"])
+            + context("2026-10-19T01:00:03Z", turn: turnB) + token("2026-10-19T01:00:04Z", total: 160, last: 60))
+        require(CodexLocalRecordsReader(root: invalidSession.root).scan(now: now, cancellation: CodexRecordsCancellation())!.dailyTokens == 100, "invalid new session cannot inherit old baseline")
+
+        let midnight = try Fixture(); defer { midnight.remove() }
+        let midnightPath = try midnight.write("2026/10/18/live.jsonl", meta("2026-10-18T23:58:00Z") + context("2026-10-18T23:58:00Z") + token("2026-10-18T23:59:00Z", total: 100))
+        let midnightReader = CodexLocalRecordsReader(root: midnight.root)
+        require(midnightReader.scan(now: date("2026-10-18T23:59:01Z"), cancellation: CodexRecordsCancellation())!.dailyTokens == 100, "midnight baseline setup")
+        let nextDay = token("2026-10-19T00:00:01Z", total: 125, last: 25)
+        try midnight.append(midnightPath, nextDay)
+        let crossedMidnight = midnightReader.scan(now: date("2026-10-19T00:00:02Z"), cancellation: CodexRecordsCancellation())!
+        require(crossedMidnight.dailyTokens == 25 && midnightReader.bytesReadLastScan == nextDay.count, "UTC rollover retains cursor and baseline without replay")
+
+        let tails = try Fixture(); defer { tails.remove() }
+        let tailPath = try tails.write("2026/10/19/tail.jsonl", meta() + context() + token("2026-10-19T01:00:01Z", total: 100).dropLast())
+        let tailReader = CodexLocalRecordsReader(root: tails.root)
+        require(tailReader.scan(now: now, cancellation: CodexRecordsCancellation())!.dailyTokens == nil && !tailReader.needsCatchUp, "partial raw line waits for append without hot catch-up")
+        try tails.append(tailPath, Data([10]))
+        require(tailReader.scan(now: now.addingTimeInterval(1), cancellation: CodexRecordsCancellation())!.dailyTokens == 100, "completed tail reread without retaining raw body")
+        let oversizedPath = try tails.write("2026/10/19/oversize.jsonl", Data(repeating: 65, count: 200_000) + Data([10]) + base)
+        _ = oversizedPath
+        let oversized = CodexLocalRecordsReader(root: tails.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(oversized.incomplete && oversized.dailyTokens == 100, "oversized line discarded and later complete records parsed")
+
+        let truncated = try Fixture(); defer { truncated.remove() }
+        let truncPath = try truncated.write("2026/10/19/truncate.jsonl", base + token("2026-10-19T01:00:02Z", total: 160, last: 60))
+        let truncReader = CodexLocalRecordsReader(root: truncated.root)
+        require(truncReader.scan(now: now, cancellation: CodexRecordsCancellation())!.dailyTokens == 160, "truncation setup")
+        try base.write(to: truncPath)
+        let rebuilt = truncReader.scan(now: now.addingTimeInterval(1), cancellation: CodexRecordsCancellation())!
+        require(rebuilt.dailyTokens == 100 && rebuilt.incomplete, "truncation rebuild replaces old contributions without replay")
+
+        let bounded = try Fixture(); defer { bounded.remove() }
+        try bounded.write("2026/10/19/a.jsonl", base)
+        try bounded.write("2026/10/19/b.jsonl", base)
+        var tiny = CodexRecordsBudget(); tiny.maxFiles = 1
+        require(CodexLocalRecordsReader(root: bounded.root, budget: tiny).scan(now: now, cancellation: CodexRecordsCancellation())!.incomplete, "catalog cap disclosed")
+        tiny = CodexRecordsBudget(); tiny.bytesPerScan = 10; tiny.bytesPerFile = 10
+        let capped = CodexLocalRecordsReader(root: bounded.root, budget: tiny).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(capped.incomplete && capped.dailyTokens == nil, "read budget never claims initial exact zero")
+        tiny = CodexRecordsBudget(); tiny.maxRecordsTotal = 1
+        let limited = CodexLocalRecordsReader(root: fixture.root, budget: tiny).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(limited.incomplete && limited.recordsCount == 1, "numeric cache cap disclosed")
+
+        let global = try Fixture(); defer { global.remove() }
+        for index in 0..<4 {
+            let id = String(format: "%08d-7777-4777-8777-777777777777", index)
+            try global.write("2026/10/19/\(index).jsonl", meta(id: id) + context(turn: id) + token("2026-10-19T01:00:01Z", total: 100))
         }
-        precondition(CodexReadProtocol.request(id: 1, method: "thread/turns/list", parameters: ["threadId": "t", "itemsView": "summary", "limit": 1]) == nil)
-        precondition(CodexReadProtocol.request(id: 1, method: "thread/turns/list", parameters: ["threadId": "t", "itemsView": "notLoaded", "limit": 1]) != nil)
-        precondition(CodexReadProtocol.suppressedNotifications.contains("thread/settings/updated"))
-        precondition(CodexReadProtocol.suppressedNotifications.contains("item/agentMessage/delta"))
-        precondition(CodexReadProtocol.suppressedNotifications.contains("turn/completed"))
-        precondition(Set(CodexReadProtocol.suppressedNotifications).isDisjoint(with: CodexReadProtocol.notifications))
-        var buffer = CodexLineBuffer()
-        precondition(buffer.append(Data("{\"x\":".utf8))?.isEmpty == true)
-        let frames = buffer.append(Data("1}\n{\"y\":2}\n".utf8))!
-        precondition(frames.count == 2 && frames[0] == Data("{\"x\":1}".utf8))
-        precondition(buffer.append(Data(repeating: 65, count: CodexLineBuffer.maximumFrameBytes + 1)) == nil)
-    }
-
-    private static func observations() {
-        var state = CodexObservationStore()
-        let now = Date()
-        state.connection(.connected, notice: nil, monotonic: 0)
-        state.loadedThreads(["a", "b"], complete: true)
-        precondition(state.snapshot.activeCount == nil)
-        precondition(state.turns(["data": [["status": "inProgress", "itemsView": "notLoaded", "items": [], "startedAt": 1_700_000_000]]], threadID: "a", now: now))
-        precondition(state.turns(["data": [["status": "completed", "itemsView": "notLoaded", "items": []]]], threadID: "b", now: now))
-        precondition(state.snapshot.activeCount == nil, "inProgress alone cannot distinguish active work from approval waits")
-        state.advance(monotonic: 2)
-        precondition(state.snapshot.observedActiveSeconds == 0)
-        state.notification(method: "thread/status/changed", parameters: ["threadId": "a", "status": ["type": "active", "activeFlags": []]])
-        state.advance(monotonic: 5)
-        precondition(state.snapshot.activeCount == 1 && state.snapshot.observedActiveSeconds == 3)
-        state.notification(method: "thread/status/changed", parameters: ["threadId": "b", "status": ["type": "active", "activeFlags": []]])
-        state.advance(monotonic: 6)
-        precondition(state.snapshot.activeCount == 2 && state.snapshot.observedActiveSeconds == 4, "Parallel work counts once in active union time")
-        state.notification(method: "thread/status/changed", parameters: ["threadId": "a", "status": ["type": "active", "activeFlags": ["waitingOnApproval"]]])
-        state.notification(method: "thread/status/changed", parameters: ["threadId": "b", "status": ["type": "active", "activeFlags": ["waitingOnUserInput"]]])
-        state.advance(monotonic: 10)
-        precondition(state.snapshot.activeCount == 0 && state.snapshot.waitingCount == 2 && state.snapshot.observedActiveSeconds == 4)
-        state.notification(method: "thread/status/changed", parameters: ["threadId": "a", "status": ["type": "active", "activeFlags": []]])
-        state.notification(method: "model/rerouted", parameters: ["threadId": "a", "toModel": "gpt-6.1-sol"])
-        precondition(state.snapshot.currentModel == "gpt-6.1-sol")
-        state.advance(monotonic: 100)
-        precondition(state.snapshot.observedActiveSeconds == 4, "A suspension/disconnected sampling gap is not active work")
-        state.notification(method: "thread/status/changed", parameters: ["threadId": "a", "status": ["type": "idle"]])
-        precondition(state.snapshot.currentModel == nil)
-        precondition(state.turns(["data": [["status": "completed", "itemsView": "notLoaded", "items": [], "startedAt": 1_000]]], threadID: "a", now: now))
-        state.notification(method: "thread/status/changed", parameters: ["threadId": "a", "status": ["type": "active", "activeFlags": []]])
-        precondition(state.snapshot.currentStartedAt == nil, "A new active turn cannot reuse a previous terminal turn timestamp")
-        state.notification(method: "thread/settings/updated", parameters: ["threadId": "a", "threadSettings": ["model": "private-title-sentinel", "cwd": "/private/path-sentinel"]])
-        precondition(!String(describing: state.snapshot).contains("sentinel"))
-        precondition(!state.turns(["data": [["status": "completed", "itemsView": "full", "items": []]]], threadID: "a", now: now))
-        precondition(!state.turns(["data": [["status": "completed", "itemsView": "notLoaded", "items": ["private-content-sentinel"]]]], threadID: "a", now: now))
-        precondition(state.turns(["data": [["status": "failed", "itemsView": "notLoaded", "items": [], "error": ["message": "private-error-sentinel"]]]], threadID: "a", now: now))
-        precondition(!String(describing: state.snapshot).contains("sentinel"))
-        state.connection(.unavailable, notice: nil, monotonic: 101)
-        precondition(state.snapshot.activeCount == nil && state.snapshot.waitingCount == nil)
-    }
-
-    private static func usage(_ thread: String, input: Int64, cached: Int64, output: Int64, model: String = "gpt-6.1-sol") -> [String: Any] {
-        ["threadUsage": ["threadId": thread, "groups": [["model": model, "inputTokens": input, "cachedInputTokens": cached, "outputTokens": output, "totalTokens": input + output]]]]
-    }
-
-    private static func usageAndQuotas() {
-        var state = CodexObservationStore()
-        state.loadedThreads(["a", "b"], complete: true)
-        state.usage(usage("a", input: 60, cached: 20, output: 40), threadID: "a")
-        precondition(state.snapshot.models.isEmpty && state.snapshot.observedTokens == 0)
-        state.usage(usage("a", input: 100, cached: 25, output: 50), threadID: "a")
-        state.usage(usage("a", input: 100, cached: 25, output: 50), threadID: "a")
-        precondition(state.snapshot.observedTokens == 50 && state.snapshot.models[0].cachedInputTokens == 5)
-        state.usage(usage("a", input: 10, cached: 0, output: 10), threadID: "a")
-        state.usage(usage("a", input: 100, cached: 25, output: 50), threadID: "a")
-        precondition(state.snapshot.observedTokens == 50, "Counter rollback and recovery cannot replay an already counted delta")
-        state.usage(usage("a", input: 130, cached: 30, output: 70), threadID: "a")
-        state.usage(usage("b", input: 60, cached: 20, output: 40), threadID: "b")
-        state.usage(usage("b", input: 100, cached: 25, output: 50), threadID: "b")
-        precondition(state.snapshot.observedTokens == 150 && state.snapshot.models[0].totalTokens == 150)
-        state.usage(usage("wrong", input: 500, cached: 0, output: 100), threadID: "a")
-        state.usage(usage("a", input: 500, cached: 0, output: 100, model: "/private/path-sentinel"), threadID: "a")
-        precondition(state.snapshot.observedTokens == 150 && !String(describing: state.snapshot).contains("sentinel"))
-        state.connection(.unavailable, notice: nil, monotonic: 0)
-        precondition(state.snapshot.observedTokens == 150, "Unavailable display can retain clearly stale values")
-        state.connection(.connecting, notice: nil, monotonic: 1)
-        state.connection(.connected, notice: nil, monotonic: 2)
-        state.loadedThreads(["a"], complete: true)
-        state.usage(usage("a", input: 500, cached: 100, output: 500), threadID: "a")
-        precondition(state.snapshot.observedTokens == 0 && state.snapshot.models.isEmpty,
-            "A reconnect must baseline the disconnected gap rather than charging it as observed usage")
-        let now = ISO8601DateFormatter().date(from: "2026-10-19T12:00:00Z")!
-        state.account(["summary": ["lifetimeTokens": 123_456], "dailyUsageBuckets": [["startDate": "2026-10-19", "tokens": 789], ["startDate": "2026-10-18", "tokens": 321]]], now: now)
-        precondition(state.snapshot.lifetimeTokens == 123_456 && state.snapshot.dailyTokens == 789)
-        state.account(["summary": ["lifetimeTokens": NSNull()], "dailyUsageBuckets": NSNull()], now: now)
-        precondition(state.snapshot.lifetimeTokens == nil && state.snapshot.dailyTokens == nil)
-        state.limits(["rateLimitsByLimitId": ["codex": ["primary": ["usedPercent": 0, "windowDurationMins": 300, "resetsAt": 2_000_000_000], "secondary": ["usedPercent": 60, "windowDurationMins": 10_080]]], "rateLimits": ["primary": ["usedPercent": 99]]])
-        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas.first?.usedPercent == 0)
-        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "codex", "primary": ["usedPercent": 20]]])
-        precondition(state.snapshot.quotas[0].usedPercent == 20 && state.snapshot.quotas[0].windowMinutes == 300 && state.snapshot.quotas[1].usedPercent == 60)
-        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "codex", "primary": ["usedPercent": 42.5]]])
-        precondition(state.snapshot.quotas[0].usedPercent == 42.5)
-        state.limits(["rateLimits": ["primary": ["usedPercent": 101]]])
-        precondition(state.snapshot.quotas.isEmpty)
-        state.account(["summary": ["lifetimeTokens": 42], "dailyUsageBuckets": [["startDate": "2026-10-19", "tokens": 12]]], now: now)
-        state.limits(["rateLimits": ["primary": ["usedPercent": 50]]])
-        state.connection(.connecting, notice: nil, monotonic: 3)
-        precondition(state.snapshot.dailyTokens == nil && state.snapshot.lifetimeTokens == nil && state.snapshot.quotas.isEmpty)
-        state.appStartedAt(now)
-        precondition(state.snapshot.appStartedAt == now)
-        state.appStartedAt(nil)
-        precondition(state.snapshot.appStartedAt == nil)
-    }
-
-    private static func socketSecurity() throws {
-        // Synthetic lstat records exercise the production validator without
-        // opening any real IPC endpoint or requiring sandbox network access.
-        let home = URL(fileURLWithPath: "/Users/codex-fixture", isDirectory: true)
-        let url = home.appendingPathComponent(".codex/app-server-control/app-server-control.sock")
-        let parent = url.deletingLastPathComponent().path
-        var records: [String: stat] = [:]
-        var path = ""
-        for (index, component) in url.pathComponents.enumerated() {
-            path = component == "/" ? "/" : path == "/" ? "/" + component : path + "/" + component
-            var value = stat()
-            value.st_dev = 1
-            value.st_ino = ino_t(index + 1)
-            value.st_uid = path == home.path || path.hasPrefix(home.path + "/") ? geteuid() : 0
-            value.st_mode = path == url.path ? S_IFSOCK | 0o600 : S_IFDIR | 0o700
-            records[path] = value
+        var globalBudget = CodexRecordsBudget(); globalBudget.maxRecordsTotal = 2
+        let globalReader = CodexLocalRecordsReader(root: global.root, budget: globalBudget)
+        let globalSnapshot = globalReader.scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(globalReader.retainedRecordCount <= 2 && globalSnapshot.incomplete, "global retained cache is bounded across multiple files")
+        let recent = try Fixture(); defer { recent.remove() }
+        try recent.write("2020/01/01/old.jsonl", base)
+        try recent.write("2026/10/19/new.jsonl", meta() + context(model: "gpt-6-astra") + token("2026-10-19T01:00:01Z", total: 10))
+        var recentBudget = CodexRecordsBudget(); recentBudget.maxFiles = 1
+        let recentSnapshot = CodexLocalRecordsReader(root: recent.root, budget: recentBudget).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(recentSnapshot.dailyTokens == 10 && recentSnapshot.currentModel == "gpt-6-astra" && recentSnapshot.incomplete, "metadata cutoff prioritizes recent date folders")
+        let catchup = try Fixture(); defer { catchup.remove() }
+        var backlog = meta() + context()
+        let ignored = line("response_item", "2026-10-19T01:00:00Z", ["body": String(repeating: "x", count: 4_096)])
+        for _ in 0..<100 { backlog.append(ignored) }
+        backlog.append(token("2026-10-19T01:00:01Z", total: 100))
+        try catchup.write("2026/10/19/catchup.jsonl", backlog)
+        var catchupBudget = CodexRecordsBudget(); catchupBudget.bytesPerScan = 32_768; catchupBudget.bytesPerFile = 32_768
+        let catchupReader = CodexLocalRecordsReader(root: catchup.root, budget: catchupBudget)
+        var catchupSnapshot = catchupReader.scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(catchupReader.needsCatchUp && catchupSnapshot.dailyTokens == nil, "unread backlog requests bounded catch-up")
+        for _ in 0..<30 where catchupReader.needsCatchUp {
+            catchupSnapshot = catchupReader.scan(now: now.addingTimeInterval(1), cancellation: CodexRecordsCancellation())!
+            require(catchupReader.bytesReadLastScan <= 32_768, "catch-up respects each byte budget")
         }
-        let identity = CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] })!
-        precondition(CodexEndpointSecurity.unchanged(identity, readMetadata: { records[$0] }))
-        precondition(CodexEndpointSecurity.inspect(socketURL: home.appendingPathComponent("arbitrary.sock"), homeURL: home, readMetadata: { records[$0] }) == nil)
-        let originalParent = records[parent]!
-        records[parent]?.st_mode = S_IFDIR | 0o770
-        precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) == nil)
-        records[parent] = originalParent
-        records[url.path]?.st_mode = S_IFSOCK | 0o660
-        precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) == nil)
-        records[url.path]?.st_mode = S_IFSOCK | 0o600
-        records[parent]?.st_mode = S_IFLNK | 0o700
-        precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) == nil)
-        precondition(!CodexEndpointSecurity.unchanged(identity, readMetadata: { records[$0] }))
-        records[parent] = originalParent
-        records[parent]?.st_ino += 1
-        precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) != nil)
-        precondition(!CodexEndpointSecurity.unchanged(identity, readMetadata: { records[$0] }))
-        records[parent] = originalParent
-        records[url.path]?.st_uid = geteuid() + 1
-        precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) == nil)
-        records[url.path] = nil
-        precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) == nil)
-    }
+        require(!catchupReader.needsCatchUp && catchupSnapshot.dailyTokens == 100, "catch-up finishes then becomes idle")
 
-    private static func quotaBucketSelection() {
-        func bucket(_ used: Double) -> [String: Any] {
-            ["primary": ["usedPercent": used, "windowDurationMins": 300],
-             "secondary": ["usedPercent": used + 10, "windowDurationMins": 10_080]]
-        }
-        var state = CodexObservationStore()
-        state.limits(["rateLimitsByLimitId": ["aaa-model": bucket(5), "codex": bucket(20), "zzz-model": bucket(40)], "rateLimits": bucket(77)])
-        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas.allSatisfy { $0.name.hasPrefix("codex.") })
-        precondition(state.snapshot.quotas[0].usedPercent == 20)
-        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "aaa-model", "primary": ["usedPercent": 1]]])
-        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 20,
-            "A model-specific notification cannot replace or append default account quota rows")
-        var legacy = bucket(77)
-        legacy["limitId"] = "zzz-model"
-        state.limits(["rateLimitsByLimitId": ["codex": bucket(20), "zzz-model": bucket(40)], "rateLimits": legacy])
-        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 40)
-        precondition(state.snapshot.quotas.allSatisfy { $0.name.hasPrefix("zzz-model.") })
-        state.limits(["rateLimitsByLimitId": ["only-model": bucket(5)], "rateLimits": [:]])
-        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 5)
-        state.limits(["rateLimitsByLimitId": ["aaa-model": bucket(5), "zzz-model": bucket(40)], "rateLimits": bucket(77)])
-        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 77)
-        precondition(state.snapshot.quotas.allSatisfy { $0.name.hasPrefix("legacy.") })
-        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "aaa-model", "primary": ["usedPercent": 1]]])
-        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 77)
-        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["primary": ["usedPercent": 78.5]]])
-        precondition(state.snapshot.quotas[0].usedPercent == 78.5)
-        state.limits(["rateLimitsByLimitId": ["aaa-model": bucket(5), "zzz-model": bucket(40)], "rateLimits": [:]])
-        precondition(state.snapshot.quotas.isEmpty, "Ambiguous model buckets must remain unavailable without a default view")
-        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "aaa-model", "primary": ["usedPercent": 1]]])
-        precondition(state.snapshot.quotas.isEmpty)
-    }
+        let external = try Fixture(); defer { external.remove() }
+        let externalPath = try external.write("outside.jsonl", base)
+        let links = try Fixture(); defer { links.remove() }
+        try FileManager.default.createSymbolicLink(at: links.root.appendingPathComponent("linked.jsonl"), withDestinationURL: externalPath)
+        try FileManager.default.createSymbolicLink(at: links.root.appendingPathComponent("linked-dir"), withDestinationURL: external.root)
+        let linksSnapshot = CodexLocalRecordsReader(root: links.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(linksSnapshot.dailyTokens == nil && linksSnapshot.incomplete, "file and directory symlinks never traversed")
+        let symlinkRoot = external.base.appendingPathComponent("root-link")
+        try FileManager.default.createSymbolicLink(at: symlinkRoot, withDestinationURL: fixture.root)
+        require(CodexLocalRecordsReader(root: symlinkRoot).scan(now: now, cancellation: CodexRecordsCancellation())!.connection == .unavailable, "symlink root refused")
+        let moved = try Fixture(); defer { moved.remove() }
+        try moved.write("2026/10/19/a.jsonl", base)
+        let movedReader = CodexLocalRecordsReader(root: moved.root)
+        require(movedReader.scan(now: now, cancellation: CodexRecordsCancellation())!.dailyTokens == 100, "root identity setup")
+        let oldRoot = moved.root.deletingLastPathComponent().appendingPathComponent("old-sessions")
+        try FileManager.default.moveItem(at: moved.root, to: oldRoot)
+        try FileManager.default.createDirectory(at: moved.root, withIntermediateDirectories: false)
+        let replaced = movedReader.scan(now: now.addingTimeInterval(1), cancellation: CodexRecordsCancellation())!
+        require(replaced.connection == .unavailable && replaced.dailyTokens == nil, "replaced root clears stale numeric data")
+        let cancelled = CodexRecordsCancellation(); cancelled.cancel()
+        require(reader.scan(now: now, cancellation: cancelled) == nil, "cancelled scan performs no work or delivery")
 
-    private static func lifecycle() {
-        precondition(Thread.isMainThread)
-        let monitor = CodexMonitor(isRunning: { false }, launchDate: { nil }, workspaceNotificationsEnabled: false)
-        var callbacks = 0
-        monitor.onUpdate = { snapshot in
-            precondition(Thread.isMainThread && snapshot.connection == .notRunning)
-            callbacks += 1
-        }
+        let suite = "MacThermal.CodexMonitorProbe." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let launch = now.addingTimeInterval(-3600)
+        let monitor = CodexMonitor(defaults: defaults, recordsRoot: fixture.root,
+            isRunning: { true }, launchDate: { launch }, workspaceNotificationsEnabled: false)
+        var snapshots: [CodexMonitorSnapshot] = []
+        monitor.onUpdate = { snapshots.append($0) }
         monitor.start()
-        monitor.start()
-        monitor.refresh()
-        monitor.stop()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        precondition(callbacks == 0, "Queued callbacks from a stopped generation must be discarded")
-        monitor.start()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-        precondition(callbacks > 0)
-        monitor.stop()
-        let stopped = callbacks
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        precondition(callbacks == stopped)
+        require(snapshots.last?.recordsEnabled == false && snapshots.last?.appStartedAt == launch, "opt-in defaults off while runtime remains local")
+        monitor.setRecordsEnabled(true)
+        monitor.setRecordsEnabled(false)
+        let until = Date().addingTimeInterval(0.3)
+        while RunLoop.current.run(mode: .default, before: until), Date() < until {}
+        require(snapshots.last?.recordsEnabled == false && snapshots.last?.dailyTokens == nil && snapshots.last?.models.isEmpty == true, "off clears counts and rejects in-flight enabled callbacks")
+        require(!defaults.bool(forKey: CodexMonitor.recordsEnabledKey), "explicit toggle persistence")
+        monitor.stop(); let count = snapshots.count; monitor.refresh()
+        require(snapshots.count == count, "stop has no late refresh delivery")
+        first = CodexMonitorSnapshot()
+        print("Codex local-record monitor probe PASS (\(checks) checks; synthetic fixtures only)")
     }
+}
+
+private final class Fixture {
+    let base: URL
+    let root: URL
+    init() throws {
+        base = URL(fileURLWithPath: "/private/tmp").appendingPathComponent("mac-thermal-codex-fixture-" + UUID().uuidString, isDirectory: true)
+        root = base.appendingPathComponent(".codex/sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+    @discardableResult func write(_ relative: String, _ data: Data) throws -> URL {
+        let path = root.appendingPathComponent(relative)
+        try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: path)
+        return path
+    }
+    func append(_ path: URL, _ data: Data) throws {
+        let fd = Darwin.open(path.path, O_WRONLY | O_APPEND | O_CLOEXEC | O_NOFOLLOW)
+        guard fd >= 0 else { throw NSError(domain: "Fixture", code: 1) }
+        defer { Darwin.close(fd) }
+        let count = data.withUnsafeBytes { Darwin.write(fd, $0.baseAddress!, $0.count) }
+        if count != data.count { throw NSError(domain: "Fixture", code: 2) }
+    }
+    func remove() { try? FileManager.default.removeItem(at: base) }
 }

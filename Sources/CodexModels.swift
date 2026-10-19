@@ -13,29 +13,20 @@ struct CodexModelUsage: Equatable {
     var totalTokens: Int64 = 0
 }
 
-struct CodexQuota: Equatable {
-    var name: String
-    var usedPercent: Double
-    var windowMinutes: Int?
-    var resetsAt: Date?
-}
-
 /// Only numeric usage and runtime metadata reach the view. No credentials,
 /// conversation text, tool arguments, working directories or task titles.
 struct CodexMonitorSnapshot {
     var appStartedAt: Date?
     var connection: CodexConnectionState = .notRunning
-    var activeCount: Int?
-    var waitingCount: Int?
+    var recordsEnabled = false
+    /// UTC-today numeric usage records accepted from this Mac, not file count.
+    var recordsCount: Int?
+    var lastRecordAt: Date?
+    var incomplete = false
     var currentModel: String?
-    var currentStartedAt: Date?
-    var observedActiveSeconds: TimeInterval = 0
-    var observedTokens: Int64 = 0
-    var observedSince: Date = Date()
+    /// UTC-today totals from local records; not the whole account's usage.
     var dailyTokens: Int64?
-    var lifetimeTokens: Int64?
     var models: [CodexModelUsage] = []
-    var quotas: [CodexQuota] = []
     var updatedAt: Date?
     /// An original localized UI key, never an upstream error message.
     var noticeKey: String?

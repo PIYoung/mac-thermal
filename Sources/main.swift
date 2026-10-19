@@ -114,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         panel.refresh = { [weak self] in self?.requestSample() }
         codexPanel.refresh = { [weak self] in self?.codexMonitor.refresh() }
+        codexPanel.recordsEnabledChanged = { [weak self] enabled in self?.codexMonitor.setRecordsEnabled(enabled) }
         codexMonitor.onUpdate = { [weak self] snapshot in
             self?.codexSnapshot = snapshot
             self?.codexPanel.apply(snapshot)

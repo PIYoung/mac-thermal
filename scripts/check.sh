@@ -30,4 +30,4 @@ xcrun swiftc -O -target arm64-apple-macosx14.0 \
   -framework AppKit -o "$check_dir/ui-metrics-probe"
 "$check_dir/ui-metrics-probe"
 
-print -- "Build, localization, CPU/GPU menu rendering, process ranking, thermal fallback, GPU parsing, paired panel layout/updates, bounded panel opening, Codex read-only protocol/UI, uptime, usage history, and isolated disk cleanup checks passed."
+print -- "Build, localization, CPU/GPU menu rendering, process ranking, thermal fallback, GPU parsing, paired panel layout/updates, bounded panel opening, Codex local-record parser/UI, uptime, usage history, and isolated disk cleanup checks passed."

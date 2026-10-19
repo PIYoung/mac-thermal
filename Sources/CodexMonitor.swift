@@ -1,856 +1,675 @@
 import AppKit
 import Foundation
 import Darwin
-import Security
 
-enum CodexReadProtocol {
-    static let methods: Set<String> = ["initialize", "account/usage/read", "account/rateLimits/read", "thread/loaded/list", "thread/turns/list"]
-    static let notifications: Set<String> = ["thread/status/changed", "thread/tokenUsage/updated", "account/rateLimits/updated", "model/rerouted"]
-    // Exact opt-outs from the bundled 0.162 protocol. Unknown future events are
-    // also discarded locally; no generic event, payload or upstream error is logged.
-    static let suppressedNotifications = [
-        "error", "thread/started", "thread/archived", "thread/deleted", "thread/unarchived", "thread/closed", "thread/reverted",
-        "skills/changed", "thread/name/updated", "thread/attachment/updated", "thread/goal/updated", "thread/prediction/updated",
-        "thread/goal/cleared", "thread/queue/changed", "project/changed", "thread/project/updated", "thread/environment/connected",
-        "thread/environment/disconnected", "thread/settings/updated", "turn/started", "hook/started", "turn/completed", "hook/completed",
-        "turn/diff/updated", "turn/plan/updated", "item/started", "item/autoApprovalReview/started", "item/autoApprovalReview/completed",
-        "autoApprovalReview/strictReviewRequired", "item/completed", "item/agentMessage/delta", "item/plan/delta", "command/exec/outputDelta",
-        "process/outputDelta", "process/exited", "item/commandExecution/outputDelta", "item/commandExecution/terminalInteraction",
-        "item/fileChange/outputDelta", "item/fileChange/patchUpdated", "serverRequest/resolved", "item/mcpToolCall/progress",
-        "mcpServer/oauthLogin/completed", "mcpServer/startupStatus/updated", "mcpServer/event/stream/notification", "account/updated",
-        "account/gatewayOAuth/changed", "app/list/updated", "remoteControl/status/changed", "externalAgentConfig/import/progress",
-        "externalAgentConfig/import/completed", "fs/changed", "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded",
-        "item/reasoning/textDelta", "thread/compacted", "model/verification", "modelProvider/authRecoveryStarted",
-        "modelProvider/authRecoveryCompleted", "turn/moderationMetadata", "model/safetyBuffering/updated", "warning", "guardianWarning",
-        "deprecationNotice", "configWarning", "fuzzyFileSearch/sessionUpdated", "fuzzyFileSearch/sessionCompleted", "thread/realtime/started",
-        "thread/realtime/itemAdded", "thread/realtime/item/started", "thread/realtime/item/transcript/delta", "thread/realtime/item/completed",
-        "thread/realtime/transcript/delta", "thread/realtime/transcript/done", "thread/realtime/outputAudio/delta", "thread/realtime/sdp",
-        "thread/realtime/error", "thread/realtime/closed", "windows/worldWritableWarning", "windowsSandbox/setupCompleted", "account/login/completed"
-    ]
+/// Cancellation is shared with the main thread: OFF does not wait behind a scan.
+final class CodexRecordsCancellation {
+    private let lock = NSLock()
+    private var value = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return value }
+    func cancel() { lock.lock(); value = true; lock.unlock() }
+}
 
+struct CodexTokenNumbers: Equatable, Hashable {
+    var input: Int64
+    var cached: Int64
+    var output: Int64
+    var reasoning: Int64
+    var total: Int64
+    static let zero = Self(input: 0, cached: 0, output: 0, reasoning: 0, total: 0)
+
+    static func parse(_ value: Any?) -> Self? {
+        guard let object = value as? [String: Any],
+              let input = integer(object["input_tokens"]),
+              let cached = integer(object["cached_input_tokens"]),
+              let output = integer(object["output_tokens"]),
+              let reasoning = integer(object["reasoning_output_tokens"]),
+              let total = integer(object["total_tokens"]),
+              cached <= input, reasoning <= output,
+              input <= Int64.max - output, input + output == total else { return nil }
+        return Self(input: input, cached: cached, output: output, reasoning: reasoning, total: total)
+    }
     static func integer(_ value: Any?) -> Int64? {
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-              number.doubleValue.isFinite, number.doubleValue >= 0,
-              number.doubleValue < Double(Int64.max), number.doubleValue.rounded(.towardZero) == number.doubleValue else { return nil }
-        return number.int64Value
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let text = number.stringValue
+        guard !text.isEmpty, text.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
+              let result = Int64(text), result >= 0 else { return nil }
+        return result
     }
-
-    static func identifier(_ value: Any?) -> String? {
-        guard let value = value as? String, !value.isEmpty, value.utf8.count <= 80,
-              !value.contains(".."), value.utf8.allSatisfy({
-                  (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || [45, 46, 95].contains($0)
-              }) else { return nil }
-        return value
+    func delta(after old: Self) -> Self? {
+        guard input >= old.input, cached >= old.cached, output >= old.output,
+              reasoning >= old.reasoning, total >= old.total else { return nil }
+        return Self(input: input - old.input, cached: cached - old.cached,
+                    output: output - old.output, reasoning: reasoning - old.reasoning,
+                    total: total - old.total)
     }
-
-    static func percentage(_ value: Any?) -> Double? {
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-              number.doubleValue.isFinite, (0...100).contains(number.doubleValue) else { return nil }
-        return number.doubleValue
+    func usage(model: String) -> CodexModelUsage {
+        CodexModelUsage(model: model, inputTokens: input, cachedInputTokens: cached,
+                        outputTokens: output, reasoningOutputTokens: reasoning, totalTokens: total)
     }
+}
 
-    static func request(id: Int, method: String, parameters: [String: Any]) -> Data? {
-        guard methods.contains(method) else { return nil }
-        if method == "thread/turns/list" {
-            guard parameters["itemsView"] as? String == "notLoaded", integer(parameters["limit"]) == 1,
-                  identifier(parameters["threadId"]) != nil else { return nil }
+private struct CodexNodeIdentity: Equatable, Hashable {
+    let device: dev_t
+    let inode: ino_t
+    let owner: uid_t
+    let kind: mode_t
+    let birthSeconds: Int64
+    let birthNanoseconds: Int64
+    init(_ info: stat) {
+        device = info.st_dev; inode = info.st_ino; owner = info.st_uid
+        kind = info.st_mode & S_IFMT
+        birthSeconds = Int64(info.st_birthtimespec.tv_sec)
+        birthNanoseconds = Int64(info.st_birthtimespec.tv_nsec)
+    }
+}
+
+private struct CodexRecordsScope {
+    let components: [String]
+    let identities: [CodexNodeIdentity]
+    let device: dev_t
+
+    static func open(_ root: URL, expected: Self? = nil) -> (Self, Int32)? {
+        let path = root.path
+        guard path.hasPrefix("/"), !path.contains("\0") else { return nil }
+        let components = path.split(separator: "/").map(String.init)
+        guard !components.isEmpty else { return nil }
+        var descriptor = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+        guard descriptor >= 0 else { return nil }
+        var identities: [CodexNodeIdentity] = []
+        var succeeded = false
+        defer { if !succeeded { Darwin.close(descriptor) } }
+        for (index, component) in components.enumerated() {
+            guard component != ".", component != ".." else { return nil }
+            let next = component.withCString { openat(descriptor, $0, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW) }
+            guard next >= 0 else { return nil }
+            Darwin.close(descriptor); descriptor = next
+            var info = stat()
+            guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR,
+                  info.st_uid == 0 || info.st_uid == geteuid() else { return nil }
+            // Root-owned sticky temporary ancestors are allowed for isolated probes.
+            let stickyTemporary = info.st_uid == 0 && (info.st_mode & S_ISVTX) != 0
+            guard (info.st_mode & 0o022) == 0 || stickyTemporary else { return nil }
+            if index >= max(0, components.count - 2), info.st_uid != geteuid() { return nil }
+            identities.append(CodexNodeIdentity(info))
         }
-        if method == "account/usage/read", let thread = parameters["threadId"], identifier(thread) == nil { return nil }
-        guard let data = try? JSONSerialization.data(withJSONObject: ["id": id, "method": method, "params": parameters]), data.count <= 16_384 else { return nil }
-        return data + Data([10])
-    }
-
-    static func add(_ left: Int64, _ right: Int64) -> Int64 {
-        let result = left.addingReportingOverflow(right)
-        return result.overflow ? Int64.max : result.partialValue
+        let scope = Self(components: components, identities: identities, device: identities.last!.device)
+        if let expected, expected.components != components || expected.identities != identities { return nil }
+        succeeded = true
+        return (scope, descriptor)
     }
 }
 
-struct CodexLineBuffer {
-    private var pending = Data()
-    static let maximumFrameBytes = 262_144
-    mutating func append(_ bytes: Data) -> [Data]? {
-        guard bytes.count <= Self.maximumFrameBytes, pending.count + bytes.count <= Self.maximumFrameBytes * 2 else { return nil }
-        pending.append(bytes)
-        var result: [Data] = []
-        while let end = pending.firstIndex(of: 10) {
-            guard end <= Self.maximumFrameBytes else { return nil }
-            if end > 0 { result.append(Data(pending[..<end])) }
-            pending.removeSubrange(...end)
+private struct CodexRecordKey: Hashable {
+    let turnID: String
+    let timestamp: Date
+    let cumulative: CodexTokenNumbers
+}
+private struct CodexUsageRecord {
+    let key: CodexRecordKey
+    let model: String
+    let numbers: CodexTokenNumbers
+}
+private struct CodexContext {
+    let model: String
+    let turnID: String
+    let timestamp: Date
+}
+
+/// A bounded JSONL parser retains only identifiers, counters and dates. Raw lines
+/// and dictionaries are transient; incomplete raw lines are reread, never cached.
+final class CodexLocalRecordState {
+    fileprivate var offset: Int64 = 0
+    fileprivate var discardedLine = false
+    fileprivate var partialLine = false
+    fileprivate var waitingForAppend = false
+    fileprivate var incomplete = false
+    fileprivate var sessionID: String?
+    fileprivate var sessionStartedAt: Date?
+    fileprivate var forkBoundary: Date?
+    fileprivate var context: CodexContext?
+    fileprivate var baseline: CodexTokenNumbers?
+    fileprivate var baselineAt: Date?
+    fileprivate var records: [CodexRecordKey: CodexUsageRecord] = [:]
+    fileprivate var latestModel: String?
+    fileprivate var latestModelAt: Date?
+    fileprivate var knownSize: Int64 = 0
+    fileprivate var catalogSizeAtRead: Int64?
+    fileprivate var modifiedSeconds: Int64 = 0
+    fileprivate var modifiedNanos: Int64 = 0
+
+    func consume(_ line: Data, now: Date, dayStart: Date, dayEnd: Date, maxRecords: Int) {
+        guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              let type = object["type"] as? String else { context = nil; incomplete = true; return }
+        guard type == "session_meta" || type == "turn_context" || type == "event_msg" else { return }
+        guard let payload = object["payload"] as? [String: Any] else {
+            if type == "turn_context" { context = nil }
+            if type == "session_meta" { sessionID = nil; context = nil; baseline = nil; baselineAt = nil }
+            incomplete = true; return
         }
-        return pending.count <= Self.maximumFrameBytes ? result : nil
-    }
-}
-
-struct CodexSocketIdentity: Equatable {
-    struct Node: Equatable {
-        let path: String
-        let device: dev_t
-        let inode: ino_t
-        let owner: uid_t
-        let mode: mode_t
-    }
-    let url: URL
-    let nodes: [Node]
-}
-
-enum CodexEndpointSecurity {
-    static func metadata(_ path: String) -> stat? {
-        var value = stat()
-        return lstat(path, &value) == 0 ? value : nil
-    }
-
-    static func inspect(socketURL: URL, homeURL: URL,
-                        readMetadata: (String) -> stat? = metadata) -> CodexSocketIdentity? {
-        let home = homeURL.path
-        let allowed = [home + "/.codex/app-server-control/app-server-control.sock", home + "/.codex/app-server-control.sock"]
-        guard socketURL.isFileURL, allowed.contains(socketURL.path), socketURL.path.utf8.count < 104 else { return nil }
-        var nodes: [CodexSocketIdentity.Node] = []
-        var path = ""
-        for component in socketURL.pathComponents {
-            path = component == "/" ? "/" : path == "/" ? "/" + component : path + "/" + component
-            guard let value = readMetadata(path), value.st_mode & S_IFMT != S_IFLNK else { return nil }
-            let isSocket = path == socketURL.path
-            if isSocket {
-                guard value.st_mode & S_IFMT == S_IFSOCK, value.st_uid == geteuid(), value.st_mode & 0o077 == 0 else { return nil }
+        if type == "event_msg", payload["type"] as? String != "token_count" { return }
+        guard let timestamp = Self.date(object["timestamp"]), timestamp <= now.addingTimeInterval(300) else {
+            if type == "turn_context" { context = nil }
+            if type == "session_meta" { sessionID = nil; context = nil; baseline = nil; baselineAt = nil }
+            incomplete = true; return
+        }
+        if type == "session_meta" {
+            guard let id = Self.identifier(payload["id"]) else {
+                sessionID = nil; context = nil; baseline = nil; baselineAt = nil; incomplete = true; return
+            }
+            if let old = sessionID, old != id { baseline = nil; baselineAt = nil; context = nil; forkBoundary = nil }
+            sessionID = id; sessionStartedAt = timestamp
+            if let fork = payload["forked_from_id"], !(fork is NSNull) {
+                guard Self.identifier(fork) != nil else {
+                    sessionID = nil; context = nil; baseline = nil; baselineAt = nil; incomplete = true; return
+                }
+                forkBoundary = timestamp
+                records = records.filter { $0.value.key.timestamp >= timestamp }
+                incomplete = true
+            }
+            return
+        }
+        if type == "turn_context" {
+            if let old = context, timestamp < old.timestamp { incomplete = true; return }
+            guard let model = Self.model(payload["model"]), let id = Self.identifier(payload["turn_id"]) else {
+                context = nil; incomplete = true; return
+            }
+            context = CodexContext(model: model, turnID: id, timestamp: timestamp)
+            return
+        }
+        guard let info = payload["info"] as? [String: Any],
+              let numbers = CodexTokenNumbers.parse(info["total_token_usage"]) else {
+            // Some token_count events intentionally have info:null (no usage yet).
+            if !(payload["info"] is NSNull) { incomplete = true }
+            return
+        }
+        guard sessionID != nil else { incomplete = true; return }
+        if let previousAt = baselineAt, timestamp < previousAt { incomplete = true; return }
+        let increment: CodexTokenNumbers
+        if let old = baseline {
+            guard let delta = numbers.delta(after: old) else {
+                // Keep the high-water baseline: a rollback cannot replay history.
+                incomplete = true; return
+            }
+            increment = delta
+        } else {
+            let last = CodexTokenNumbers.parse(info["last_token_usage"])
+            if last == numbers, forkBoundary == nil, let start = sessionStartedAt, start <= timestamp {
+                increment = numbers
             } else {
-                guard value.st_mode & S_IFMT == S_IFDIR else { return nil }
-                if path == home || path.hasPrefix(home + "/") {
-                    guard value.st_uid == geteuid(), value.st_mode & 0o022 == 0 else { return nil }
-                } else {
-                    // System ancestors may use the conventional root-owned
-                    // sticky temporary directory; no writable non-sticky ancestor.
-                    guard value.st_uid == 0 || value.st_uid == geteuid(),
-                          value.st_mode & 0o022 == 0 || (value.st_uid == 0 && value.st_mode & S_ISVTX != 0) else { return nil }
-                }
-            }
-            nodes.append(.init(path: path, device: value.st_dev, inode: value.st_ino, owner: value.st_uid, mode: value.st_mode))
-        }
-        return CodexSocketIdentity(url: socketURL, nodes: nodes)
-    }
-
-    static func current() -> CodexSocketIdentity? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return [".codex/app-server-control/app-server-control.sock", ".codex/app-server-control.sock"].compactMap {
-            inspect(socketURL: home.appendingPathComponent($0), homeURL: home)
-        }.first
-    }
-
-    static func unchanged(_ identity: CodexSocketIdentity, readMetadata: (String) -> stat? = metadata) -> Bool {
-        identity.nodes.allSatisfy { node in
-            guard let current = readMetadata(node.path) else { return false }
-            return current.st_dev == node.device && current.st_ino == node.inode &&
-                current.st_uid == node.owner && current.st_mode == node.mode
-        }
-    }
-
-    static func installedCLI() -> URL? {
-        for path in [
-            "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
-            "/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
-            "/Applications/Codex.app/Contents/Resources/codex"
-        ] {
-            var value = stat()
-            guard lstat(path, &value) == 0, value.st_mode & S_IFMT == S_IFREG,
-                  value.st_uid == 0 || value.st_uid == geteuid(), value.st_mode & 0o022 == 0,
-                  value.st_mode & 0o111 != 0 else { continue }
-            var code: SecStaticCode?
-            var requirement: SecRequirement?
-            guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &code) == errSecSuccess,
-                  let code,
-                  SecRequirementCreateWithString("anchor apple generic and certificate leaf[subject.OU] = \"2DC432GLL2\"" as CFString, [], &requirement) == errSecSuccess,
-                  SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate).union(.noNetworkAccess), requirement) == errSecSuccess else { continue }
-            return URL(fileURLWithPath: path)
-        }
-        return nil
-    }
-}
-
-struct CodexObservationStore {
-    enum Activity { case unknown, idle, active, waiting }
-    private enum QuotaSelection { case identified(String), legacy }
-    struct ThreadMetadata {
-        var activity: Activity = .unknown
-        var startedAt: Date?
-        var routedModel: String?
-    }
-    struct Counters: Equatable {
-        var input: Int64, cached: Int64, output: Int64, total: Int64
-        func delta(after old: Counters) -> Counters? {
-            guard input >= old.input, cached >= old.cached, output >= old.output, total >= old.total else { return nil }
-            return Counters(input: input - old.input, cached: cached - old.cached, output: output - old.output, total: total - old.total)
-        }
-    }
-    private(set) var snapshot = CodexMonitorSnapshot.pending
-    private var threads: [String: ThreadMetadata] = [:]
-    private var loaded = Set<String>()
-    private var completeLoadedList = false
-    private var baselines: [String: [String: Counters]] = [:]
-    private var totals: [String: CodexModelUsage] = [:]
-    private var quotaWindows: [String: CodexQuota] = [:]
-    private var quotaSelection: QuotaSelection?
-    private var lastMonotonic: TimeInterval?
-
-    mutating func advance(monotonic: TimeInterval) {
-        if let last = lastMonotonic {
-            let elapsed = monotonic - last
-            if elapsed >= 0, elapsed <= 15, threads.values.contains(where: { $0.activity == .active }), snapshot.connection == .connected {
-                snapshot.observedActiveSeconds += elapsed
-            }
-        }
-        lastMonotonic = monotonic
-    }
-
-    mutating func connection(_ value: CodexConnectionState, notice: String?, monotonic: TimeInterval) {
-        advance(monotonic: monotonic)
-        if value == .connecting {
-            baselines.removeAll()
-            totals.removeAll()
-            snapshot.observedActiveSeconds = 0
-            snapshot.observedTokens = 0
-            snapshot.models = []
-            snapshot.observedSince = Date()
-            snapshot.dailyTokens = nil
-            snapshot.lifetimeTokens = nil
-            snapshot.quotas = []
-            quotaWindows.removeAll()
-            quotaSelection = nil
-            snapshot.updatedAt = nil
-        }
-        snapshot.connection = value
-        snapshot.noticeKey = notice
-        if value != .connected {
-            threads.removeAll()
-            loaded.removeAll()
-            completeLoadedList = false
-        }
-        updateActivity()
-    }
-
-    mutating func errorNotice() { snapshot.noticeKey = "Codex 데이터를 읽을 수 없습니다" }
-
-    mutating func appStartedAt(_ value: Date?) { snapshot.appStartedAt = value }
-
-    mutating func received(monotonic: TimeInterval, now: Date) {
-        advance(monotonic: monotonic)
-        snapshot.updatedAt = now
-    }
-
-    mutating func loadedThreads(_ identifiers: [String], complete: Bool) {
-        loaded = Set(identifiers.prefix(128).compactMap(CodexReadProtocol.identifier))
-        completeLoadedList = complete && identifiers.count <= 128
-        threads = threads.filter { loaded.contains($0.key) }
-        for id in loaded where threads[id] == nil { threads[id] = ThreadMetadata() }
-        // Evicted threads establish a fresh baseline if seen again, so old
-        // account totals are never replayed as new observed token usage.
-        if baselines.count > 128 { baselines = baselines.filter { loaded.contains($0.key) } }
-        updateActivity()
-    }
-
-    mutating func account(_ value: [String: Any], now: Date) {
-        snapshot.lifetimeTokens = (value["summary"] as? [String: Any]).flatMap { CodexReadProtocol.integer($0["lifetimeTokens"]) }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyy-MM-dd"
-        let today = formatter.string(from: now)
-        let buckets = (value["dailyUsageBuckets"] as? [[String: Any]] ?? []).prefix(400)
-        let matches = buckets.filter { ($0["startDate"] as? String).map { String($0.prefix(10)) == today } ?? false }
-        snapshot.dailyTokens = matches.count == 1 ? CodexReadProtocol.integer(matches[0]["tokens"]) : nil
-    }
-
-    mutating func usage(_ value: [String: Any], threadID: String) {
-        guard loaded.contains(threadID), let usage = value["threadUsage"] as? [String: Any],
-              usage["threadId"] as? String == threadID,
-              let groups = usage["groups"] as? [[String: Any]], groups.count <= 64 else { return }
-        var current: [String: Counters] = [:]
-        var invalid = Set<String>()
-        for group in groups {
-            guard let model = CodexReadProtocol.identifier(group["model"]) else { continue }
-            guard let input = CodexReadProtocol.integer(group["inputTokens"]),
-                  let cached = CodexReadProtocol.integer(group["cachedInputTokens"]),
-                  let output = CodexReadProtocol.integer(group["outputTokens"]),
-                  let total = CodexReadProtocol.integer(group["totalTokens"]), cached <= input,
-                  !input.addingReportingOverflow(output).overflow, input + output <= total else {
-                invalid.insert(model); continue
-            }
-            let previous = current[model] ?? Counters(input: 0, cached: 0, output: 0, total: 0)
-            current[model] = Counters(input: CodexReadProtocol.add(previous.input, input), cached: CodexReadProtocol.add(previous.cached, cached),
-                output: CodexReadProtocol.add(previous.output, output), total: CodexReadProtocol.add(previous.total, total))
-        }
-        for model in invalid { current.removeValue(forKey: model) }
-        for (model, counters) in current {
-            if let before = baselines[threadID]?[model] {
-                guard let delta = counters.delta(after: before) else { continue }
-                guard totals[model] != nil || totals.count < 64 else { continue }
-                var aggregate = totals[model] ?? CodexModelUsage(model: model)
-                aggregate.inputTokens = CodexReadProtocol.add(aggregate.inputTokens, delta.input)
-                aggregate.cachedInputTokens = CodexReadProtocol.add(aggregate.cachedInputTokens, delta.cached)
-                aggregate.outputTokens = CodexReadProtocol.add(aggregate.outputTokens, delta.output)
-                aggregate.totalTokens = CodexReadProtocol.add(aggregate.totalTokens, delta.total)
-                // Account usage groups do not expose reasoning tokens. The UI
-                // does not render that unsupported field as a measured zero.
-                if delta.total > 0 { totals[model] = aggregate }
-            }
-            if baselines[threadID] == nil { baselines[threadID] = [:] }
-            baselines[threadID]?[model] = counters
-        }
-        snapshot.models = totals.values.sorted { $0.totalTokens == $1.totalTokens ? $0.model < $1.model : $0.totalTokens > $1.totalTokens }
-        snapshot.observedTokens = snapshot.models.reduce(0) { CodexReadProtocol.add($0, $1.totalTokens) }
-    }
-
-    mutating func turns(_ value: [String: Any], threadID: String, now: Date) -> Bool {
-        guard loaded.contains(threadID), let data = value["data"] as? [[String: Any]], data.count <= 1 else { return false }
-        guard let turn = data.first else { threads[threadID]?.activity = .idle; updateActivity(); return true }
-        guard turn["itemsView"] as? String == "notLoaded", let items = turn["items"] as? [Any], items.isEmpty,
-              let status = turn["status"] as? String, ["inProgress", "completed", "interrupted", "failed"].contains(status) else { return false }
-        threads[threadID]?.startedAt = nil
-        if status == "inProgress", let seconds = CodexReadProtocol.integer(turn["startedAt"]),
-           Double(seconds) <= now.timeIntervalSince1970 + 300 {
-            threads[threadID]?.startedAt = Date(timeIntervalSince1970: Double(seconds))
-        }
-        // inProgress includes approval waits. It alone cannot prove active work.
-        if status != "inProgress" {
-            threads[threadID]?.activity = .idle
-            threads[threadID]?.routedModel = nil
-        }
-        updateActivity()
-        return true
-    }
-
-    mutating func notification(method: String, parameters: [String: Any]) {
-        guard CodexReadProtocol.notifications.contains(method) else { return }
-        if method == "account/rateLimits/updated" {
-            guard let limits = parameters["rateLimits"] as? [String: Any], let quotaSelection else { return }
-            switch quotaSelection {
-            case .identified(let id):
-                guard CodexReadProtocol.identifier(limits["limitId"]) == id else { return }
-                quota(limits, bucket: id, sparse: true)
-            case .legacy:
-                // An anonymous historical default update cannot be assumed to
-                // describe a different explicitly identified model bucket.
-                guard limits["limitId"] == nil || limits["limitId"] is NSNull else { return }
-                quota(limits, bucket: "legacy", sparse: true)
-            }
-            return
-        }
-        guard let id = CodexReadProtocol.identifier(parameters["threadId"]), loaded.contains(id) else { return }
-        if method == "thread/status/changed", let status = parameters["status"] as? [String: Any] {
-            switch status["type"] as? String {
-            case "active":
-                guard let flags = status["activeFlags"] as? [String], flags.allSatisfy({ ["waitingOnApproval", "waitingOnUserInput"].contains($0) }) else {
-                    threads[id]?.activity = .unknown
-                    updateActivity()
-                    return
-                }
-                if threads[id]?.activity == .idle || threads[id]?.activity == .unknown {
-                    threads[id]?.startedAt = nil
-                    threads[id]?.routedModel = nil
-                }
-                threads[id]?.activity = flags.isEmpty ? .active : .waiting
-            case "idle", "notLoaded", "systemError":
-                threads[id]?.activity = .idle
-                threads[id]?.startedAt = nil
-                threads[id]?.routedModel = nil
-            default: threads[id]?.activity = .unknown
-            }
-        } else if method == "model/rerouted", let model = CodexReadProtocol.identifier(parameters["toModel"]) {
-            threads[id]?.routedModel = model
-        }
-        updateActivity()
-    }
-
-    mutating func limits(_ value: [String: Any]) {
-        quotaWindows.removeAll()
-        quotaSelection = nil
-        let legacy = value["rateLimits"] as? [String: Any]
-        let legacyID = legacy.flatMap { CodexReadProtocol.identifier($0["limitId"]) }
-        if let buckets = value["rateLimitsByLimitId"] as? [String: [String: Any]], !buckets.isEmpty {
-            let chosen: (String, [String: Any])?
-            if let legacyID, let bucket = buckets[legacyID] { chosen = (legacyID, bucket) }
-            else if let bucket = buckets["codex"] { chosen = ("codex", bucket) }
-            else if buckets.count == 1, let entry = buckets.first, CodexReadProtocol.identifier(entry.key) != nil { chosen = (entry.key, entry.value) }
-            else { chosen = nil }
-            if let (id, bucket) = chosen {
-                quotaSelection = .identified(id)
-                quota(bucket, bucket: id, sparse: false)
+                baseline = numbers; baselineAt = timestamp
+                if timestamp >= dayStart { incomplete = true }
                 return
             }
         }
-        if let legacy {
-            let hasWindow = ["primary", "secondary"].contains { kind in
-                (legacy[kind] as? [String: Any]).flatMap { CodexReadProtocol.percentage($0["usedPercent"]) } != nil
-            }
-            if let legacyID {
-                quotaSelection = .identified(legacyID)
-                quota(legacy, bucket: legacyID, sparse: false)
-            } else if hasWindow {
-                quotaSelection = .legacy
-                quota(legacy, bucket: "legacy", sparse: false)
-            }
-        }
-        snapshot.quotas = quotaWindows.values.sorted { $0.name < $1.name }
+        baseline = numbers; baselineAt = timestamp
+        guard increment.total > 0 else { return }
+        guard timestamp >= dayStart, timestamp < dayEnd else { return }
+        if let boundary = forkBoundary, timestamp < boundary { return }
+        guard let context, context.timestamp <= timestamp,
+              forkBoundary == nil || context.timestamp >= forkBoundary! else { incomplete = true; return }
+        let key = CodexRecordKey(turnID: context.turnID, timestamp: timestamp, cumulative: numbers)
+        guard records[key] == nil else { return }
+        guard records.count < maxRecords else { incomplete = true; return }
+        records[key] = CodexUsageRecord(key: key, model: context.model, numbers: increment)
+        if latestModelAt == nil || timestamp >= latestModelAt! { latestModel = context.model; latestModelAt = timestamp }
     }
-
-    private mutating func quota(_ value: [String: Any], bucket: String?, sparse: Bool) {
-        let name = CodexReadProtocol.identifier(bucket) ?? CodexReadProtocol.identifier(value["limitId"]) ?? "codex"
-        for kind in ["primary", "secondary"] {
-            let key = name + "." + kind
-            if let window = value[kind] as? [String: Any], let used = CodexReadProtocol.percentage(window["usedPercent"]) {
-                let duration = CodexReadProtocol.integer(window["windowDurationMins"]).flatMap { $0 > 0 && $0 <= 525_600 ? Int($0) : nil }
-                let reset = CodexReadProtocol.integer(window["resetsAt"]).flatMap { $0 < 32_503_680_000 ? Date(timeIntervalSince1970: Double($0)) : nil }
-                quotaWindows[key] = CodexQuota(name: key, usedPercent: used,
-                    windowMinutes: duration ?? (sparse ? quotaWindows[key]?.windowMinutes : nil),
-                    resetsAt: reset ?? (sparse ? quotaWindows[key]?.resetsAt : nil))
-            } else if !sparse { quotaWindows.removeValue(forKey: key) }
-        }
-        snapshot.quotas = quotaWindows.values.sorted { $0.name < $1.name }
+    static func identifier(_ value: Any?) -> String? {
+        guard let text = value as? String, text.utf8.count <= 64, UUID(uuidString: text) != nil else { return nil }
+        return text.lowercased()
     }
-
-    private mutating func updateActivity() {
-        let values = loaded.compactMap { threads[$0] }
-        let known = completeLoadedList && !values.contains(where: { $0.activity == .unknown })
-        snapshot.activeCount = known ? values.filter { $0.activity == .active }.count : nil
-        snapshot.waitingCount = known ? values.filter { $0.activity == .waiting }.count : nil
-        let active = values.filter { $0.activity == .active }
-        snapshot.currentStartedAt = active.compactMap(\.startedAt).min()
-        snapshot.currentModel = active.count == 1 ? active.first?.routedModel : nil
+    static func model(_ value: Any?) -> String? {
+        guard let text = value as? String, !text.isEmpty, text.utf8.count <= 80,
+              text.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 46 || $0 == 95 }) else { return nil }
+        return text
+    }
+    private static let fractionalDate: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return formatter
+    }()
+    private static let plainDate = ISO8601DateFormatter()
+    static func date(_ value: Any?) -> Date? {
+        guard let text = value as? String, text.utf8.count <= 40 else { return nil }
+        return fractionalDate.date(from: text) ?? plainDate.date(from: text)
     }
 }
 
-private final class CodexReadConnection {
-    enum Kind {
-        case initialize, account, limits, loaded, turns(String), usage(String)
-    }
-    struct Pending { let kind: Kind; let since: TimeInterval }
-    let queue: DispatchQueue
-    var deliver: (CodexMonitorSnapshot) -> Void
-    private var store = CodexObservationStore()
-    private var process: Process?
-    private var processID: UUID?
-    private var input: Pipe?
-    private var output: Pipe?
-    private var runtimeDirectory: URL?
-    private var endpoint: CodexSocketIdentity?
-    private var buffer = CodexLineBuffer()
-    private var pending: [Int: Pending] = [:]
-    private var requestID = 0
-    private var ready = false
-    private var closing = false
-    private var retryAt: TimeInterval = 0
-    private var failures = 0
-    private var timeouts = 0
-    private var nextAccount: TimeInterval = 0
-    private var nextLimits: TimeInterval = 0
-    private var nextLoaded: TimeInterval = 0
-    private var loadedIDs: [String] = []
-    private var loadingIDs: [String] = []
-    private var loadedPage = 0
-    private var cursor: String?
-    private var usageTimes: [String: TimeInterval] = [:]
-    private var turnTimes: [String: TimeInterval] = [:]
-    private var unsupported = Set<String>()
-    private var appRunning = false
-    private var lastForced: TimeInterval = 0
+struct CodexRecordsBudget {
+    var maxEntries = 8_000
+    var maxFiles = 512
+    var maxDirectories = 512
+    var maxDepth = 5
+    var bytesPerScan = 4 * 1_024 * 1_024
+    var bytesPerFile = 4 * 1_024 * 1_024
+    var maxLineBytes = 128 * 1_024
+    var maxRecordsPerFile = 8_192
+    var maxRecordsTotal = 24_576
+    var secondsPerScan = 0.35
+}
+private struct CodexRecordFile {
+    let names: [String]
+    let ancestors: [CodexNodeIdentity]
+    let identity: CodexNodeIdentity
+    let size: Int64
+    let modifiedSeconds: Int64
+    let modifiedNanos: Int64
+}
 
-    init(queue: DispatchQueue, deliver: @escaping (CodexMonitorSnapshot) -> Void) {
-        self.queue = queue
-        self.deliver = deliver
-    }
+/// Reader has one worker-queue owner; it never starts a process or touches another
+/// Codex directory. Its only durable state is in-memory numeric parsing metadata.
+final class CodexLocalRecordsReader {
+    private let root: URL
+    private let budget: CodexRecordsBudget
+    private var scope: CodexRecordsScope?
+    private var states: [CodexNodeIdentity: CodexLocalRecordState] = [:]
+    private var dayStart: Date?
+    private var roundRobin = 0
+    private var catalog: [CodexRecordFile] = []
+    private var catalogAt: Date?
+    private var catalogPartial = false
+    private var catalogValid = false
+    private var failedFiles = Set<CodexNodeIdentity>()
+    private(set) var needsCatchUp = false
+    private(set) var bytesReadLastScan = 0
+    var retainedRecordCount: Int { states.values.reduce(0) { $0 + $1.records.count } }
 
-    func refresh(appRunning: Bool, appStartedAt: Date?, force: Bool) {
-        self.appRunning = appRunning
-        store.appStartedAt(appRunning ? appStartedAt : nil)
-        let now = ProcessInfo.processInfo.systemUptime
-        if !appRunning {
-            disconnect(state: .notRunning, notice: "Codex가 실행되지 않았습니다", retry: false)
-            deliver(store.snapshot)
-            return
-        }
-        if process == nil {
-            guard now >= retryAt else { deliver(store.snapshot); return }
-            connect()
-            return
-        }
-        guard ready else { expire(now: now); return }
-        guard let endpoint, CodexEndpointSecurity.unchanged(endpoint) else {
-            disconnect(state: .unavailable, notice: "공유 Codex 서버에 연결할 수 없습니다", retry: true)
-            return
-        }
-        store.advance(monotonic: now)
-        expire(now: now)
-        if force && now - lastForced >= 10 {
-            lastForced = now
-            nextAccount = 0; nextLimits = 0; nextLoaded = 0
-        }
-        poll(now: now)
-        deliver(store.snapshot)
-    }
+    init(root: URL, budget: CodexRecordsBudget = CodexRecordsBudget()) { self.root = root; self.budget = budget }
 
-    func stop() {
-        appRunning = false
-        disconnect(state: .notRunning, notice: nil, retry: false)
-    }
-
-    private func connect() {
-        guard process == nil, let endpoint = CodexEndpointSecurity.current(),
-              let executable = CodexEndpointSecurity.installedCLI(), CodexEndpointSecurity.unchanged(endpoint) else {
-            unavailable()
-            return
+    func scan(now: Date, cancellation: CodexRecordsCancellation) -> CodexMonitorSnapshot? {
+        guard !cancellation.isCancelled else { return nil }
+        bytesReadLastScan = 0
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let start = calendar.startOfDay(for: now)
+        let end = start.addingTimeInterval(86_400)
+        if dayStart != start {
+            // Keep validated cumulative baselines/cursors: an old session may cross midnight.
+            for state in states.values { state.records.removeAll(); state.incomplete = false }
+            catalogAt = nil; dayStart = start
         }
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MacThermalCodexProxy-" + UUID().uuidString, isDirectory: true)
-        do { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700]) }
-        catch { unavailable(); return }
-        let helper = Process()
-        let incoming = Pipe(), outgoing = Pipe()
-        helper.executableURL = executable
-        helper.arguments = ["app-server", "proxy", "--sock", endpoint.url.path]
-        // Proxying an existing socket needs no CLI config/authentication files.
-        // The clean temporary working/home directory also prevents ambient
-        // project configuration or inherited API credentials from being used.
-        helper.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "CODEX_HOME": folder.path, "TMPDIR": folder.path, "LANG": "en_US.UTF-8"]
-        helper.currentDirectoryURL = folder
-        helper.standardInput = incoming
-        helper.standardOutput = outgoing
-        helper.standardError = FileHandle.nullDevice
-        let id = UUID()
-        process = helper
-        processID = id
-        input = incoming
-        output = outgoing
-        runtimeDirectory = folder
-        self.endpoint = endpoint
-        buffer = CodexLineBuffer()
-        pending.removeAll()
-        unsupported.removeAll()
-        ready = false
-        closing = false
-        requestID = 0
-        helper.terminationHandler = { [weak self] _ in
-            guard let self else { return }
-            self.queue.async { [weak self] in self?.terminated(id: id) }
+        needsCatchUp = false
+        guard let (verified, rootFD) = CodexRecordsScope.open(root, expected: scope) else {
+            states.removeAll(); catalog.removeAll(); catalogValid = false
+            var snapshot = CodexMonitorSnapshot(); snapshot.recordsEnabled = true; snapshot.connection = .unavailable
+            snapshot.noticeKey = "로컬 Codex 기록을 읽을 수 없습니다"; snapshot.updatedAt = now
+            return cancellation.isCancelled ? nil : snapshot
         }
-        outgoing.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            // A concurrently retired helper may close this handle. Use the
-            // bounded throwing API so that race becomes a discarded EOF/error.
-            let bytes = (try? handle.read(upToCount: 65_536)) ?? Data()
-            guard let self else { return }
-            self.queue.async { [weak self] in
-                guard let self, self.processID == id else { return }
-                if bytes.isEmpty {
-                    self.disconnect(state: .unavailable, notice: "공유 Codex 서버에 연결할 수 없습니다", retry: true)
-                } else { self.receive(bytes) }
+        scope = verified
+        defer { Darwin.close(rootFD) }
+        let deadline = ProcessInfo.processInfo.systemUptime + budget.secondsPerScan
+        if catalogAt == nil || now.timeIntervalSince(catalogAt!) >= 16 {
+            let result = enumerate(rootFD: rootFD, cancellation: cancellation, deadline: deadline, dayStart: start)
+            guard !cancellation.isCancelled else { return nil }
+            catalog = result.files; catalogPartial = result.partial; catalogValid = true; catalogAt = now
+            failedFiles.removeAll()
+            let identities = Set(catalog.map(\.identity))
+            states = states.filter { identities.contains($0.key) }
+            if roundRobin >= catalog.count { roundRobin = 0 }
+        }
+        var remaining = budget.bytesPerScan
+        var examined = 0
+        while examined < catalog.count, remaining > 0, ProcessInfo.processInfo.systemUptime < deadline {
+            guard !cancellation.isCancelled else { return nil }
+            let index = (roundRobin + examined) % catalog.count
+            let file = catalog[index]
+            if !failedFiles.contains(file.identity) {
+                read(file, rootFD: rootFD, now: now, dayStart: start, dayEnd: end,
+                     remaining: &remaining, cancellation: cancellation, deadline: deadline)
             }
+            examined += 1
         }
-        store.connection(.connecting, notice: "Codex에 연결하는 중입니다", monotonic: ProcessInfo.processInfo.systemUptime)
-        do {
-            guard CodexEndpointSecurity.unchanged(endpoint) else { throw CocoaError(.fileReadUnknown) }
-            try helper.run()
-            let descriptor = incoming.fileHandleForWriting.fileDescriptor
-            _ = fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL) | O_NONBLOCK)
-            _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
-            send(method: "initialize", parameters: [
-                "clientInfo": ["name": "mac_thermal_usage_monitor", "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1"],
-                "capabilities": ["experimentalApi": false, "optOutNotificationMethods": CodexReadProtocol.suppressedNotifications]
-            ], kind: .initialize)
-        } catch {
-            cleanup(id: id)
-            unavailable()
+        if !catalog.isEmpty { roundRobin = (roundRobin + max(1, examined)) % catalog.count }
+        guard !cancellation.isCancelled else { return nil }
+        // Never publish data from a directory that was exchanged during a scan.
+        guard let (_, verificationFD) = CodexRecordsScope.open(root, expected: verified) else {
+            states.removeAll(); catalog.removeAll(); catalogValid = false
+            var snapshot = CodexMonitorSnapshot(); snapshot.recordsEnabled = true; snapshot.connection = .unavailable
+            snapshot.noticeKey = "로컬 Codex 기록을 읽을 수 없습니다"; snapshot.updatedAt = now
+            return snapshot
         }
-        deliver(store.snapshot)
+        Darwin.close(verificationFD)
+        needsCatchUp = catalog.contains { file in
+            guard !failedFiles.contains(file.identity) else { return false }
+            guard let state = states[file.identity] else { return true }
+            let size = state.catalogSizeAtRead == file.size ? state.knownSize : max(file.size, state.knownSize)
+            return state.offset < size && !state.waitingForAppend
+        }
+        return snapshot(now: now, dayStart: start, dayEnd: end)
     }
 
-    private func unavailable() {
-        failures = min(5, failures + 1)
-        retryAt = ProcessInfo.processInfo.systemUptime + min(120, 5 * pow(2, Double(failures)))
-        store.connection(.unavailable, notice: "공유 Codex 서버에 연결할 수 없습니다", monotonic: ProcessInfo.processInfo.systemUptime)
-        deliver(store.snapshot)
-    }
-
-    private func send(method: String, parameters: [String: Any], kind: Kind) {
-        guard process?.isRunning == true, pending.count < 6, !unsupported.contains(method) else { return }
-        requestID += 1
-        guard let bytes = CodexReadProtocol.request(id: requestID, method: method, parameters: parameters) else { return }
-        pending[requestID] = Pending(kind: kind, since: ProcessInfo.processInfo.systemUptime)
-        write(bytes)
-    }
-
-    private func write(_ bytes: Data) {
-        guard let input else { return }
-        let count = bytes.withUnsafeBytes { pointer in
-            Darwin.write(input.fileHandleForWriting.fileDescriptor, pointer.baseAddress, pointer.count)
-        }
-        if count != bytes.count { disconnect(state: .unavailable, notice: "공유 Codex 서버에 연결할 수 없습니다", retry: true) }
-    }
-
-    private func method(for kind: Kind) -> String {
-        switch kind {
-        case .initialize: return "initialize"
-        case .account, .usage: return "account/usage/read"
-        case .limits: return "account/rateLimits/read"
-        case .loaded: return "thread/loaded/list"
-        case .turns: return "thread/turns/list"
-        }
-    }
-
-    private func containsPending(_ method: String) -> Bool { pending.values.contains { self.method(for: $0.kind) == method } }
-
-    private func poll(now: TimeInterval) {
-        guard ready, process?.isRunning == true else { return }
-        if now >= nextAccount, !containsPending("account/usage/read") {
-            nextAccount = now + 60
-            send(method: "account/usage/read", parameters: [:], kind: .account)
-        }
-        if now >= nextLimits, !containsPending("account/rateLimits/read") {
-            nextLimits = now + 60
-            send(method: "account/rateLimits/read", parameters: ["excludeResetCreditDetails": true, "supportsLunaReserve": false], kind: .limits)
-        }
-        if now >= nextLoaded, !containsPending("thread/loaded/list") {
-            nextLoaded = now + 15
-            loadingIDs = []
-            loadedPage = 0
-            cursor = nil
-            send(method: "thread/loaded/list", parameters: ["limit": 32], kind: .loaded)
-        }
-        if !containsPending("thread/turns/list"), let id = loadedIDs.min(by: { (turnTimes[$0] ?? 0) < (turnTimes[$1] ?? 0) }), now - (turnTimes[id] ?? 0) >= 30 {
-            turnTimes[id] = now
-            send(method: "thread/turns/list", parameters: ["threadId": id, "itemsView": "notLoaded", "limit": 1, "sortDirection": "desc"], kind: .turns(id))
-        }
-        if now < nextAccount, !containsPending("account/usage/read"), let id = loadedIDs.min(by: { (usageTimes[$0] ?? 0) < (usageTimes[$1] ?? 0) }), now - (usageTimes[id] ?? 0) >= 30 {
-            usageTimes[id] = now
-            send(method: "account/usage/read", parameters: ["threadId": id], kind: .usage(id))
-        }
-    }
-
-    private func expire(now: TimeInterval) {
-        let expired = pending.filter { now - $0.value.since >= 15 }
-        for (id, request) in expired {
-            pending.removeValue(forKey: id)
-            timeouts += 1
-            store.errorNotice()
-            if case .initialize = request.kind {
-                disconnect(state: .unavailable, notice: "공유 Codex 서버에 연결할 수 없습니다", retry: true)
-                return
-            }
-        }
-        if timeouts >= 3 { disconnect(state: .unavailable, notice: "Codex 데이터를 읽을 수 없습니다", retry: true) }
-    }
-
-    private func receive(_ bytes: Data) {
-        guard let lines = buffer.append(bytes) else {
-            disconnect(state: .unavailable, notice: "Codex 데이터를 읽을 수 없습니다", retry: true)
-            return
-        }
-        for line in lines {
-            guard let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else {
-                disconnect(state: .unavailable, notice: "Codex 데이터를 읽을 수 없습니다", retry: true)
-                return
-            }
-            if let method = object["method"] as? String {
-                // Never respond to approval/tool/login requests from the server.
-                guard object["id"] == nil, CodexReadProtocol.notifications.contains(method),
-                      let parameters = object["params"] as? [String: Any], ready else { continue }
-                store.received(monotonic: ProcessInfo.processInfo.systemUptime, now: Date())
-                store.notification(method: method, parameters: parameters)
-                deliver(store.snapshot)
-                continue
-            }
-            guard let id = CodexReadProtocol.integer(object["id"]), id <= Int64(Int.max),
-                  let request = pending.removeValue(forKey: Int(id)) else { continue }
-            if let error = object["error"] as? [String: Any] {
-                if (error["code"] as? NSNumber)?.intValue == -32601 { unsupported.insert(method(for: request.kind)) }
-                store.errorNotice()
-                if case .initialize = request.kind {
-                    disconnect(state: .unavailable, notice: "공유 Codex 서버에 연결할 수 없습니다", retry: true)
-                    return
+    private func enumerate(rootFD: Int32, cancellation: CodexRecordsCancellation, deadline: TimeInterval,
+                           dayStart: Date) -> (files: [CodexRecordFile], partial: Bool) {
+        struct Entry { let name: String; let info: stat }
+        var files: [CodexRecordFile] = []
+        var entries = 0; var directories = 0; var partial = false
+        func visit(_ fd: Int32, names: [String], ancestors: [CodexNodeIdentity]) {
+            guard !cancellation.isCancelled else { return }
+            let traversalFD = dup(fd)
+            guard traversalFD >= 0 else { partial = true; return }
+            guard let directory = fdopendir(traversalFD) else { Darwin.close(traversalFD); partial = true; return }
+            defer { closedir(directory) }
+            var children: [Entry] = []
+            while !cancellation.isCancelled {
+                guard entries < budget.maxEntries, ProcessInfo.processInfo.systemUptime < deadline else { partial = true; break }
+                guard let entry = readdir(directory) else { break }
+                let name = withUnsafePointer(to: &entry.pointee.d_name) {
+                    $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXNAMLEN) + 1) { String(cString: $0) }
                 }
-                deliver(store.snapshot)
-                continue
+                if name == "." || name == ".." || name.hasPrefix(".") { continue }
+                entries += 1
+                var info = stat()
+                guard name.withCString({ fstatat(fd, $0, &info, AT_SYMLINK_NOFOLLOW) }) == 0 else { partial = true; continue }
+                guard info.st_uid == geteuid(), info.st_dev == scope?.device else { partial = true; continue }
+                if (info.st_mode & S_IFMT) == S_IFLNK { partial = true; continue }
+                children.append(Entry(name: name, info: info))
             }
-            guard let result = object["result"] as? [String: Any] else { store.errorNotice(); continue }
-            timeouts = 0
-            let now = Date()
-            store.received(monotonic: ProcessInfo.processInfo.systemUptime, now: now)
-            switch request.kind {
-            case .initialize:
-                ready = true
-                failures = 0
-                nextAccount = 0; nextLimits = 0; nextLoaded = 0
-                usageTimes = [:]; turnTimes = [:]
-                write(Data("{\"method\":\"initialized\"}\n".utf8))
-                store.connection(.connected, notice: "연결 이후 관측한 활동만 집계합니다", monotonic: ProcessInfo.processInfo.systemUptime)
-                poll(now: ProcessInfo.processInfo.systemUptime)
-            case .account: store.account(result, now: now)
-            case .limits: store.limits(result)
-            case .usage(let thread): store.usage(result, threadID: thread)
-            case .turns(let thread):
-                guard store.turns(result, threadID: thread, now: now) else {
-                    disconnect(state: .unavailable, notice: "Codex 데이터를 읽을 수 없습니다", retry: true)
-                    return
+            // Session folders use year/month/day names. Visiting those in reverse
+            // order makes current records useful even when historic metadata hits a cap.
+            children.sort {
+                let leftDirectory = ($0.info.st_mode & S_IFMT) == S_IFDIR
+                let rightDirectory = ($1.info.st_mode & S_IFMT) == S_IFDIR
+                if leftDirectory != rightDirectory { return leftDirectory }
+                if leftDirectory { return $0.name > $1.name }
+                if $0.info.st_mtimespec.tv_sec != $1.info.st_mtimespec.tv_sec {
+                    return $0.info.st_mtimespec.tv_sec > $1.info.st_mtimespec.tv_sec
                 }
-            case .loaded:
-                guard let data = result["data"] as? [String], data.count <= 32,
-                      data.allSatisfy({ CodexReadProtocol.identifier($0) != nil }) else {
-                    disconnect(state: .unavailable, notice: "Codex 데이터를 읽을 수 없습니다", retry: true)
-                    return
-                }
-                loadingIDs.append(contentsOf: data)
-                loadedPage += 1
-                cursor = (result["nextCursor"] as? String).flatMap { $0.utf8.count <= 1_024 ? $0 : nil }
-                if let cursor, loadedPage < 4, loadingIDs.count < 128 {
-                    send(method: "thread/loaded/list", parameters: ["limit": 32, "cursor": cursor], kind: .loaded)
-                } else {
-                    loadedIDs = Array(Set(loadingIDs)).sorted()
-                    store.loadedThreads(loadedIDs, complete: cursor == nil)
-                    usageTimes = usageTimes.filter { loadedIDs.contains($0.key) }
-                    turnTimes = turnTimes.filter { loadedIDs.contains($0.key) }
+                return $0.name < $1.name
+            }
+            for child in children {
+                guard !cancellation.isCancelled else { return }
+                guard files.count < budget.maxFiles, ProcessInfo.processInfo.systemUptime < deadline else { partial = true; return }
+                let name = child.name; let info = child.info
+                let kind = info.st_mode & S_IFMT
+                if kind == S_IFDIR {
+                    guard names.count < budget.maxDepth, directories < budget.maxDirectories,
+                          (info.st_mode & 0o022) == 0 else { partial = true; continue }
+                    directories += 1
+                    let next = name.withCString { openat(fd, $0, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW) }
+                    guard next >= 0 else { partial = true; continue }
+                    var opened = stat()
+                    if fstat(next, &opened) == 0, CodexNodeIdentity(opened) == CodexNodeIdentity(info),
+                       (opened.st_mode & 0o022) == 0 {
+                        visit(next, names: names + [name], ancestors: ancestors + [CodexNodeIdentity(info)])
+                    } else { partial = true }
+                    Darwin.close(next)
+                } else if kind == S_IFREG, name.hasSuffix(".jsonl") {
+                    if TimeInterval(info.st_mtimespec.tv_sec) < dayStart.timeIntervalSince1970,
+                       states[CodexNodeIdentity(info)] == nil { continue }
+                    files.append(CodexRecordFile(names: names + [name], ancestors: ancestors,
+                        identity: CodexNodeIdentity(info), size: Int64(info.st_size),
+                        modifiedSeconds: Int64(info.st_mtimespec.tv_sec), modifiedNanos: Int64(info.st_mtimespec.tv_nsec)))
                 }
             }
-            deliver(store.snapshot)
         }
+        visit(rootFD, names: [], ancestors: [])
+        return (files.sorted {
+            if $0.modifiedSeconds != $1.modifiedSeconds { return $0.modifiedSeconds > $1.modifiedSeconds }
+            return $0.identity.inode < $1.identity.inode
+        }, partial)
     }
 
-    private func disconnect(state: CodexConnectionState, notice: String?, retry: Bool) {
-        closing = true
-        ready = false
-        pending.removeAll()
-        loadedIDs = []
-        buffer = CodexLineBuffer()
-        output?.fileHandleForReading.readabilityHandler = nil
-        try? input?.fileHandleForWriting.close()
-        store.connection(state, notice: notice, monotonic: ProcessInfo.processInfo.systemUptime)
-        if retry {
-            failures = min(5, failures + 1)
-            retryAt = ProcessInfo.processInfo.systemUptime + min(120, 5 * pow(2, Double(failures)))
-        } else { retryAt = 0 }
-        if let helper = process, helper.isRunning {
-            let id = processID
-            helper.terminate()
-            queue.asyncAfter(deadline: .now() + 1) { [weak self, helper] in
-                guard helper.isRunning else { return }
-                if let self, self.processID != id { return }
-                kill(helper.processIdentifier, SIGKILL)
+    private func openFile(_ file: CodexRecordFile, rootFD: Int32, cancellation: CodexRecordsCancellation) -> Int32? {
+        var parent = dup(rootFD)
+        guard parent >= 0 else { return nil }
+        defer { Darwin.close(parent) }
+        for (index, component) in file.names.dropLast().enumerated() {
+            guard !cancellation.isCancelled else { return nil }
+            let next = component.withCString { openat(parent, $0, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW) }
+            guard next >= 0 else { return nil }
+            var info = stat()
+            guard fstat(next, &info) == 0, CodexNodeIdentity(info) == file.ancestors[index],
+                  (info.st_mode & 0o022) == 0 else { Darwin.close(next); return nil }
+            Darwin.close(parent); parent = next
+        }
+        guard !cancellation.isCancelled, let name = file.names.last else { return nil }
+        let fd = name.withCString { openat(parent, $0, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK) }
+        guard fd >= 0 else { return nil }
+        var info = stat()
+        guard fstat(fd, &info) == 0, CodexNodeIdentity(info) == file.identity,
+              (info.st_mode & S_IFMT) == S_IFREG else { Darwin.close(fd); return nil }
+        return fd
+    }
+
+    private func read(_ file: CodexRecordFile, rootFD: Int32, now: Date, dayStart: Date, dayEnd: Date,
+                      remaining: inout Int, cancellation: CodexRecordsCancellation, deadline: TimeInterval) {
+        guard !cancellation.isCancelled else { return }
+        guard let fd = openFile(file, rootFD: rootFD, cancellation: cancellation) else {
+            states.removeValue(forKey: file.identity); failedFiles.insert(file.identity); catalogPartial = true; return
+        }
+        defer { Darwin.close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0 else { failedFiles.insert(file.identity); catalogPartial = true; return }
+        let size = Int64(info.st_size)
+        var state = states[file.identity] ?? CodexLocalRecordState()
+        let modified = (Int64(info.st_mtimespec.tv_sec), Int64(info.st_mtimespec.tv_nsec))
+        let oldModified = (state.modifiedSeconds, state.modifiedNanos)
+        if size < state.knownSize || (size == state.knownSize && modified != oldModified && state.knownSize > 0) {
+            state = CodexLocalRecordState(); state.incomplete = true
+        }
+        state.knownSize = size; state.modifiedSeconds = modified.0; state.modifiedNanos = modified.1
+        state.catalogSizeAtRead = file.size
+        states[file.identity] = state
+        guard state.offset < size else { state.partialLine = false; return }
+        var cursor = state.offset
+        var lineStart = cursor
+        var line = Data()
+        var fileRemaining = min(remaining, budget.bytesPerFile)
+        let existingRecords = states.values.reduce(0) { $0 + $1.records.count }
+        let recordLimit = min(budget.maxRecordsPerFile, state.records.count + max(0, budget.maxRecordsTotal - existingRecords))
+        state.partialLine = false
+        var buffer = [UInt8](repeating: 0, count: 32 * 1_024)
+        while cursor < size, fileRemaining > 0, ProcessInfo.processInfo.systemUptime < deadline {
+            guard !cancellation.isCancelled else { return }
+            let count = min(buffer.count, fileRemaining, Int(min(Int64(Int.max), size - cursor)))
+            let received = buffer.withUnsafeMutableBytes { pread(fd, $0.baseAddress!, count, off_t(cursor)) }
+            guard received > 0 else { state.incomplete = true; failedFiles.insert(file.identity); return }
+            bytesReadLastScan += received
+            remaining -= received; fileRemaining -= received
+            var position = 0
+            while position < received {
+                guard !cancellation.isCancelled else { return }
+                let newline: Int? = buffer.withUnsafeBytes { raw in
+                    let base = raw.baseAddress!.advanced(by: position)
+                    guard let found = memchr(base, 10, received - position) else { return nil }
+                    return position + base.distance(to: found)
+                }
+                let end = newline ?? received
+                let segmentLength = end - position
+                if !state.discardedLine {
+                    if segmentLength <= budget.maxLineBytes - line.count {
+                        line.append(contentsOf: buffer[position..<end])
+                    } else {
+                        line.removeAll(keepingCapacity: false); state.discardedLine = true
+                        state.context = nil; state.incomplete = true
+                    }
+                }
+                cursor += Int64(segmentLength)
+                position = end
+                if newline != nil {
+                    cursor += 1; position += 1
+                    if !state.discardedLine, !line.isEmpty {
+                        state.consume(line, now: now, dayStart: dayStart, dayEnd: dayEnd, maxRecords: recordLimit)
+                    }
+                    line.removeAll(keepingCapacity: true); state.discardedLine = false
+                    state.offset = cursor; lineStart = cursor
+                }
             }
-        } else if let id = processID { cleanup(id: id) }
-        deliver(store.snapshot)
+            if state.discardedLine { state.offset = cursor; lineStart = cursor }
+        }
+        // Discard raw partial bytes; their bounded prefix is reread next scan.
+        if !line.isEmpty { state.offset = lineStart; state.partialLine = true }
+        if state.discardedLine { state.partialLine = true }
+        state.waitingForAppend = cursor == size && state.partialLine
     }
 
-    private func terminated(id: UUID) {
-        guard id == processID else { return }
-        let unexpectedExit = appRunning && !closing
-        cleanup(id: id)
-        if unexpectedExit { unavailable() }
-    }
-
-    private func cleanup(id: UUID) {
-        guard processID == id else { return }
-        ready = false
-        process?.terminationHandler = nil
-        process = nil
-        processID = nil
-        output?.fileHandleForReading.readabilityHandler = nil
-        try? output?.fileHandleForReading.close()
-        try? input?.fileHandleForWriting.close()
-        output = nil
-        input = nil
-        endpoint = nil
-        pending.removeAll()
-        if let folder = runtimeDirectory { try? FileManager.default.removeItem(at: folder) }
-        runtimeDirectory = nil
+    private func snapshot(now: Date, dayStart: Date, dayEnd: Date) -> CodexMonitorSnapshot {
+        var snapshot = CodexMonitorSnapshot(); snapshot.recordsEnabled = true
+        snapshot.connection = .connected; snapshot.updatedAt = now
+        var incomplete = catalogPartial || !catalogValid
+        var records: [CodexRecordKey: CodexUsageRecord] = [:]
+        var conflictingKeys = Set<CodexRecordKey>()
+        for file in catalog {
+            guard let state = states[file.identity] else { incomplete = true; continue }
+            if state.offset < max(file.size, state.knownSize) || state.partialLine || state.incomplete { incomplete = true }
+            for (key, record) in state.records where key.timestamp >= dayStart && key.timestamp < dayEnd {
+                guard !conflictingKeys.contains(key) else { continue }
+                if let old = records[key] {
+                    if old.model != record.model || old.numbers != record.numbers {
+                        incomplete = true; records.removeValue(forKey: key); conflictingKeys.insert(key)
+                    }
+                    continue
+                }
+                guard records.count < budget.maxRecordsTotal else { incomplete = true; break }
+                records[key] = record
+            }
+        }
+        var models: [String: CodexModelUsage] = [:]
+        var total: Int64 = 0
+        for record in records.values {
+            var usage = models[record.model] ?? CodexModelUsage(model: record.model)
+            let values = [usage.inputTokens, usage.cachedInputTokens, usage.outputTokens, usage.reasoningOutputTokens, usage.totalTokens, total]
+            let adds = [record.numbers.input, record.numbers.cached, record.numbers.output, record.numbers.reasoning, record.numbers.total, record.numbers.total]
+            guard zip(values, adds).allSatisfy({ $0.0 <= Int64.max - $0.1 }) else { incomplete = true; continue }
+            usage.inputTokens += record.numbers.input; usage.cachedInputTokens += record.numbers.cached
+            usage.outputTokens += record.numbers.output; usage.reasoningOutputTokens += record.numbers.reasoning
+            usage.totalTokens += record.numbers.total; total += record.numbers.total
+            models[record.model] = usage
+            if snapshot.lastRecordAt == nil || record.key.timestamp > snapshot.lastRecordAt! {
+                snapshot.lastRecordAt = record.key.timestamp; snapshot.currentModel = record.model
+            }
+        }
+        snapshot.incomplete = incomplete
+        snapshot.recordsCount = records.isEmpty && incomplete ? nil : records.count
+        snapshot.dailyTokens = records.isEmpty && incomplete ? nil : total
+        snapshot.models = models.values.sorted { $0.totalTokens == $1.totalTokens ? $0.model < $1.model : $0.totalTokens > $1.totalTokens }
+        if incomplete { snapshot.noticeKey = "일부 로컬 기록만 집계했습니다" }
+        else if records.isEmpty { snapshot.noticeKey = "사용량이 기록된 로컬 항목이 없습니다" }
+        else { snapshot.noticeKey = "이 Mac의 로컬 기록을 UTC 날짜로 집계합니다" }
+        return snapshot
     }
 }
 
-/// A read-only observer of an already-running, same-user shared Codex daemon.
-/// It never starts a daemon, opens authentication/history files, resumes work,
-/// or requests a model call. An app using a private transport stays unavailable.
 final class CodexMonitor {
+    static let recordsEnabledKey = "codexLocalRecordsEnabledV1"
     var onUpdate: ((CodexMonitorSnapshot) -> Void)?
-    private let queue = DispatchQueue(label: "local.mac-thermal.codex-read-only", qos: .utility)
-    private var connection: CodexReadConnection?
-    private var timer: Timer?
-    private var observers: [NSObjectProtocol] = []
-    private var generation: UInt = 0
-    private var started = false
+    private let queue = DispatchQueue(label: "MacThermal.CodexLocalRecords", qos: .utility)
+    private let defaults: UserDefaults
+    private let recordsRoot: URL
     private let runningProvider: () -> Bool
     private let launchDateProvider: () -> Date?
     private let workspaceNotificationsEnabled: Bool
+    private var timer: Timer?
+    private var observers: [NSObjectProtocol] = []
+    private var started = false
+    private var enabled = false
+    private var generation: UInt = 0
+    private var cancellation = CodexRecordsCancellation()
+    private var pollInFlight = false
+    private var catchUpWork: DispatchWorkItem?
+    private var hasDeliveredRead = false
+    private var reader: CodexLocalRecordsReader? // Worker queue only.
 
-    init(isRunning: @escaping () -> Bool = CodexMonitor.isCodexRunning,
+    init(defaults: UserDefaults = .standard,
+         recordsRoot: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions", isDirectory: true),
+         isRunning: @escaping () -> Bool = CodexMonitor.isCodexRunning,
          launchDate: @escaping () -> Date? = CodexMonitor.codexLaunchDate,
          workspaceNotificationsEnabled: Bool = true) {
-        runningProvider = isRunning
-        launchDateProvider = launchDate
+        self.defaults = defaults; self.recordsRoot = recordsRoot
+        runningProvider = isRunning; launchDateProvider = launchDate
         self.workspaceNotificationsEnabled = workspaceNotificationsEnabled
     }
-
     static func isCodexRunning() -> Bool {
-        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.openai.codex" && !$0.isTerminated }
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex").isEmpty
     }
-
     static func codexLaunchDate() -> Date? {
-        NSWorkspace.shared.runningApplications.filter {
-            $0.bundleIdentifier == "com.openai.codex" && !$0.isTerminated
-        }.compactMap(\.launchDate).min()
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex").compactMap(\.launchDate).min()
     }
-
     func start() {
         precondition(Thread.isMainThread)
         guard !started else { return }
-        started = true
-        generation &+= 1
-        let currentGeneration = generation
-        let delivery: (CodexMonitorSnapshot) -> Void = { [weak self] snapshot in
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.started, self.generation == currentGeneration else { return }
-                self.onUpdate?(snapshot)
-            }
-        }
-        let connection = self.connection ?? CodexReadConnection(queue: queue, deliver: delivery)
-        queue.async { connection.deliver = delivery }
-        self.connection = connection
+        started = true; enabled = defaults.bool(forKey: Self.recordsEnabledKey)
+        replaceReader()
         if workspaceNotificationsEnabled {
-            let workspace = NSWorkspace.shared.notificationCenter
             for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
-                observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                     guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                           application.bundleIdentifier == "com.openai.codex" else { return }
                     self?.refresh()
                 })
             }
         }
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in self?.update(force: false) }
-        timer.tolerance = 1
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-        update(force: false)
+        let timer = Timer(timeInterval: 8, repeats: true) { [weak self] _ in self?.refresh() }
+        timer.tolerance = 1; RunLoop.main.add(timer, forMode: .common); self.timer = timer
+        refresh()
     }
-
+    func setRecordsEnabled(_ value: Bool) {
+        precondition(Thread.isMainThread)
+        defaults.set(value, forKey: Self.recordsEnabledKey)
+        guard value != enabled else { if started { refresh() }; return }
+        enabled = value
+        // Permission revocation is synchronous; queued work sees this token now.
+        replaceReader()
+        if started { refresh() }
+    }
+    private func replaceReader() {
+        cancellation.cancel(); generation &+= 1
+        catchUpWork?.cancel(); catchUpWork = nil; pollInFlight = false; hasDeliveredRead = false
+        cancellation = CodexRecordsCancellation()
+        let shouldRead = enabled; let root = recordsRoot; let token = cancellation
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.reader = shouldRead && !token.isCancelled ? CodexLocalRecordsReader(root: root) : nil
+        }
+    }
     func refresh() {
         precondition(Thread.isMainThread)
-        update(force: true)
-    }
-
-    private func update(force: Bool) {
-        guard started, let connection else { return }
+        guard started else { return }
         let running = runningProvider()
-        let startedAt = running ? launchDateProvider() : nil
-        queue.async { connection.refresh(appRunning: running, appStartedAt: startedAt, force: force) }
+        let launchDate = running ? launchDateProvider() : nil
+        guard enabled else {
+            var snapshot = CodexMonitorSnapshot(); snapshot.appStartedAt = launchDate
+            snapshot.recordsEnabled = false; snapshot.connection = running ? .unavailable : .notRunning
+            snapshot.noticeKey = "로컬 기록 읽기가 꺼져 있습니다"; onUpdate?(snapshot); return
+        }
+        guard !pollInFlight else { return }
+        catchUpWork?.cancel(); catchUpWork = nil
+        pollInFlight = true
+        if !hasDeliveredRead {
+            var snapshot = CodexMonitorSnapshot(); snapshot.recordsEnabled = true; snapshot.connection = .connecting
+            snapshot.appStartedAt = launchDate; snapshot.noticeKey = "로컬 Codex 기록을 읽는 중입니다"; onUpdate?(snapshot)
+        }
+        let token = cancellation; let revision = generation
+        queue.async { [weak self] in
+            guard let self, !token.isCancelled,
+                  var snapshot = self.reader?.scan(now: Date(), cancellation: token), !token.isCancelled else { return }
+            let catchUp = self.reader?.needsCatchUp == true
+            snapshot.appStartedAt = launchDate
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.started, self.enabled, self.generation == revision, !token.isCancelled else { return }
+                self.pollInFlight = false; self.hasDeliveredRead = true
+                self.onUpdate?(snapshot)
+                if catchUp, self.enabled, self.generation == revision, !token.isCancelled {
+                    let work = DispatchWorkItem { [weak self] in
+                        guard let self, self.started, self.enabled, self.generation == revision, !token.isCancelled else { return }
+                        self.catchUpWork = nil; self.refresh()
+                    }
+                    self.catchUpWork = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+                }
+            }
+        }
     }
-
     func stop() {
         precondition(Thread.isMainThread)
         guard started else { return }
-        started = false
-        generation &+= 1
-        timer?.invalidate()
-        timer = nil
-        if !observers.isEmpty {
-            let workspace = NSWorkspace.shared.notificationCenter
-            for observer in observers { workspace.removeObserver(observer) }
-        }
-        observers = []
-        if let connection { queue.async { connection.stop() } }
-        // Keep the retiring helper's lifecycle owner. A quick start/stop/start
-        // waits for that same helper to exit rather than spawning a second one.
+        started = false; cancellation.cancel(); generation &+= 1
+        catchUpWork?.cancel(); catchUpWork = nil; pollInFlight = false
+        timer?.invalidate(); timer = nil
+        for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }; observers.removeAll()
+        queue.async { [weak self] in self?.reader = nil }
+    }
+    deinit {
+        cancellation.cancel(); timer?.invalidate()
+        catchUpWork?.cancel()
+        for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
     }
 }

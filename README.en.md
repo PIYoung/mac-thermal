@@ -103,9 +103,9 @@ Use the top-right Settings button to change the language, menu bar motion, and a
 
 The unreleased v2.7 resource surface is 340×420pt. While Codex is running, a separate 300×420pt companion appears beside it with a 12pt gap and a fixed opening position. Narrow screens use a vertically scrollable pair.
 
-App runtime comes from the Codex launch date provided by macOS. The companion reads only numeric usage and runtime metadata from an already-running official local shared Codex server. Account daily tokens (UTC) are separate from activity time and model counters observed during this connection. Unsupported values remain unavailable. No extra model requests or API-key entry are added. Credentials, conversation bodies and configuration files are not read; counters remain in memory. Existing Codex services may be contacted by Codex to answer account-usage queries.
+App runtime comes from the Codex launch date provided by macOS. **Record reading is off by default.** Enable it in the companion to extract model identifiers, token counters and timestamps from `~/.codex/sessions` and display **this Mac's UTC-today usage**. These files also contain conversations, but bodies, commands and credentials are not retained or transmitted, and source files are never changed. Turning reading off stops reads and clears the in-memory aggregation.
 
-Codex installations without the shared local server show an unavailable state. Mac Thermal never starts a server or changes Codex settings or permissions automatically; connecting a new transport needs separate review. The resource gallery above illustrates the previous release.
+No API key, paid model request, account-service connection or new server is added. Account-wide totals, remaining quota, API billing and verified active-work duration are unavailable. Missing or bounded data is labeled unavailable or partial. The resource gallery above illustrates the previous release.
 
 ## Disk cleanup
 

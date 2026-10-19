@@ -117,7 +117,7 @@ enum LocalizationProbe {
         require(originalStoredValue == finalStoredValue, "Probe changed actual app language preference")
     }
     private static func testLiteralCoverage(_ project: URL, tables: [String: [String]]) throws {
-        let sourceNames = ["DiskCleanup.swift", "DiskCleanupView.swift", "Panel.swift", "CodexPanel.swift", "LiquidTabs.swift", "MenuBarContent.swift", "MenuBarPreferences.swift", "Uptime.swift", "LoginItem.swift", "main.swift", "Resources.swift", "DashboardWindow.swift"]
+        let sourceNames = ["DiskCleanup.swift", "DiskCleanupView.swift", "Panel.swift", "CodexPanel.swift", "CodexMonitor.swift", "LiquidTabs.swift", "MenuBarContent.swift", "MenuBarPreferences.swift", "Uptime.swift", "LoginItem.swift", "main.swift", "Resources.swift", "DashboardWindow.swift"]
         let regex = try NSRegularExpression(pattern: #"L10n\.(?:text|format)\(\s*"((?:\\.|[^"\\])*)""#)
         let literalRegex = try NSRegularExpression(pattern: #""((?:\\.|[^"\\])*)""#)
         var callCount = 0

@@ -57,72 +57,96 @@ enum LoginItemManager {
         let originalLanguage = L10n.language
         defer { L10n.setLanguage(originalLanguage, defaults: defaults) }
         let origin = Date(timeIntervalSince1970: 1_792_065_600)
-        let sample = CodexMonitorSnapshot(connection: .connected, activeCount: 2, waitingCount: 1,
-            currentModel: "gpt-6.1-sol", currentStartedAt: Date().addingTimeInterval(-125),
-            observedActiveSeconds: 3_725, observedTokens: 200, observedSince: origin,
-            dailyTokens: 2_500, models: [
+        let sample = CodexMonitorSnapshot(appStartedAt: Date().addingTimeInterval(-125),
+            connection: .connected, recordsEnabled: true, recordsCount: 123, lastRecordAt: origin,
+            currentModel: "gpt-6.1-sol", dailyTokens: 2_500, models: [
                 CodexModelUsage(model: "gpt-alpha", totalTokens: 100),
                 CodexModelUsage(model: "gpt-beta", totalTokens: 50),
                 CodexModelUsage(model: "gpt-delta", totalTokens: 25),
                 CodexModelUsage(model: "gpt-gamma", totalTokens: 25)
-            ], quotas: [CodexQuota(name: "Codex", usedPercent: 36, windowMinutes: 300, resetsAt: origin),
-                CodexQuota(name: "Codex", usedPercent: 72, windowMinutes: 10_080, resetsAt: origin)],
-            updatedAt: origin)
+            ], updatedAt: origin)
         for language in AppLanguage.allCases {
             L10n.setLanguage(language, defaults: defaults)
             let panel = CodexPanelController()
             _ = panel.view
+            precondition(!panel.probeRecordsEnabled, "Record reading must default off")
+            var changes: [Bool] = []
+            panel.recordsEnabledChanged = { changes.append($0) }
             let initial = panel.probeStrings
             panel.apply(sample)
-            precondition(panel.probeStrings == initial, "Hidden sampling must not format AppKit fields")
+            precondition(panel.probeStrings == initial && !panel.probeRecordsEnabled,
+                "Hidden sampling must not format AppKit fields")
             panel.prepareForPresentation()
             panel.view.layoutSubtreeIfNeeded()
             bounds(canvas(panel))
             precondition(panel.preferredContentSize == NSSize(width: 348, height: 468))
+            precondition(panel.probeRecordsEnabled && changes.isEmpty, "Applying snapshots must never toggle the collector")
             precondition(panel.probeStrings["daily"] == "2.5K")
             precondition(panel.probeStrings["dailyTitle"] == L10n.text("오늘 토큰 (UTC)"))
             let dailyHeading = L10n.text("오늘 토큰 (UTC)") as NSString
             precondition(dailyHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium)]).width <= 118,
                 "UTC daily heading must fit its fixed width in every language")
-            precondition(panel.probeStrings["scope"] == L10n.text("계정 집계"))
-            precondition(panel.probeStrings["timeScope"] == L10n.text("이번 연결 관측"))
-            precondition(panel.probeStrings["time"] == "1:02:05")
+            let modelHeading = L10n.text("모델별 · 오늘 TOP 3") as NSString
+            precondition(modelHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]).width <= 174)
+            let privacy = L10n.text("대화 기록 파일에서 추출 · 본문 저장·표시·전송 없음") as NSString
+            precondition(privacy.boundingRect(with: NSSize(width: 252, height: 100), options: [.usesLineFragmentOrigin],
+                attributes: [.font: NSFont.systemFont(ofSize: 9)]).height <= 27, "Privacy explanation must fit two lines")
+            precondition(panel.probeStrings["scope"] == L10n.text("이 Mac 기록"))
+            precondition(panel.probeStrings["timeScope"] == L10n.text("현지 시각"))
+            precondition(panel.probeStrings["time"] != L10n.text("정보 없음"))
+            precondition(panel.probeStrings["counts"] == L10n.format("오늘 %lld개 기록", Int64(123)))
+            precondition(panel.probeStrings["elapsed"]?.hasPrefix(L10n.format("앱 %@", "")) == true)
             precondition(panel.probeModelNames == ["gpt-alpha", "gpt-beta", "gpt-delta"])
             precondition(panel.probeModelFractions.compactMap { $0 } == [0.5, 0.25, 0.125])
-            precondition(panel.probeQuotaValues == ["36% / 64%", "72% / 28%"])
             precondition(!panel.probeCardsAreDimmed)
             var refreshes = 0
             panel.refresh = { refreshes += 1 }
             panel.probeRefresh()
             precondition(refreshes == 1, "Refresh must invoke only the supplied callback")
             panel.probeSetVisible(true)
+            panel.probeSetRecordsEnabled(false)
+            precondition(changes == [false] && !panel.probeRecordsEnabled)
+            precondition(panel.probeModelNames.isEmpty && panel.probeStrings["daily"] == L10n.text("정보 없음"))
+            precondition(panel.probeStrings["time"] == L10n.text("정보 없음") && panel.probeStrings["counts"] == "—")
+            panel.probeRefresh()
+            precondition(refreshes == 1, "Off must not trigger a refresh read")
+            panel.probeSetRecordsEnabled(false)
+            precondition(changes == [false], "An unchanged switch must not duplicate callbacks")
+            panel.probeSetRecordsEnabled(true)
+            precondition(changes == [false, true] && panel.probeRecordsEnabled)
+            precondition(panel.probeStrings["activity"] == L10n.text("로컬 기록 확인 중"))
+            precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"), "Re-enable must wait for a new scan")
             var unavailable = sample
             unavailable.connection = .unavailable
-            unavailable.currentStartedAt = origin
-            unavailable.updatedAt = origin.addingTimeInterval(125)
             panel.apply(unavailable)
-            precondition(panel.probeStrings["elapsed"] == "02:05", "Disconnected elapsed time must freeze at the last update")
+            precondition(changes == [false, true], "Programmatic snapshots must not send switch actions")
             precondition(panel.probeStrings["updated"]?.hasPrefix(L10n.format("이전 값 · %@", "")) == true)
             precondition(panel.probeCardsAreDimmed)
-            panel.apply(unavailable)
-            precondition(panel.probeStrings["elapsed"] == "02:05")
+            var partial = sample
+            partial.incomplete = true
+            partial.dailyTokens = 0
+            panel.apply(partial)
+            precondition(panel.probeStrings["scope"] == L10n.text("이 Mac 기록 · 일부"))
+            precondition(panel.probeStrings["recordsStatus"] == L10n.text("일부 기록만 집계"))
+            precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"), "A partial scan must not claim a complete zero")
             var unknown = CodexMonitorSnapshot.pending
             unknown.connection = .connected
-            unknown.observedTokens = 5_000
-            unknown.models = sample.models
+            unknown.recordsEnabled = true
             unknown.currentModel = "/Users/private/workspace"
+            unknown.models = [CodexModelUsage(model: "/Users/private/model", totalTokens: 100)]
             unknown.noticeKey = "Private raw server error"
-            unknown.quotas = [CodexQuota(name: "/Users/private/path", usedPercent: .nan, windowMinutes: nil, resetsAt: nil),
-                CodexQuota(name: "Second", usedPercent: 150, windowMinutes: 300, resetsAt: nil),
-                CodexQuota(name: "Hidden", usedPercent: 25, windowMinutes: 1_440, resetsAt: origin)]
+            unknown.lastRecordAt = Date(timeIntervalSince1970: .nan)
+            unknown.recordsCount = -1
             panel.apply(unknown)
-            precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"), "Observed tokens must never replace account daily tokens")
+            precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"))
             precondition(panel.probeStrings["model"] == L10n.text("정보 없음"))
-            precondition(panel.probeQuotaValues == [L10n.text("정보 없음"), L10n.text("정보 없음")])
-            precondition(panel.probeQuotaFractions.allSatisfy { $0 == nil })
+            precondition(panel.probeStrings["time"] == L10n.text("정보 없음") && panel.probeStrings["counts"] == "—")
+            precondition(panel.probeModelNames.isEmpty)
             precondition(!panel.probeStrings.values.contains(where: { $0.contains("Private raw") || $0.contains("/Users/private") }))
-            panel.apply(.pending)
-            precondition(panel.probeModelNames.isEmpty && panel.probeQuotaValues.isEmpty)
+            var off = sample
+            off.recordsEnabled = false
+            panel.apply(off)
+            precondition(!panel.probeRecordsEnabled && panel.probeModelNames.isEmpty)
             precondition(panel.probeStrings["daily"] == L10n.text("정보 없음") && panel.probeStrings["time"] == L10n.text("정보 없음"))
             var runtime = CodexMonitorSnapshot.pending
             runtime.connection = .unavailable
@@ -130,7 +154,6 @@ enum LoginItemManager {
             panel.apply(runtime)
             precondition(panel.probeStrings["elapsed"]?.hasPrefix(L10n.format("앱 %@", "")) == true)
             precondition(panel.probeStrings["elapsedNotice"] == L10n.text("Codex 앱 실행 후 경과 시간입니다. 작업 활동 시간과 다릅니다."))
-            precondition(panel.probeStrings["time"] == L10n.text("정보 없음"), "App runtime must never become observed task time")
             for invalidStart in [nil, Date(timeIntervalSince1970: .nan), Date().addingTimeInterval(60)] as [Date?] {
                 runtime.appStartedAt = invalidStart
                 panel.apply(runtime)
@@ -156,12 +179,14 @@ enum LoginItemManager {
                 let missing = CodexPanelController()
                 var unavailable = CodexMonitorSnapshot.pending
                 unavailable.connection = .unavailable
-                unavailable.noticeKey = "공유 Codex 서버에 연결할 수 없습니다"
+                unavailable.recordsEnabled = true
+                unavailable.appStartedAt = Date().addingTimeInterval(-2_533)
+                unavailable.noticeKey = "로컬 Codex 기록을 읽을 수 없습니다"
                 missing.apply(unavailable)
                 missing.prepareForPresentation()
                 try render(missing, appearance: appearance, output: output.appendingPathComponent("codex-unavailable-\(name).png"))
             }
         }
-        print("Codex panel passed: 4-language fixed bounds, hidden updates, refresh callback, account/observed separation, real quota limits, frozen stale time, safe metadata and unknown states; no server or private file access")
+        print("Codex panel passed: 4-language fixed bounds/privacy text, local UTC-today scope, opt-in off, real switch callback, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
     }
 }
