@@ -1,138 +1,41 @@
-<p align="center">
-  <img src="docs/images/app-icon.png" alt="Mac Thermal" width="72" height="72">
-</p>
-
+<p align="center"><img src="docs/images/app-icon.png" alt="Mac Thermal" width="64" height="64"></p>
 <h1 align="center">Mac Thermal</h1>
+<p align="center"><strong>Macの状態を、メニューバーでひと目に。</strong><br>Apple Silicon · macOS 14+ · MIT</p>
+<p align="center"><a href="README.md">한국어</a> · <a href="README.en.md">English</a> · <strong>日本語</strong> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ ダウンロード</strong></a> · <a href="RELEASES.md">更新履歴</a></p>
 
-<p align="center">
-  <strong>Macの状態を、メニューバーでひと目に。</strong><br>
-  温度・リソース使用量・転送速度に小さな動きを添える、無料のオープンソースアプリ。
-</p>
+## メニューバーとパネル
 
-<p align="center">
-  <img src="docs/images/readme-platforms.svg" alt="macOS 14以降 · Apple Silicon · MITライセンス" width="360" height="28">
-</p>
-
-<p align="center">
-  <a href="README.md">한국어</a> · <a href="README.en.md">English</a> · <strong>日本語</strong> · <a href="README.zh-CN.md">简体中文</a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ ダウンロード</strong></a> ·
-  <a href="#インストール">インストール方法</a> ·
-  <a href="RELEASES.md">更新履歴</a> ·
-  <a href="docs/DETAILS.md">技術説明</a>
-</p>
-
----
-
-## メニューバーでひと目に
-
-パネルを開かずに、CPU・GPU・SSD・ネットワークの状態を同時に確認できます。数値は実測値、動きは今どれだけ負荷がかかっているかの目安です。
-
-<p align="center">
-  <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/menubar.png">
-    <img src="docs/images/menubar-demo.gif" alt="CPUのリズムバー、SSDの波、アップロードとダウンロードの流れを表示するMac Thermalのメニューバー" width="520">
-  </picture>
-  <br>
-  <sub>実際のアプリの描画処理による合成サンプルです。<a href="docs/images/menubar.png">静止画を見る</a></sub>
-</p>
-
-| CPUのリズム | SSDの波 | ネットワークの流れ |
-| :--- | :--- | :--- |
-| 温度と使用率を表示し、負荷に応じてバーが動きます。回転する点のスタイルも選べます。 | 読み書き速度を表示します。液面の高さは使用容量、波はI/O活動を表します。 | アップロード・ダウンロード速度と転送方向を流れで表します。転送が止まると流れも止まります。 |
-
-システムの熱状態に応じて、メニューバーの文字が**オレンジ・赤**に変わります。設定で動きをオフにしたり強度を変えたりでき、macOSの**「視差効果を減らす」**にも従います。
-
-既定では**CPU・GPU・SSD・ネットワークの4項目をすべて表示**します。**設定 → メニューバー表示**のチェックボックスで各項目を選べます。SSDとネットワークの間も含めて間隔を詰め、非表示の項目の空間は残しません。使用率が上がるほど点灯する数と穏やかな光の流れが増し、0%では静止します。12個のタイルは使用率の目盛りで、実際のコア数ではありません。
-
-<p align="center">
-  <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/menubar-gpu.png">
-    <img src="docs/images/menubar-gpu-demo.gif" alt="GPU使用率に応じて点灯数と光の流れが変わるメニューバーの合成例" width="520">
-  </picture>
-</p>
-
-## クリックしてリソース別に詳しく
-
-メニューバーをクリックすると固定サイズのパネルが開きます。初回はCPUタブ、それ以降は最後に表示したタブを開きます。画像はクリックすると拡大できます。
-
-<table>
+<p align="center"><img src="docs/images/menubar.png" alt="CodexロボットとCPU・GPU・SSD・ネットワークのメニューバー" width="460"></p>
+<table align="center">
+  <tr><th>Codex補助パネル</th><th>リソースパネル</th></tr>
   <tr>
-    <th>CPU</th>
-    <th>メモリ</th>
+    <td><a href="docs/images/codex-ja-light.png"><img src="docs/images/codex-ja-light.png" alt="Codex補助パネル" width="190"></a></td>
+    <td><a href="docs/images/panel-ja-cpu.png"><img src="docs/images/panel-ja-cpu.png" alt="リソースパネル" width="215"></a></td>
   </tr>
-  <tr>
-    <td align="center">
-      <a href="docs/images/panel-ja-cpu.png"><img src="docs/images/panel-ja-cpu.png" alt="CPU使用率グラフ、温度、上位3プロセス" width="250"></a><br>
-      <sub>使用率グラフ · 温度 · 上位3プロセス</sub>
-    </td>
-    <td align="center">
-      <a href="docs/images/panel-ja-memory.png"><img src="docs/images/panel-ja-memory.png" alt="メモリ使用量、プレッシャー、圧縮・スワップ、上位3プロセス" width="250"></a><br>
-      <sub>メモリプレッシャー · 圧縮・スワップ · 上位3プロセス</sub>
-    </td>
-  </tr>
-  <tr>
-    <th>SSD</th>
-    <th>ネットワーク</th>
-  </tr>
-  <tr>
-    <td align="center">
-      <a href="docs/images/panel-ja-ssd.png"><img src="docs/images/panel-ja-ssd.png" alt="SSDの空き容量、読み書きグラフ、温度" width="250"></a><br>
-      <sub>空き容量 · 読み書きグラフ · 温度</sub>
-    </td>
-    <td align="center">
-      <a href="docs/images/panel-ja-network.png"><img src="docs/images/panel-ja-network.png" alt="ダウンロード・アップロード速度と直近1分のグラフ" width="250"></a><br>
-      <sub>ダウンロード・アップロード · 直近1分のグラフ</sub>
-    </td>
-  </tr>
-  <tr><th colspan="2">GPU</th></tr>
-  <tr><td colspan="2" align="center">
-    <a href="docs/images/panel-ja-gpu.png"><img src="docs/images/panel-ja-gpu.png" alt="使用率グラフ · GPUモデル · コア数" width="250"></a><br>
-    <sub>使用率グラフ · GPUモデル · コア数</sub>
-  </td></tr>
 </table>
+<sub>実際のアプリ描画による合成例です。半透明効果はmacOSのバージョンで異なります。</sub>
 
-<sub>プレビューはすべて合成サンプルデータです。ガラス効果はmacOSのバージョンによって異なる場合があります。</sub>
+## 主な機能
 
-**既定は韓国語 · 4言語 · ライト・ダークモード · 起動後の経過時間 · ログイン時に起動**<br>
-右上の設定ボタンで、言語・メニューバーの動き・自動起動を変更できます。基本のリソース監視にはアカウント・広告・解析・サーバー送信はなく、グラフの履歴はメモリ内だけに保持します。
-
-## コンパクトなパネルとCodexの使用状況
-
-開発中のv2.7では、リソースパネルを340×420ptに縮小します。Codex起動中は300×420ptの補助パネルを左側に12ptの間隔で並べ、開いている間は位置を固定します。狭い画面では縦にスクロールできます。
-
-Codex起動中はリソース項目の左端にロボットアイコンだけを表示します。新しいトークン記録を検出するとタイピングし、追加の記録がないと10秒後に止まります。リアルタイムの消費・完了状態ではなく、設定で非表示にできます。トークン数と最近の記録時刻はパネルとツールチップで確認できます。
-
-macOSが提供するCodexの起動日時からアプリの経過時間を表示します。**記録の読み取りは既定でオフ**です。補助パネルでオンにすると、`~/.codex/sessions`からモデル名・トークン数・時刻を抽出し、**このMacの今日の使用量（UTC）**を集計します。記録には会話本文も含まれますが、本文・コマンド・認証情報は保存・送信せず、元のファイルも変更しません。オフにすると読み取りを停止し、メモリ内の集計を消去します。
-
-APIキー・有料モデル呼び出し・アカウントサービスへの接続・新しいサーバーは不要です。アカウント全体の使用量・残りの上限・API請求額・実際の作業時間は提供しません。読み取れない値や制限された集計は情報なし・部分集計と表示します。上のリソース画像は以前のリリースの例です。
-
-## ディスク整理
-
-SSDカード右上の**ディスク整理**からクラウド同期されていないローカルフォルダを選びます。作成日と更新日の両方が30日以上前のDMG・PKGインストーラと100MB以上のファイルを候補として表示します。選択したフォルダを記憶し、次回の整理画面で自動検査します。フォルダメニューで変更・記憶解除ができます。古さや大きさだけで不要とは判断しません。検査完了時は古いインストーラだけを推奨として事前選択し、大容量ファイルは手動選択にします。中止・上限到達時は事前選択しません。
-
-場所・サイズ・更新日・候補の理由を確認し、選択件数と容量を確認してから**ゴミ箱に移動**します。システム・既知のクラウドの場所、隠しファイル、シンボリックリンク、パッケージ内部、バージョン管理プロジェクト、キャッシュの一括削除は対象外です。検索や残りの処理を中止でき、結果では移動・スキップ・失敗を区別します。
-
-ゴミ箱に移動した容量は、確保できた空き容量ではありません。アプリはゴミ箱を空にせず、完全削除もしません。結果からゴミ箱を開いて確認できます。任意の場所にある他社の同期フォルダはすべてを検出できないため、選択しないでください。承認したフォルダのブックマークと識別情報だけをローカル保存し、変更・確認不能時は再選択が必要です。候補一覧・選択・確認内容はメモリ内だけに保持し、ファイル内容の読み取りや外部送信はしません。
+- **メニューバー:** CPU温度・使用率、GPU使用率、SSD読み書き、ネットワーク速度と動く指標。
+- **クリックでパネル:** CPU・GPU・メモリ・SSD・通信タブ、最近のグラフ、CPU・メモリ上位3プロセス、起動後の経過時間。
+- **Codex:** 左の補助パネルにアプリ実行時間・今日のローカルトークン・モデル別使用量。新しいトークン記録を検出するとメニューバーのロボットが動きます。
+- **ディスク整理:** 選んだフォルダの候補を確認し、最終確認後に選択ファイルをゴミ箱へ移動。
+- **設定:** 表示項目・動き・ログイン時の起動を変更。韓国語が既定で、英語・日本語・簡体字中国語にも対応。
 
 ## インストール
 
-**macOS 14以降を搭載したApple Silicon Mac**で動作します。配布ファイルはARM64専用で、Intel Macには対応していません。
+1. [最新リリース](https://github.com/PIYoung/mac-thermal/releases/latest)から**DMG**をダウンロードします。ZIPもあります。
+2. DMGを開き、**Mac Thermal.app**を**Applications**へドラッグします。
+3. 起動してメニューバーをクリックします。更新時は新しいリリースをインストールします。
 
-1. [最新リリース](https://github.com/PIYoung/mac-thermal/releases/latest)から**DMG**をダウンロードします。ZIP版もあります。
-2. DMGを開き、**Mac Thermal.app**を**Applications**フォルダへドラッグします。
-3. アプリを起動し、メニューバーの指標をクリックします。Dockアイコンは表示しません。
-
-> **ダウンロード前に** — 現在のアプリはアドホック署名であり、Apple Developer ID署名・公証は受けていません。macOSが起動をブロックする場合は、セキュリティ設定を無効化せず、以下の手順でソースからビルドしてください。ファイルの整合性はリリースの`SHA256SUMS`と照合できます。
-
-自動更新機能はありません。新しいバージョンは[リリースページ](https://github.com/PIYoung/mac-thermal/releases)からインストールします。
+> このビルドはad-hoc署名で、Appleの公証はありません。macOSがブロックした場合、セキュリティ設定を解除せず下記のソースビルドをご利用ください。配布ファイルは`SHA256SUMS`で検証できます。
 
 <details>
-<summary><strong>ソースからビルド・インストール</strong></summary>
+<summary>ソースからビルド・インストール</summary>
 
-Apple Siliconと、**macOS 26 SDKを含むXcode 26、または互換性のあるCommand Line Tools**が必要です。実行対象はmacOS 14以降です。macOS 26より前では標準の半透明パネルを使用します。
+Apple Siliconと、macOS 26 SDKを含むXcode 26または互換Command Line Toolsが必要です。
 
 ```sh
 git clone https://github.com/PIYoung/mac-thermal.git
@@ -140,34 +43,18 @@ cd mac-thermal
 zsh scripts/install.sh --open
 ```
 
-`~/Applications/Mac Thermal.app`にインストールして起動します。起動せずにインストールする場合は`--open`を省いてください。`sudo`は使用しません。ビルドのみの場合は`zsh build.sh`を実行してください。出力先は`build/Mac Thermal.app`です。
+既存のアプリを終了してから実行してください。`~/Applications`にインストールします。`sudo`は不要です。
 
 </details>
 
-<details>
-<summary><strong>自動起動と表示対象について</strong></summary>
+## Codex記録とプライバシー
 
-- **ログイン時に起動：** 設定で切り替えます。初回起動時に自動登録するのは`~/Applications`から実行した場合だけです。DMGで`/Applications`へインストールした場合は自動登録しません。macOSが承認を求める場合は、システムのログイン項目設定で許可してください。
-- **GPU:** ドライバが報告する全体の使用率・モデル・コア数を表示します。Apple M4 Proで実測を確認しましたが、チップやmacOSによって取得可否が異なります。取得できない値はメニューバーに`—`、パネルに「情報なし」と表示します。GPU温度・NPU使用率は提供しません。
-- **CPU温度：** 読み取れるコアセンサーの最高値です。Apple M4 Proで読み取りを検証済みで、他のチップとの互換性は未確認です。取得できない値は`—`と表示します。
-- **熱状態：** macOSが報告する状態を使用します。独自の温度しきい値では判定せず、ファンや冷却の制御は行いません。
-- **メモリ：** 使用量・プレッシャー・圧縮・スワップを表示します。メモリ温度は提供しません。
-- **上位3プロセス：** 同じアプリの複数プロセスを合算しない、プロセス単位の順位です。CPU使用率は全論理コアを基準に正規化します。
-- **SSD・ネットワーク：** SSDのI/Oは内蔵物理SSD全体、ネットワーク速度は有効な`en*`インターフェイスが対象です。VPN・ループバックは合算しません。
-- **更新：** 計測は2秒ごと、動きは最大8fpsです。ユーザー設定・「視差効果を減らす」・スリープ・画面オフ・アイドル状態に応じて動きを止めます。
+Codex記録の読み取りは**既定でOFF**です。オンにすると`~/.codex/sessions`からモデル名・トークン数・時刻のみメモリに集計します。ファイルには会話本文もありますが、本文・コマンド・認証情報は保管・表示・送信せず、元ファイルも変更しません。オフで読み取りを止め、集計を消去します。
 
-計算方法と互換性の詳しい範囲は[技術説明](docs/DETAILS.md)をご覧ください。現在、この文書は韓国語で提供しています。
+対象は**このMacの今日の記録（UTC）**で、アカウント全体の使用量・請求額・残り上限ではありません。ロボットは追加の記録がないと10秒後に止まり、リアルタイムのトークン消費や作業完了を示しません。
 
-</details>
+---
 
-## 一緒につくる
+[技術説明](docs/DETAILS.md) · [セキュリティ](SECURITY.md) · [貢献](CONTRIBUTING.md) · [MITライセンス](LICENSE) · [サードパーティ通知](THIRD_PARTY_NOTICES.txt)
 
-**AIを使って制作しました。** コード・UI・翻訳・ドキュメントは、OpenAI Codexとユーザーからの繰り返しのフィードバックを通じて作成しました。
-
-[不具合・機能の提案](https://github.com/PIYoung/mac-thermal/issues) · [貢献ガイド](CONTRIBUTING.md) · [セキュリティの報告](SECURITY.md)
-
-センサーに関する報告には、MacのチップとmacOSのバージョンを添えてください。画面やログを共有する際は、個人情報や他のアプリのプロセス名を伏せてください。
-
-[MITライセンス](LICENSE)で公開しています。Statsのセンサーを参考にした部分の著作権・MIT表記は[サードパーティーの通知](THIRD_PARTY_NOTICES.txt)に保存しています。アプリアイコン・UI・グラフ・動きは独自に実装しており、システムのシンボル・フォントには各提供者の条件が適用されます。[コード・素材の出典](ASSET_PROVENANCE.md)
-
-<sub>README構成の参考：<a href="https://github.com/othneildrew/Best-README-Template">Best-README-Template</a>（Unlicense）。紹介文と画像は、このプロジェクトで作成しました。</sub>
+<sub>OpenAI Codexとユーザーのフィードバックを活用し、AIの支援で制作しました。</sub>

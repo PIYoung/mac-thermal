@@ -124,7 +124,7 @@ enum RenderDocPreview {
             node.subviews.forEach(restoreSelectedTabLabel)
         }
         restoreSelectedTabLabel(renderView)
-        precondition(bitmap.pixelsWide == 760 && bitmap.pixelsHigh == 936)
+        precondition(bitmap.pixelsWide == Int(PanelController.surfaceSize.width * 2) && bitmap.pixelsHigh == Int(PanelController.surfaceSize.height * 2))
         // Blank renders have repeatedly hidden regressions in offscreen helpers.
         // Verify image data varies before allowing a documentation asset update.
         var distinct = Set<UInt32>()
@@ -144,7 +144,7 @@ enum RenderDocPreview {
     }
 
     private static func contactSheet(directory: URL, appearance: String) throws {
-        let cellWidth = 380, imageHeight = 468, cellHeight = 492
+        let cellWidth = Int(PanelController.surfaceSize.width), imageHeight = Int(PanelController.surfaceSize.height), cellHeight = Int(PanelController.surfaceSize.height) + 24
         let width = cellWidth * tabNames.count, height = cellHeight * AppLanguage.allCases.count
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -196,7 +196,7 @@ enum RenderDocPreview {
             }
             try contactSheet(directory: fixtureDirectory, appearance: appearanceName)
         }
-        print("Rendered 40 synthetic native resource panels (5 tabs × 4 languages × 2 appearances), 760×936; no live readings or user preferences changed")
+        print("Rendered 40 synthetic native resource panels (5 tabs × 4 languages × 2 appearances), 680×840; no live readings or user preferences changed")
         print("Documentation CPU preview: \(canonical.lastPathComponent)")
     }
 }

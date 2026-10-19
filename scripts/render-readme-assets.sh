@@ -39,4 +39,10 @@ for language in ko en ja zh-CN; do
     cp "$project_dir/build/panel-previews/$source_language-light-$tab.png" "$image_dir/panel-$language-$tab.png"
   done
 done
-print -- "README artwork ready: original app icon, synthetic menu GIF/PNG, and 20 native panel PNGs (760×936)."
+zsh "$project_dir/scripts/run_codex_panel_probe.sh" --render "$project_dir/build/codex-docs"
+for language in ko en ja zh-CN; do
+  source_language="$language"
+  [[ "$language" != zh-CN ]] || source_language=zh-Hans
+  cp "$project_dir/build/codex-docs/codex-$source_language-light.png" "$image_dir/codex-$language-light.png"
+done
+print -- "README artwork ready: original app icon, synthetic menu GIF/PNG, and 20 native resource PNGs (680×840) and four Codex PNGs (600×840)."

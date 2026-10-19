@@ -4,7 +4,7 @@
 
 - 앱 아이콘·패널 헤더의 표장: `scripts/DrawIcon.swift`의 직접 지정한 Bézier 도형으로 생성합니다. 외부 이미지, 글꼴, SF Symbols 또는 심볼에서 가져온 경로를 사용하지 않습니다.
 - README의 아이콘 PNG는 위 원본 아이콘에서 생성합니다. `docs/images/readme-platforms.svg`의 메타데이터 표시는 직접 작성한 도형·텍스트이며 외부 배지 서비스를 사용하지 않습니다.
-- README 메뉴바 GIF·PNG와 4개 언어 패널 PNG는 `scripts/render-readme-assets.sh`로 재생성합니다. 합성 예시 수치를 실제 앱 렌더러로 그리며, 사용자 화면·실제 프로세스 이름·실시간 수집값을 공개 이미지에 넣지 않습니다. 메뉴바를 감싼 둥근 배경은 문서용 자체 도형입니다.
+- README 메뉴바 GIF·PNG와 4개 언어 자원·Codex 패널 PNG는 `scripts/render-readme-assets.sh`로 재생성합니다. 합성 예시 수치를 실제 앱 렌더러로 그리며, 사용자 화면·실제 프로세스 이름·실시간 수집값을 공개 이미지에 넣지 않습니다. 메뉴바를 감싼 둥근 배경은 문서용 자체 도형입니다.
 - README의 헤더·소개·다운로드·접이식 안내 구성은 [Best-README-Template](https://github.com/othneildrew/Best-README-Template)을 참고했습니다. [Unlicense 원문](https://github.com/othneildrew/Best-README-Template/blob/main/LICENSE.txt)을 2026-10-15에 확인했으며, 원본 소개 문구·로고·이미지는 포함하지 않았습니다. 문서 문구·HTML·이미지는 이 프로젝트에서 작성합니다.
 - 그래프·탭·유리 카드: 프로젝트에서 직접 작성한 AppKit/QuartzCore 코드입니다. 다른 앱의 소스나 화면 자산을 복제하지 않습니다.
 - GPU 수집기: 프로젝트에서 직접 작성한 IOKit 레지스트리 조회 코드입니다. 외부 앱 소스·라이브러리를 추가하지 않으며 GPU 사용률은 드라이버 속성값을 검증해 표시합니다.

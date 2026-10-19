@@ -168,6 +168,22 @@ enum LoginItemManager {
         if let index = CommandLine.arguments.firstIndex(of: "--render"), CommandLine.arguments.indices.contains(index + 1) {
             let output = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            var documentation = sample
+            documentation.appStartedAt = Date().addingTimeInterval(-8_280)
+            documentation.currentModel = "model-alpha"
+            documentation.dailyTokens = 267_000
+            documentation.models = [CodexModelUsage(model: "model-alpha", totalTokens: 182_000),
+                                    CodexModelUsage(model: "model-beta", totalTokens: 64_000),
+                                    CodexModelUsage(model: "model-gamma", totalTokens: 21_000)]
+            for language in AppLanguage.allCases {
+                L10n.setLanguage(language, defaults: defaults)
+                let appearance = NSAppearance(named: .aqua)!
+                app.appearance = appearance
+                let panel = CodexPanelController()
+                panel.apply(documentation)
+                panel.prepareForPresentation()
+                try render(panel, appearance: appearance, output: output.appendingPathComponent("codex-\(language.rawValue)-light.png"))
+            }
             L10n.setLanguage(.korean, defaults: defaults)
             for (name, appearanceName) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
                 let appearance = NSAppearance(named: appearanceName)!

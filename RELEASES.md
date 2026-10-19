@@ -1,6 +1,6 @@
 # Releases
 
-## v2.7.0 — Unreleased
+## v2.7.0 — 2026-10-19
 
 Compact resource surfaces and an optional local Codex companion. Build 28.
 
@@ -12,6 +12,8 @@ Compact resource surfaces and an optional local Codex companion. Build 28.
 
 - Add an independently selectable, icon-only Codex robot at the left of the resource menu items while the desktop app is running. Keep token totals and last-record age in the panel and tooltip. The robot types after newly observed recent usage records and stops after 10 seconds without another record; initial scans, app runtime and old catch-up records never imply live task status. Respect motion-off, Reduce Motion and sleep.
 - Migrate existing menu selections while adding the new Codex item; preserve subsequent opt-outs. Validate all 32 selections, both appearances, four languages and fixed left-side companion ordering.
+
+- Simplify all four READMEs and refresh small native previews for the compact panels and leading Codex icon.
 
 ## v2.6.0 — 2026-10-19
 

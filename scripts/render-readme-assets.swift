@@ -23,7 +23,7 @@ enum RenderReadmeAssets {
     }
 
     private static func composed(_ image: NSImage) -> CGImage {
-        let canvasSize = CGSize(width: image.size.width > 264 ? 720 : 576, height: 92)
+        let canvasSize = CGSize(width: max(576, ceil(image.size.width * 2) + 48), height: 92)
         guard let context = CGContext(data: nil, width: Int(canvasSize.width),
             height: Int(canvasSize.height), bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
@@ -45,7 +45,7 @@ enum RenderReadmeAssets {
         let contentRect = CGRect(x: floor((canvasSize.width - CGFloat(content.width)) / 2),
             y: floor((canvasSize.height - CGFloat(content.height)) / 2),
             width: CGFloat(content.width), height: CGFloat(content.height))
-        precondition(contentRect.width <= 672 && contentRect.height == 44,
+        precondition(contentRect.width <= 748 && contentRect.height == 44,
             "Unexpected production menu painter size")
         context.interpolationQuality = .none
         context.draw(content, in: contentRect)
@@ -88,7 +88,14 @@ enum RenderReadmeAssets {
                 let frame = composed(image)
                 if let width = expectedFrameWidth { precondition(frame.width == width) }
                 else { expectedFrameWidth = frame.width }
-                if index == 0 { try writePNG(frame, to: directory.appendingPathComponent("\(name).png")) }
+                if index == 0 {
+                    let snapshot = CodexMonitorSnapshot(appStartedAt: sample.time.addingTimeInterval(-8_280),
+                        connection: .connected, recordsEnabled: true, recordsCount: 123,
+                        lastRecordAt: sample.time, dailyTokens: 267_000, updatedAt: sample.time)
+                    let staticMenu = name == "menubar" ? MenuBarContent.previewCodex(sample: sample,
+                        snapshot: snapshot, preferences: preferences, dark: true).0 ?? image : image
+                    try writePNG(composed(staticMenu), to: directory.appendingPathComponent("\(name).png"))
+                }
                 if let data = frame.dataProvider?.data { renderedFrames.insert(data as Data) }
                 // GIF stores centiseconds. Alternate 120/130 ms so the complete
                 // 24-frame loop remains exactly three seconds (eight fps average).
