@@ -3,6 +3,8 @@ import Foundation
 extension L10n {
     // Original translations. Values are English, Japanese, and Simplified Chinese.
     static let systemTranslations: [String: [String]] = [
+        "Mac Thermal · %@\nCPU %@ / 사용률 %@\nGPU 사용률 %@\nSSD 읽기 %@ · 쓰기 %@\nSSD 사용 용량 %@ · 온도 %@\n업로드 %@ · 다운로드 %@\n메뉴바 %@ · 클릭하면 패널과 메뉴바 설정": ["Mac Thermal · %@\nCPU %@ / usage %@\nGPU usage %@\nSSD read %@ · write %@\nSSD space used %@ · temperature %@\nUpload %@ · download %@\nMenu bar %@ · click for panel and settings", "Mac Thermal · %@\nCPU %@ / 使用率 %@\nGPU使用率 %@\nSSD読み込み %@ · 書き込み %@\nSSD使用容量 %@ · 温度 %@\nアップロード %@ · ダウンロード %@\nメニューバー %@ · クリックでパネルと設定", "Mac Thermal · %@\nCPU %@ / 使用率 %@\nGPU使用率 %@\nSSD读取 %@ · 写入 %@\nSSD已用空间 %@ · 温度 %@\n上传 %@ · 下载 %@\n菜单栏 %@ · 点击打开面板和设置"],
+        "Mac Thermal, CPU %@, 사용률 %@, GPU 사용률 %@, SSD 읽기 %@, 쓰기 %@, 저장 공간 사용 %@, 업로드 %@, 다운로드 %@, 열 상태 %@, 메뉴바 %@": ["Mac Thermal, CPU %@, usage %@, GPU usage %@, SSD read %@, write %@, storage used %@, upload %@, download %@, thermal state %@, menu bar %@", "Mac Thermal、CPU %@、使用率 %@、GPU使用率 %@、SSD読み込み %@、書き込み %@、ストレージ使用量 %@、アップロード %@、ダウンロード %@、熱状態 %@、メニューバー %@", "Mac Thermal，CPU %@，使用率 %@，GPU使用率 %@，SSD读取 %@，写入 %@，已用存储空间 %@，上传 %@，下载 %@，热状态 %@，菜单栏 %@"],
         "정상": ["Normal", "正常", "正常"],
         "약간 높음": ["Elevated", "やや高温", "温度偏高"],
         "높음": ["High", "高温", "高温"],

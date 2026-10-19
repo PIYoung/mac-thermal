@@ -216,6 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         sampleQueue.sync {
             mt_thermal_close()
             mt_process_metrics_reset()
+            mt_gpu_metrics_close()
         }
     }
 }
@@ -233,6 +234,9 @@ if CommandLine.arguments.contains("--diagnostics") {
         "ssd_celsius": sensors.ssd_sensor_count > 0 ? sensors.ssd_celsius as Any : NSNull(),
         "cpu_sensor_count": sensors.cpu_sensor_count,
         "cpu_usage_percent": metrics.cpu_valid != 0 ? metrics.cpu_usage_percent as Any : NSNull(),
+        "gpu_usage_percent": resources.gpu.utilizationPercent as Any? ?? NSNull(),
+        "gpu_model": resources.gpu.model as Any? ?? NSNull(),
+        "gpu_core_count": resources.gpu.coreCount as Any? ?? NSNull(),
         "upload_bytes_per_second": metrics.network_valid != 0 ? metrics.upload_bytes_per_second as Any : NSNull(),
         "download_bytes_per_second": metrics.network_valid != 0 ? metrics.download_bytes_per_second as Any : NSNull(),
         "thermal_status": ThermalStatus(ProcessInfo.processInfo.thermalState).title,
@@ -257,6 +261,7 @@ if CommandLine.arguments.contains("--diagnostics") {
     if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]), let text = String(data: data, encoding: .utf8) { print(text) }
     mt_thermal_close()
     mt_process_metrics_reset()
+    mt_gpu_metrics_close()
 } else {
     let app = NSApplication.shared
     let delegate = AppDelegate()

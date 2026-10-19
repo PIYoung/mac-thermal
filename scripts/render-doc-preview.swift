@@ -17,7 +17,7 @@ enum LoginItemManager {
 
 @main
 enum RenderDocPreview {
-    private static let tabNames = ["cpu", "memory", "ssd", "network"]
+    private static let tabNames = ["cpu", "gpu", "memory", "ssd", "network"]
 
     private static func populate(_ panel: PanelController) {
         // A deterministic illustrative minute. None of these are live readings.
@@ -39,7 +39,8 @@ enum RenderDocPreview {
                     readableCount: 312, skippedCount: 2, available: true),
                 disk: DiskSnapshot(totalBytes: 512_000_000_000, availableBytes: 256_000_000_000,
                     readBytesPerSecond: (14 + download[index]) * 1_000_000,
-                    writeBytesPerSecond: (3 + upload[index] * 2.5) * 1_000_000, deviceCount: 1))
+                    writeBytesPerSecond: (3 + upload[index] * 2.5) * 1_000_000, deviceCount: 1),
+                gpu: GPUSnapshot(utilizationPercent: min(100, cpu[index] * 1.5), model: "Apple M4 Pro", coreCount: 20))
             panel.apply(Snapshot(cpuTemperature: 64, ssdTemperature: 42, cpuUsage: cpu[index],
                 upload: upload[index] * 1_000_000, download: download[index] * 1_000_000,
                 interfaces: 1, cpuSensors: 8, ssdSensors: 2, thermal: ThermalStatus(.nominal),
@@ -53,7 +54,7 @@ enum RenderDocPreview {
         let suiteName = "local.mac-thermal.docs.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else { fatalError("Cannot create isolated defaults") }
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(tab, forKey: "dashboardSelectedResourceTabV3")
+        defaults.set(tabNames[tab], forKey: "dashboardSelectedResourceTabV4")
         L10n.setLanguage(language, defaults: defaults)
         let panel = PanelController(defaults: defaults)
         let view = panel.view
@@ -144,7 +145,7 @@ enum RenderDocPreview {
 
     private static func contactSheet(directory: URL, appearance: String) throws {
         let cellWidth = 380, imageHeight = 468, cellHeight = 492
-        let width = cellWidth * 4, height = cellHeight * AppLanguage.allCases.count
+        let width = cellWidth * tabNames.count, height = cellHeight * AppLanguage.allCases.count
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
@@ -195,7 +196,7 @@ enum RenderDocPreview {
             }
             try contactSheet(directory: fixtureDirectory, appearance: appearanceName)
         }
-        print("Rendered 32 synthetic native resource panels (4 tabs × 4 languages × 2 appearances), 760×936; no live readings or user preferences changed")
+        print("Rendered 40 synthetic native resource panels (5 tabs × 4 languages × 2 appearances), 760×936; no live readings or user preferences changed")
         print("Documentation CPU preview: \(canonical.lastPathComponent)")
     }
 }

@@ -2,3 +2,4 @@
 #include "SystemMetrics.h"
 #include "ResourceMetrics.h"
 #include "DiskMetrics.h"
+#include "GPUMetrics.h"

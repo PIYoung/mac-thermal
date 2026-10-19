@@ -28,7 +28,7 @@
 
 ## 在菜单栏随时查看
 
-无需一直打开面板，就能查看 CPU、SSD 和网络状态。数字来自实际测量，动态效果则让忙碌程度一目了然。
+无需一直打开面板，就能查看 CPU 或 GPU、SSD 和网络状态。数字来自实际测量，动态效果则让忙碌程度一目了然。
 
 <p align="center">
   <picture>
@@ -44,6 +44,15 @@
 | 显示温度与使用率，节奏条随负载变化。也可选择环绕圆点样式。 | 显示读写速度。液面高度表示已用容量，波浪表示 I/O 活动。 | 分别呈现上传与下载的速度和方向。没有传输时，对应的流动效果也会停止。 |
 
 菜单栏文字会随系统热状态变为**橙色或红色**。可以在设置中关闭动态效果或调整强度，也会遵循 macOS 的**减弱动态效果**设置。
+
+在**设置 → 菜单栏指标 → GPU**中切换后，首项会显示为4×3方格。使用率越高，点亮的格子越多，柔和光波的速度也越快；0%时静止。12格表示使用率刻度，并非实际核心数量。默认仍显示CPU。
+
+<p align="center">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/menubar-gpu.png">
+    <img src="docs/images/menubar-gpu-demo.gif" alt="随GPU使用率改变点亮格数和柔和光波速度的菜单栏合成示例" width="520">
+  </picture>
+</p>
 
 ## 点击查看各项资源详情
 
@@ -78,6 +87,11 @@
       <sub>下载与上传 · 最近 1 分钟图表</sub>
     </td>
   </tr>
+  <tr><th colspan="2">GPU</th></tr>
+  <tr><td colspan="2" align="center">
+    <a href="docs/images/panel-zh-CN-gpu.png"><img src="docs/images/panel-zh-CN-gpu.png" alt="使用率图表 · GPU型号 · 核心数量" width="250"></a><br>
+    <sub>使用率图表 · GPU型号 · 核心数量</sub>
+  </td></tr>
 </table>
 
 <sub>所有预览均使用合成示例数据。玻璃效果可能因 macOS 版本而异。</sub>
@@ -116,6 +130,7 @@ zsh scripts/install.sh --open
 <summary><strong>自动启动与数据口径</strong></summary>
 
 - **登录时自动启动：** 可在设置中开关。仅从 `~/Applications` 运行时，应用才会在首次启动时自动注册；通过 DMG 安装到 `/Applications` 时不会自动注册。如果 macOS 要求批准，请在系统的登录项设置中允许。
+- **GPU：** 显示驱动报告的总体使用率、型号与核心数量。已在Apple M4 Pro上验证实际读取；兼容性会因芯片和macOS而异。无法读取时，菜单栏显示`—`，面板显示“无数据”。不提供GPU温度或NPU使用率。
 - **CPU 温度：** 可读取核心传感器中的最高值。已在 Apple M4 Pro 上验证传感器读取，其他芯片的兼容性尚未确认。无法读取的数据会显示为 `—`。
 - **热状态：** 使用 macOS 报告的状态，不按自定温度阈值判断，也不控制风扇或散热。
 - **内存：** 显示使用量、压力、压缩与交换空间，不提供内存温度。

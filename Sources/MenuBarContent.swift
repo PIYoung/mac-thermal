@@ -15,6 +15,7 @@ final class MenuBarContent: NSObject {
     private var systemSleeping = false
     private var displaySleeping = false
     private var cpuPhase = 0.0
+    private var gpuPhase = 0.0
     private var uploadPhase = 0.0
     private var downloadPhase = 0.0
     private var diskPhase = 0.0
@@ -27,6 +28,10 @@ final class MenuBarContent: NSObject {
         didSet {
             guard preferences != oldValue else { return }
             lastTick = nil
+            if preferences.primaryMetric != oldValue.primaryMetric {
+                textSignature = ""
+                rebuildBase()
+            }
             updateAccessibility()
             configureAnimation()
             displayFrame()
@@ -35,7 +40,10 @@ final class MenuBarContent: NSObject {
 
     init(frame: NSRect) {
         super.init()
-        observe(.default, .appLanguageDidChange) { [weak self] _ in self?.updateAccessibility() }
+        observe(.default, .appLanguageDidChange) { [weak self] _ in
+            self?.appearanceChanged()
+            self?.updateAccessibility()
+        }
         let workspace = NSWorkspace.shared.notificationCenter
         observe(workspace, NSWorkspace.accessibilityDisplayOptionsDidChangeNotification) { [weak self] _ in self?.appearanceChanged() }
         observe(workspace, NSWorkspace.willSleepNotification) { [weak self] _ in self?.systemSleeping = true; self?.configureAnimation() }
@@ -100,7 +108,7 @@ final class MenuBarContent: NSObject {
     }
 
     private var hasActivity: Bool {
-        (validPercentage(sample.cpuUsage) ?? 0) > 0 ||
+        (validPercentage(preferences.primaryMetric == .cpu ? sample.cpuUsage : sample.resources.gpu.utilizationPercent) ?? 0) > 0 ||
         [sample.upload, sample.download, sample.resources.disk.readBytesPerSecond, sample.resources.disk.writeBytesPerSecond].contains { (validRate($0) ?? 0) > 0 }
     }
 
@@ -128,7 +136,12 @@ final class MenuBarContent: NSObject {
         lastTick = now
         let load = validPercentage(sample.cpuUsage) ?? 0
         let intensity = max(0.75, min(1.5, preferences.intensity))
-        if load > 0 { cpuPhase = (cpuPhase + elapsed / max(0.8, (3.9 - load * 0.029) / intensity)).truncatingRemainder(dividingBy: 100) }
+        if preferences.primaryMetric == .cpu, load > 0 {
+            cpuPhase = (cpuPhase + elapsed / max(0.8, (3.9 - load * 0.029) / intensity)).truncatingRemainder(dividingBy: 100)
+        }
+        if preferences.primaryMetric == .gpu, let gpuLoad = validPercentage(sample.resources.gpu.utilizationPercent), gpuLoad > 0 {
+            gpuPhase = (gpuPhase + elapsed / Self.gpuWavePeriod(load: gpuLoad, intensity: intensity)).truncatingRemainder(dividingBy: 1)
+        }
         if let upload = validRate(sample.upload), upload > 0 { uploadPhase = (uploadPhase + elapsed / flowPeriod(upload, intensity: intensity)).truncatingRemainder(dividingBy: 1) }
         if let download = validRate(sample.download), download > 0 { downloadPhase = (downloadPhase + elapsed / flowPeriod(download, intensity: intensity)).truncatingRemainder(dividingBy: 1) }
         let diskActivity = (validRate(sample.resources.disk.readBytesPerSecond) ?? 0) + (validRate(sample.resources.disk.writeBytesPerSecond) ?? 0)
@@ -148,7 +161,14 @@ final class MenuBarContent: NSObject {
 
     private var labels: [String] {
         let cpu = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? "—%"
-        return ["CPU " + cpu, sample.cpuTemperature.map { String(format: "%.0f°C", $0) } ?? "—",
+        let primary: [String]
+        if preferences.primaryMetric == .gpu {
+            let gpu = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? "—%"
+            primary = ["GPU " + gpu, sample.resources.gpu.coreCount.flatMap { $0 > 0 ? L10n.format("%d코어", $0) : nil } ?? "—"]
+        } else {
+            primary = ["CPU " + cpu, sample.cpuTemperature.map { String(format: "%.0f°C", $0) } ?? "—"]
+        }
+        return primary + [
                 "R " + rateLabel(sample.resources.disk.readBytesPerSecond), "W " + rateLabel(sample.resources.disk.writeBytesPerSecond),
                 "↑ " + rateLabel(sample.upload), "↓ " + rateLabel(sample.download)]
     }
@@ -187,15 +207,16 @@ final class MenuBarContent: NSObject {
     private func updateAccessibility() {
         guard let button else { return }
         let cpu = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? L10n.text("측정 중")
+        let gpu = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
         let used = ssdUsedPercent.map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
         let read = rateLabel(sample.resources.disk.readBytesPerSecond)
         let write = rateLabel(sample.resources.disk.writeBytesPerSecond)
-        button.toolTip = L10n.format("Mac Thermal · %@\nCPU %@ / 사용률 %@\nSSD 읽기 %@ · 쓰기 %@\nSSD 사용 용량 %@ · 온도 %@\n업로드 %@ · 다운로드 %@\n%@ · 클릭하면 패널과 메뉴바 설정",
-            sample.thermal.title, temperature(sample.cpuTemperature), cpu, read, write, used,
-            temperature(sample.ssdTemperature), rateLabel(sample.upload), rateLabel(sample.download), preferences.style.title)
-        button.setAccessibilityLabel(L10n.format("Mac Thermal, CPU %@, 사용률 %@, SSD 읽기 %@, 쓰기 %@, 저장 공간 사용 %@, 업로드 %@, 다운로드 %@, 열 상태 %@, 메뉴바 %@",
-            temperature(sample.cpuTemperature), cpu, read, write, used,
-            rateLabel(sample.upload), rateLabel(sample.download), sample.thermal.title, preferences.style.title))
+        button.toolTip = L10n.format("Mac Thermal · %@\nCPU %@ / 사용률 %@\nGPU 사용률 %@\nSSD 읽기 %@ · 쓰기 %@\nSSD 사용 용량 %@ · 온도 %@\n업로드 %@ · 다운로드 %@\n메뉴바 %@ · 클릭하면 패널과 메뉴바 설정",
+            sample.thermal.title, temperature(sample.cpuTemperature), cpu, gpu, read, write, used,
+            temperature(sample.ssdTemperature), rateLabel(sample.upload), rateLabel(sample.download), preferences.primaryMetric.title)
+        button.setAccessibilityLabel(L10n.format("Mac Thermal, CPU %@, 사용률 %@, GPU 사용률 %@, SSD 읽기 %@, 쓰기 %@, 저장 공간 사용 %@, 업로드 %@, 다운로드 %@, 열 상태 %@, 메뉴바 %@",
+            temperature(sample.cpuTemperature), cpu, gpu, read, write, used,
+            rateLabel(sample.upload), rateLabel(sample.download), sample.thermal.title, preferences.primaryMetric.title))
     }
 
     private func context() -> CGContext? {
@@ -257,7 +278,11 @@ final class MenuBarContent: NSObject {
         guard let context = context(), let baseImage else { return nil }
         context.draw(baseImage, in: CGRect(origin: .zero, size: Self.imageSize))
         let animated = motionAllowed && !systemSleeping && !displaySleeping && hasActivity
-        drawCPU(in: context, phase: animated ? cpuPhase : 0)
+        if preferences.primaryMetric == .gpu {
+            drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
+        } else {
+            drawCPU(in: context, phase: animated ? cpuPhase : 0)
+        }
         drawCapacity(in: context, phase: animated ? diskPhase : 0, animated: animated)
         drawFlow(in: context, x: 181, bytes: sample.upload, phase: animated ? uploadPhase : 0.45, upward: true, animated: animated)
         drawFlow(in: context, x: 190, bytes: sample.download, phase: animated ? downloadPhase : 0.45, upward: false, animated: animated)
@@ -289,6 +314,36 @@ final class MenuBarContent: NSObject {
                 context.setFillColor(ink.copy(alpha: alpha) ?? ink)
                 context.fillEllipse(in: CGRect(x: 12 + cos(angle) * 7.5 - 1.6, y: 11 + sin(angle) * 7.5 - 1.6, width: 3.2, height: 3.2))
             }
+        }
+    }
+
+    /// Twelve visual steps represent utilization, independently of the GPU core count.
+    static func gpuTileCount(for value: Double?) -> Int? {
+        guard let value, value.isFinite, (0...100).contains(value) else { return nil }
+        return Int(ceil(value * 12 / 100))
+    }
+
+    static func gpuWavePeriod(load: Double, intensity: Double) -> Double {
+        max(1.3, (4.3 - load * 0.027) / sqrt(intensity))
+    }
+
+    private func drawGPU(in context: CGContext, phase: Double, animated: Bool) {
+        let active = Self.gpuTileCount(for: sample.resources.gpu.utilizationPercent)
+        for index in 0..<12 {
+            let column = index % 4
+            let row = index / 4
+            let alpha: Double
+            if let active, index < active {
+                // A restrained diagonal highlight changes brightness, never tile position.
+                let wave = animated ? (cos((phase - Double(column + row) * 0.12) * .pi * 2) + 1) / 2 : 0.5
+                alpha = 0.82 + wave * 0.18
+            } else {
+                alpha = active == nil ? 0.12 : 0.18
+            }
+            context.setFillColor(ink.copy(alpha: alpha) ?? ink)
+            let rect = CGRect(x: 3 + Double(column) * 5.5, y: 3.5 + Double(row) * 5.5, width: 4, height: 4)
+            context.addPath(CGPath(roundedRect: rect, cornerWidth: 1.1, cornerHeight: 1.1, transform: nil))
+            context.fillPath()
         }
     }
 
@@ -342,25 +397,43 @@ final class MenuBarContent: NSObject {
     }
 
     /// Offscreen fixtures exercise the same painter without changing the menu bar.
-    static func preview(sample: Snapshot, preferences: MenuBarPreferences, dark: Bool, phase: Double) -> NSImage? {
-        previewRenderer(sample: sample, preferences: preferences, dark: dark)(phase, nil)
+    static func preview(sample: Snapshot, preferences: MenuBarPreferences, dark: Bool, phase: Double, sleeping: Bool = false) -> NSImage? {
+        previewRenderer(sample: sample, preferences: preferences, dark: dark, sleeping: sleeping)(phase, nil)
     }
 
     /// Keep one painter alive to exercise successive frames and sample invalidation.
     /// The optional sample follows the same update path as the live status button.
-    static func previewRenderer(sample: Snapshot, preferences: MenuBarPreferences, dark: Bool) -> (Double, Snapshot?) -> NSImage? {
+    static func previewRenderer(sample: Snapshot, preferences: MenuBarPreferences, dark: Bool, sleeping: Bool = false) -> (Double, Snapshot?) -> NSImage? {
         let content = MenuBarContent(frame: .zero)
         content.sample = sample
         content.preferences = preferences
+        content.systemSleeping = sleeping
         content.previewAppearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         content.rebuildBase()
         return { phase, replacement in
             if let replacement { content.update(sample: replacement) }
             content.cpuPhase = phase
+            content.gpuPhase = phase
             content.uploadPhase = phase
             content.downloadPhase = phase
             content.diskPhase = phase
             return content.composite()
         }
+    }
+
+    static func previewPreferenceChange(sample: Snapshot, from old: MenuBarPreferences,
+                                        to new: MenuBarPreferences, dark: Bool, phase: Double) -> NSImage? {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        content.preferences = old
+        content.previewAppearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        content.rebuildBase()
+        content.preferences = new
+        content.cpuPhase = phase
+        content.gpuPhase = phase
+        content.uploadPhase = phase
+        content.downloadPhase = phase
+        content.diskPhase = phase
+        return content.composite()
     }
 }

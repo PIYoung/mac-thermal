@@ -38,10 +38,27 @@ struct DiskSnapshot {
     static let pending = DiskSnapshot(totalBytes: nil, availableBytes: nil, readBytesPerSecond: nil, writeBytesPerSecond: nil, deviceCount: 0)
 }
 
+struct GPUSnapshot {
+    let utilizationPercent: Double?
+    let model: String?
+    let coreCount: Int?
+
+    static let pending = GPUSnapshot(utilizationPercent: nil, model: nil, coreCount: nil)
+}
+
 struct ResourceSnapshot {
     let memory: MemorySnapshot
     let processes: ProcessSnapshot
     let disk: DiskSnapshot
+    let gpu: GPUSnapshot
+
+    init(memory: MemorySnapshot, processes: ProcessSnapshot, disk: DiskSnapshot,
+         gpu: GPUSnapshot = .pending) {
+        self.memory = memory
+        self.processes = processes
+        self.disk = disk
+        self.gpu = gpu
+    }
 
     static let pending = ResourceSnapshot(memory: .pending, processes: .pending, disk: .pending)
 }
@@ -51,6 +68,7 @@ enum ResourceSampler {
         let memory = mt_memory_metrics_sample()
         let processes = mt_process_metrics_sample()
         let disk = mt_disk_metrics_sample()
+        var gpu = mt_gpu_metrics_sample()
 
         let memorySnapshot = MemorySnapshot(
             totalBytes: memory.valid != 0 ? Double(memory.total_bytes) : nil,
@@ -90,6 +108,17 @@ enum ResourceSampler {
             readBytesPerSecond: disk.io_valid != 0 ? disk.read_bytes_per_second : nil,
             writeBytesPerSecond: disk.io_valid != 0 ? disk.write_bytes_per_second : nil,
             deviceCount: Int(disk.device_count))
-        return ResourceSnapshot(memory: memorySnapshot, processes: processSnapshot, disk: diskSnapshot)
+        let gpuModel = withUnsafePointer(to: &gpu.model) { modelPointer in
+            modelPointer.withMemoryRebound(to: CChar.self, capacity: 128) {
+                String(validatingCString: $0)
+            }
+        }
+        let gpuSnapshot = GPUSnapshot(
+            utilizationPercent: gpu.utilization_valid != 0 && gpu.utilization_percent.isFinite &&
+                (0...100).contains(gpu.utilization_percent) ? gpu.utilization_percent : nil,
+            model: gpuModel.flatMap { $0.isEmpty ? nil : $0 },
+            coreCount: gpu.core_count > 0 ? Int(gpu.core_count) : nil)
+        return ResourceSnapshot(memory: memorySnapshot, processes: processSnapshot,
+                                disk: diskSnapshot, gpu: gpuSnapshot)
     }
 }

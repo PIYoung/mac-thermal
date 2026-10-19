@@ -28,7 +28,7 @@
 
 ## A glance at the menu bar
 
-Check CPU, SSD, and network activity without opening the panel. The numbers are measured values; the motion gives you a sense of how busy your Mac is.
+Check CPU or GPU, SSD, and network activity without opening the panel. The numbers are measured values; the motion gives you a sense of how busy your Mac is.
 
 <p align="center">
   <picture>
@@ -44,6 +44,15 @@ Check CPU, SSD, and network activity without opening the panel. The numbers are 
 | Temperature and utilization, with bars that move as activity rises. Orbiting dots are also available. | Read and write rates. The fill level shows used capacity; waves reflect I/O activity. | Upload and download rates, with flow in each transfer direction. The flow stops when transfers stop. |
 
 Menu bar text turns **orange or red** with the system's thermal state. Turn motion off or adjust its intensity in Settings. The app also follows macOS **Reduce Motion**.
+
+Choose **Settings → Menu bar metric → GPU** to replace the first item with a 4×3 tile grid. More tiles light up and the gentle brightness wave speeds up as utilization rises; it stops at 0%. The 12 tiles are usage steps, not physical cores. CPU remains the default.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/menubar-gpu.png">
+    <img src="docs/images/menubar-gpu-demo.gif" alt="Synthetic GPU menu bar showing active tiles and a gentle brightness wave" width="520">
+  </picture>
+</p>
 
 ## Click for a closer look
 
@@ -78,6 +87,11 @@ Click the menu bar to open a fixed-size panel. The CPU tab opens first; later, t
       <sub>Download and upload · Past-minute graphs</sub>
     </td>
   </tr>
+  <tr><th colspan="2">GPU</th></tr>
+  <tr><td colspan="2" align="center">
+    <a href="docs/images/panel-en-gpu.png"><img src="docs/images/panel-en-gpu.png" alt="Usage graph · GPU model · Core count" width="250"></a><br>
+    <sub>Usage graph · GPU model · Core count</sub>
+  </td></tr>
 </table>
 
 <sub>All previews use synthetic example data. Glass effects may vary with the macOS version.</sub>
@@ -116,6 +130,7 @@ Installs to `~/Applications/Mac Thermal.app` and launches it. Omit `--open` to i
 <summary><strong>Automatic startup and measurement limits</strong></summary>
 
 - **Launch at login:** Toggle it in Settings. First-launch registration is automatic only when the app runs from `~/Applications`. A DMG installation in `/Applications` does not register automatically. If macOS requests approval, allow it in the system's Login Items settings.
+- **GPU:** Shows driver-reported overall utilization, model, and core count. Live readings were verified on Apple M4 Pro; availability varies by chip and macOS. Unavailable values show `—` in the menu bar and “Unavailable” in the panel. GPU temperature and NPU utilization are not provided.
 - **CPU temperature:** The highest readable core sensor value. Sensor readings have been validated on Apple M4 Pro; compatibility with other chips is unverified. Unavailable values display `—`.
 - **Thermal state:** Reported by macOS, rather than inferred from arbitrary temperature thresholds. The app does not control fans or cooling.
 - **Memory:** Usage, pressure, compression, and swap. Memory temperature is not provided.

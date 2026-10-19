@@ -35,8 +35,8 @@ cp "$project_dir/build/doc-preview/AppIcon.iconset/icon_128x128@2x.png" "$image_
 for language in ko en ja zh-CN; do
   source_language="$language"
   [[ "$language" != zh-CN ]] || source_language=zh-Hans
-  for tab in cpu memory ssd network; do
+  for tab in cpu gpu memory ssd network; do
     cp "$project_dir/build/panel-previews/$source_language-light-$tab.png" "$image_dir/panel-$language-$tab.png"
   done
 done
-print -- "README artwork ready: original app icon, synthetic menu GIF/PNG, and 16 native panel PNGs (760×936)."
+print -- "README artwork ready: original app icon, synthetic menu GIF/PNG, and 20 native panel PNGs (760×936)."

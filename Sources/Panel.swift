@@ -205,15 +205,15 @@ private final class Sparkline: FlippedView {
     }
 }
 
-private final class CPUHistoryGraph: FlippedView {
+private final class UsageHistoryGraph: FlippedView {
     private var history = CPUUsageHistory()
     var color = PanelColor.blue { didSet { needsDisplay = true } }
 
-    override init(frame: NSRect) {
+    init(frame: NSRect, accessibilityKey: String) {
         super.init(frame: frame)
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
-        localizedAccessibilityLabel(self, "CPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트")
+        localizedAccessibilityLabel(self, accessibilityKey)
         localizedToolTip(self, "실제 측정값의 최근 1분 · 세로 눈금 0~100% 고정 · 빈 구간은 미측정 또는 잠자기")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
@@ -372,7 +372,12 @@ final class PanelController: NSViewController {
     private let cpuTemp = text("—", size: 18, weight: .medium, digits: true)
     private let ssdTemp = text("—", size: 18, weight: .medium, digits: true)
     private let cpuPercent = text("측정 중", size: 30, weight: .medium, digits: true)
-    private let cpuGraph = CPUHistoryGraph(frame: .zero)
+    private let cpuGraph = UsageHistoryGraph(frame: .zero, accessibilityKey: "CPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트")
+    private let gpuPercent = text("정보 없음", size: 30, weight: .medium, digits: true)
+    private let gpuGraph = UsageHistoryGraph(frame: .zero, accessibilityKey: "GPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트")
+    private let gpuModel = text("정보 없음", size: 19, weight: .medium)
+    private let gpuCores = text("정보 없음", size: 19, weight: .medium, digits: true)
+    private let gpuDetail = text("이 Mac에서 GPU 사용률을 읽을 수 없습니다", size: 9, color: PanelColor.secondary)
     private let uptimeLabel = text("부팅 후 시간 확인 중", size: 10, color: PanelColor.secondary, digits: true)
     private let upValue = text("—", size: 20, weight: .medium, digits: true)
     private let downValue = text("—", size: 20, weight: .medium, digits: true)
@@ -407,6 +412,7 @@ final class PanelController: NSViewController {
     // Histories continue collecting while the panel or their tab is hidden.
     // Updating the AppKit views is deferred until they will actually be shown.
     private var cpuHistory = CPUUsageHistory()
+    private var gpuHistory = CPUUsageHistory()
     private var uploadHistory = ActivityHistory()
     private var downloadHistory = ActivityHistory()
     private var diskReadHistory = ActivityHistory()
@@ -443,6 +449,16 @@ final class PanelController: NSViewController {
         localizedToolTip(control, "리듬 막대 또는 순환 점으로 CPU가 바쁜 정도를 표시합니다")
         return control
     }()
+    private lazy var primaryMetricControl: NSPopUpButton = {
+        let control = NSPopUpButton(frame: .zero, pullsDown: false)
+        control.addItems(withTitles: ["CPU", "GPU"])
+        control.target = self
+        control.action = #selector(changeMenuBarPreferences)
+        control.controlSize = .regular
+        localizedAccessibilityLabel(control, "메뉴바 표시")
+        localizedToolTip(control, "메뉴바 첫 항목을 CPU 또는 GPU로 선택합니다")
+        return control
+    }()
     private lazy var menuBarMotionSwitch: NSSwitch = {
         let control = NSSwitch()
         control.target = self
@@ -471,8 +487,9 @@ final class PanelController: NSViewController {
         return control
     }()
     private let tabDefaults: UserDefaults
-    private let tabDefaultsKey = "dashboardSelectedResourceTabV3"
-    private static let tabLabels = ["CPU", "메모리", "SSD", "네트워크"]
+    private let tabDefaultsKey = "dashboardSelectedResourceTabV4"
+    private static let tabIdentifiers = ["cpu", "gpu", "memory", "ssd", "network"]
+    private static let tabLabels = ["CPU", "GPU", "메모리", "SSD", "네트워크"]
     init(defaults: UserDefaults = .standard) {
         tabDefaults = defaults
         super.init(nibName: nil, bundle: nil)
@@ -483,12 +500,16 @@ final class PanelController: NSViewController {
     }
     private func restoredTab() -> Int {
         if tabDefaults.object(forKey: tabDefaultsKey) != nil {
-            let saved = tabDefaults.integer(forKey: tabDefaultsKey)
-            return (0..<4).contains(saved) ? saved : 0
+            return Self.tabIdentifiers.firstIndex(of: tabDefaults.string(forKey: tabDefaultsKey) ?? "") ?? 0
         }
-        let legacy = tabDefaults.integer(forKey: "dashboardSelectedTabV2")
-        let migrated = [0: 0, 1: 1, 2: 0, 3: 2][legacy] ?? 0
-        tabDefaults.set(migrated, forKey: tabDefaultsKey)
+        let migrated: Int
+        if tabDefaults.object(forKey: "dashboardSelectedResourceTabV3") != nil {
+            migrated = [0: 0, 1: 2, 2: 3, 3: 4][tabDefaults.integer(forKey: "dashboardSelectedResourceTabV3")] ?? 0
+        } else {
+            let legacy = tabDefaults.integer(forKey: "dashboardSelectedTabV2")
+            migrated = [0: 0, 1: 2, 2: 0, 3: 3][legacy] ?? 0
+        }
+        tabDefaults.set(Self.tabIdentifiers[migrated], forKey: tabDefaultsKey)
         return migrated
     }
     private lazy var tabs: LiquidTabControl = {
@@ -548,16 +569,17 @@ final class PanelController: NSViewController {
         localizedToolTip(uptimeLabel, "잠자기 시간을 포함한 부팅 후 경과 시간 · 1분 단위")
         place(menuBarSettingsButton, in: canvas, 338, 23, 24, 24)
         place(tabs, in: canvas, 18, 66, 344, 24)
-        tabViews = (0..<4).map { _ in
+        tabViews = Self.tabIdentifiers.map { _ in
             let content = FlippedView()
             content.wantsLayer = true
             place(content, in: canvas, 18, 100, 344, 317)
             return content
         }
         buildCPU(in: tabViews[0])
-        buildMemory(in: tabViews[1])
-        buildDisk(in: tabViews[2])
-        buildNetwork(in: tabViews[3])
+        buildGPU(in: tabViews[1])
+        buildMemory(in: tabViews[2])
+        buildDisk(in: tabViews[3])
+        buildNetwork(in: tabViews[4])
         place(menuBarSettingsView, in: canvas, 18, 66, 344, 363)
         buildMenuBarSettings()
         showSelectedTab()
@@ -606,44 +628,50 @@ final class PanelController: NSViewController {
 
     private func buildMenuBarSettings() {
         let language = GlassCard()
-        place(language, in: menuBarSettingsView, 0, 0, 344, 52)
-        place(symbol("globe", color: PanelColor.blue), in: language, 15, 19, 14, 14)
-        place(text("언어", size: 11, weight: .semibold), in: language, 36, 17, 95, 18)
-        place(languageControl, in: language, 139, 12, 192, 28)
+        place(language, in: menuBarSettingsView, 0, 0, 344, 44)
+        place(symbol("globe", color: PanelColor.blue), in: language, 15, 15, 14, 14)
+        place(text("언어", size: 11, weight: .semibold), in: language, 36, 13, 95, 18)
+        place(languageControl, in: language, 139, 8, 192, 28)
+
+        let primary = GlassCard()
+        place(primary, in: menuBarSettingsView, 0, 50, 344, 44)
+        place(symbol("menubar.rectangle", color: PanelColor.blue), in: primary, 15, 15, 14, 14)
+        place(text("메뉴바 표시", size: 11, weight: .semibold), in: primary, 36, 13, 145, 18)
+        place(primaryMetricControl, in: primary, 188, 8, 143, 28)
 
         let style = GlassCard()
-        place(style, in: menuBarSettingsView, 0, 60, 344, 68)
-        place(symbol("waveform", color: PanelColor.blue), in: style, 15, 11, 14, 14)
-        place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 36, 9, 290, 18)
-        place(animationStyleControl, in: style, 13, 31, 318, 28)
+        place(style, in: menuBarSettingsView, 0, 100, 344, 56)
+        place(symbol("waveform", color: PanelColor.blue), in: style, 15, 7, 14, 14)
+        place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 36, 5, 290, 18)
+        place(animationStyleControl, in: style, 13, 25, 318, 26)
 
         let motion = GlassCard()
-        place(motion, in: menuBarSettingsView, 0, 136, 344, 58)
-        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 16, 8, 265, 18)
-        place(menuBarMotionSwitch, in: motion, 292, 6, 36, 22)
-        place(text("CPU는 사용률 · 네트워크는 전송량 · SSD 물결은 읽기/쓰기", size: 9, color: PanelColor.secondary), in: motion, 16, 32, 313, 14)
+        place(motion, in: menuBarSettingsView, 0, 162, 344, 50)
+        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 16, 5, 265, 18)
+        place(menuBarMotionSwitch, in: motion, 292, 3, 36, 22)
+        place(text("CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기", size: 9, color: PanelColor.secondary), in: motion, 16, 29, 313, 14)
 
         let intensity = GlassCard()
-        place(intensity, in: menuBarSettingsView, 0, 202, 344, 66)
-        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 16, 6, 240, 18)
+        place(intensity, in: menuBarSettingsView, 0, 218, 344, 58)
+        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 16, 3, 240, 18)
         motionIntensityValue.alignment = .right
-        place(motionIntensityValue, in: intensity, 278, 7, 50, 17)
-        place(motionIntensitySlider, in: intensity, 15, 26, 314, 20)
-        place(text("차분하게", size: 9, color: PanelColor.secondary), in: intensity, 17, 47, 140, 14)
+        place(motionIntensityValue, in: intensity, 278, 4, 50, 17)
+        place(motionIntensitySlider, in: intensity, 15, 23, 314, 18)
+        place(text("차분하게", size: 9, color: PanelColor.secondary), in: intensity, 17, 41, 140, 14)
         let energetic = text("활기차게", size: 9, color: PanelColor.secondary)
         energetic.alignment = .right
-        place(energetic, in: intensity, 186, 47, 141, 14)
+        place(energetic, in: intensity, 186, 41, 141, 14)
 
         let login = GlassCard()
-        place(login, in: menuBarSettingsView, 0, 276, 344, 42)
+        place(login, in: menuBarSettingsView, 0, 282, 344, 42)
         place(text("로그인 시 자동 실행", size: 11, weight: .semibold), in: login, 16, 12, 208, 18)
         loginLabel.alignment = .right
         loginLabel.font = .systemFont(ofSize: 9)
         place(loginLabel, in: login, 224, 13, 60, 16)
         place(loginSwitch, in: login, 292, 10, 36, 22)
 
-        place(text("설정은 바로 적용되고 다음 실행에도 유지돼요", size: 9, color: PanelColor.secondary), in: menuBarSettingsView, 3, 324, 338, 13)
-        place(text("macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다", size: 9, color: PanelColor.secondary), in: menuBarSettingsView, 3, 338, 338, 13)
+        place(text("설정은 바로 적용되고 다음 실행에도 유지돼요", size: 9, color: PanelColor.secondary), in: menuBarSettingsView, 3, 330, 338, 13)
+        place(text("macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다", size: 9, color: PanelColor.secondary), in: menuBarSettingsView, 3, 344, 338, 13)
         updateMenuBarControls()
     }
 
@@ -651,6 +679,8 @@ final class PanelController: NSViewController {
         updatingMenuBarControls = true
         defer { updatingMenuBarControls = false }
         animationStyleControl.selectItem(at: menuBarPreferences.style.rawValue)
+        animationStyleControl.isEnabled = menuBarPreferences.primaryMetric == .cpu
+        primaryMetricControl.selectItem(at: menuBarPreferences.primaryMetric.rawValue)
         menuBarMotionSwitch.state = menuBarPreferences.motionEnabled ? .on : .off
         motionIntensitySlider.doubleValue = menuBarPreferences.intensity
         motionIntensitySlider.isEnabled = menuBarPreferences.motionEnabled
@@ -660,8 +690,9 @@ final class PanelController: NSViewController {
 
     @objc private func changeMenuBarPreferences() {
         guard !updatingMenuBarControls,
-              let style = MenuBarAnimationStyle(rawValue: animationStyleControl.indexOfSelectedItem) else { return }
-        let preferences = MenuBarPreferences(style: style, motionEnabled: menuBarMotionSwitch.state == .on, intensity: motionIntensitySlider.doubleValue)
+              let style = MenuBarAnimationStyle(rawValue: animationStyleControl.indexOfSelectedItem),
+              let primaryMetric = MenuBarPrimaryMetric(rawValue: primaryMetricControl.indexOfSelectedItem) else { return }
+        let preferences = MenuBarPreferences(style: style, motionEnabled: menuBarMotionSwitch.state == .on, intensity: motionIntensitySlider.doubleValue, primaryMetric: primaryMetric)
         guard preferences != menuBarPreferences else { return }
         menuBarPreferences = preferences
         menuBarPreferences.save()
@@ -696,6 +727,30 @@ final class PanelController: NSViewController {
         thermalDetail.alignment = .right
         place(thermalDetail, in: thermal, 157, 13, 172, 16)
         place(cpuRanking, in: content, 0, 190, 344, 127)
+    }
+
+    private func buildGPU(in content: NSView) {
+        let usage = GlassCard()
+        place(usage, in: content, 0, 0, 344, 184)
+        place(symbol("square.grid.3x3.fill", color: PanelColor.violet), in: usage, 15, 14, 13, 13)
+        place(text("GPU 사용률", size: 11, weight: .semibold), in: usage, 35, 11, 170, 17)
+        place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 16, 31, 193, 14)
+        gpuPercent.alignment = .right
+        place(gpuPercent, in: usage, 213, 7, 115, 38)
+        gpuGraph.color = PanelColor.violet
+        place(gpuGraph, in: usage, 14, 58, 316, 88)
+        place(gpuDetail, in: usage, 16, 158, 313, 14)
+
+        let hardware = GlassCard()
+        place(hardware, in: content, 0, 192, 344, 125)
+        place(text("GPU 모델", size: 10, weight: .medium, color: PanelColor.secondary), in: hardware, 16, 12, 312, 16)
+        place(gpuModel, in: hardware, 15, 32, 313, 28)
+        let divider = NSBox()
+        divider.boxType = .separator
+        place(divider, in: hardware, 16, 70, 312, 1)
+        place(text("GPU 코어", size: 10, weight: .medium, color: PanelColor.secondary), in: hardware, 16, 91, 143, 16)
+        gpuCores.alignment = .right
+        place(gpuCores, in: hardware, 171, 84, 157, 28)
     }
 
     private func buildMemory(in content: NSView) {
@@ -804,7 +859,8 @@ final class PanelController: NSViewController {
     }
 
     @objc private func changeTab() {
-        tabDefaults.set(tabs.selectedSegment, forKey: tabDefaultsKey)
+        guard Self.tabIdentifiers.indices.contains(tabs.selectedSegment) else { return }
+        tabDefaults.set(Self.tabIdentifiers[tabs.selectedSegment], forKey: tabDefaultsKey)
         showSelectedTab()
     }
 
@@ -861,6 +917,7 @@ final class PanelController: NSViewController {
         latestSnapshot = sample
         if recordHistory {
             cpuHistory.append(sample.cpuUsage, at: sample.uptime)
+            gpuHistory.append(sample.resources.gpu.utilizationPercent, at: sample.uptime)
             uploadHistory.append(sample.upload, at: sample.time)
             downloadHistory.append(sample.download, at: sample.time)
             diskReadHistory.append(sample.resources.disk.readBytesPerSecond, at: sample.time)
@@ -885,11 +942,12 @@ final class PanelController: NSViewController {
         guard !showingMenuBarSettings else { return }
         switch tabs.selectedSegment {
         case 0: applyCPU(sample)
-        case 1:
+        case 1: applyGPU(sample.resources.gpu)
+        case 2:
             applyMemory(sample.resources.memory)
             applyMemoryProcesses(sample.resources.processes)
-        case 2: applyDisk(sample)
-        case 3: applyNetwork(sample)
+        case 3: applyDisk(sample)
+        case 4: applyNetwork(sample)
         default: break
         }
     }
@@ -910,6 +968,21 @@ final class PanelController: NSViewController {
         thermalDetail.setAccessibilityLabel(sample.thermal.detail)
         thermalDetail.textColor = sample.thermal.level > 0 ? sample.thermal.color : PanelColor.secondary
         applyCPUProcesses(sample.resources.processes)
+    }
+
+    private func applyGPU(_ gpu: GPUSnapshot) {
+        let percent = gpu.utilizationPercent.flatMap { value in
+            value.isFinite && (0...100).contains(value) ? value : nil
+        }
+        gpuPercent.stringValue = percent.map { String(format: "%.0f%%", $0) } ?? L10n.text("정보 없음")
+        gpuPercent.font = .monospacedDigitSystemFont(ofSize: percent == nil ? 12 : 30, weight: .medium)
+        gpuGraph.update(gpuHistory, percent: percent)
+        if percent == nil { gpuGraph.setAccessibilityValue(L10n.text("정보 없음")) }
+        gpuDetail.stringValue = L10n.text(percent == nil ? "이 Mac에서 GPU 사용률을 읽을 수 없습니다" : "GPU 전체 사용률 · 드라이버 보고값")
+        gpuDetail.toolTip = gpuDetail.stringValue
+        gpuModel.stringValue = gpu.model.flatMap { $0.isEmpty ? nil : $0 } ?? L10n.text("정보 없음")
+        gpuModel.toolTip = gpuModel.stringValue
+        gpuCores.stringValue = gpu.coreCount.flatMap { $0 > 0 ? L10n.format("%d코어", $0) : nil } ?? L10n.text("정보 없음")
     }
 
     private func applyMemory(_ memory: MemorySnapshot) {
@@ -1023,10 +1096,18 @@ extension PanelController {
         changeTab()
     }
     func probeToggleSettings() { toggleMenuBarSettings() }
+    func probeConfigureMenuBar(_ metric: MenuBarPrimaryMetric) {
+        menuBarPreferences.primaryMetric = metric
+        updateMenuBarControls()
+    }
+    var probePrimaryMetric: Int { primaryMetricControl.indexOfSelectedItem }
+    var probeCPUStyleEnabled: Bool { animationStyleControl.isEnabled }
     var probeStrings: [String: String] {
         ["cpu": cpuTemp.stringValue, "cpuPercent": cpuPercent.stringValue,
+         "gpuPercent": gpuPercent.stringValue, "gpuModel": gpuModel.stringValue,
+         "gpuCores": gpuCores.stringValue, "gpuDetail": gpuDetail.stringValue,
          "memory": memoryUsed.stringValue, "memoryTotal": memoryTotal.stringValue,
-         "processes": tabs.selectedSegment == 1 ? memoryRanking.probeCount : cpuRanking.probeCount,
+         "processes": tabs.selectedSegment == 2 ? memoryRanking.probeCount : cpuRanking.probeCount,
          "cpuProcesses": cpuRanking.probeCount, "memoryProcesses": memoryRanking.probeCount,
          "disk": diskFree.stringValue, "ssdTemperature": ssdTemp.stringValue,
          "upload": upValue.stringValue, "diskRead": diskRead.stringValue,
@@ -1049,7 +1130,10 @@ extension PanelController {
          diskWriteGraph.points.map { $0.0.timeIntervalSince1970 }]
     }
     var probeCPUHistoryRuns: [[CPUUsageHistory.Point]] { cpuHistory.runs }
+    var probeGPUHistoryRuns: [[CPUUsageHistory.Point]] { gpuHistory.runs }
+    var probeGPUHistoryTimes: [TimeInterval] { gpuHistory.points.map(\.time) }
     var probePresentedCPUHistoryTimes: [TimeInterval] { cpuGraph.probeTimes }
+    var probePresentedGPUHistoryTimes: [TimeInterval] { gpuGraph.probeTimes }
     var probeSurfaceFrames: [NSRect] { tabViews.map(\.frame) + [menuBarSettingsView.frame] }
 }
 #endif

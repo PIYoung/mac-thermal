@@ -1,5 +1,18 @@
 # Releases
 
+## v2.5.0 — 2026-10-19
+
+GPU monitoring and animated menu bar tiles. Build 17.
+
+- Add a GPU tab with driver-reported utilization, a fixed 0–100% graph for the last minute, model, and core count. Keep the 380×468pt panel.
+- Choose CPU or GPU for the first menu bar item in Settings; CPU remains the default and the menu bar width stays unchanged.
+- Represent GPU usage with an original 4×3 tile grid and a gentle brightness wave. The 12 cells are usage steps, not physical cores. Respect motion preferences, Reduce Motion, sleep, and the existing 8fps limit.
+- Read GPU metrics through IOKit without administrator access, a helper, new dependencies, or network requests. Unsupported fields remain unavailable rather than appearing as zero.
+- Preserve the selected resource tab when upgrading; keep language selection at the top of Settings.
+- Update all four language versions and synthetic native screenshots. Add GPU parsing, menu rendering, history, and migration checks.
+
+GPU readings were verified on Apple M4 Pro. The driver registry fields are undocumented and availability can vary with the chip and macOS version. GPU temperature and Neural Engine utilization are not included.
+
 ## v2.4.0 — 2026-10-15
 
 Resource-focused tabs and lower background overhead. Build 16.

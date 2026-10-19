@@ -3,6 +3,17 @@ import Foundation
 // Original translations for Mac Thermal. Entries are English, Japanese, Simplified Chinese.
 extension L10n {
     static let panelTranslations: [String: [String]] = [
+        "GPU 사용률": ["GPU usage", "GPU使用率", "GPU使用率"],
+        "GPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트": ["GPU usage over the last minute, vertical scale from 0 to 100 percent", "過去1分のGPU使用率グラフ、縦軸は0〜100パーセント", "最近1分钟的GPU使用率图表，纵轴为0到100%"],
+        "GPU 모델": ["GPU model", "GPUモデル", "GPU型号"],
+        "GPU 코어": ["GPU cores", "GPUコア", "GPU核心"],
+        "%d코어": ["%d cores", "%dコア", "%d核"],
+        "코어 수 확인 불가": ["Core count unavailable", "コア数を取得できません", "无法获取核心数"],
+        "GPU 전체 사용률 · 드라이버 보고값": ["Overall GPU usage · driver reported", "GPU全体の使用率 · ドライバ報告値", "GPU总体使用率 · 驱动报告值"],
+        "이 Mac에서 GPU 사용률을 읽을 수 없습니다": ["GPU usage is unavailable on this Mac", "このMacではGPU使用率を取得できません", "无法获取此Mac的GPU使用率"],
+        "메뉴바 표시": ["Menu bar metric", "メニューバー表示", "菜单栏指标"],
+        "메뉴바 첫 항목을 CPU 또는 GPU로 선택합니다": ["Choose CPU or GPU for the first menu bar item", "メニューバーの先頭をCPUまたはGPUにします", "选择CPU或GPU作为菜单栏首项"],
+        "CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기": ["CPU/GPU: load · Network: traffic · SSD: read/write", "CPU・GPUは使用率 · 通信は転送量 · SSDは読み書き", "CPU/GPU：负载 · 网络：流量 · SSD：读写速度"],
         "CPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트": ["CPU usage over the last minute, vertical scale from 0 to 100 percent", "過去1分のCPU使用率グラフ、縦軸は0〜100パーセント", "最近1分钟的CPU使用率图表，纵轴为0到100%"],
         "실제 측정값의 최근 1분 · 세로 눈금 0~100% 고정 · 빈 구간은 미측정 또는 잠자기": ["Last minute of measured values · fixed 0–100% scale · gaps indicate no measurement or sleep", "過去1分の実測値 · 縦軸は0〜100%固定 · 空白は未測定またはスリープ", "最近1分钟的实测值 · 纵轴固定为0–100% · 空白表示未测量或睡眠"],
         "현재 %.0f퍼센트": ["Currently %.0f percent", "現在%.0fパーセント", "当前%.0f%%"],
