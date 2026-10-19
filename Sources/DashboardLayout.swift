@@ -21,8 +21,8 @@ struct DashboardLayout {
         let companionOrigin: NSPoint?
         let bodySize: NSSize
         if let companion, horizontal {
-            primaryOrigin = NSPoint(x: inset, y: inset)
-            companionOrigin = NSPoint(x: inset + primary.width + gap, y: inset)
+            primaryOrigin = NSPoint(x: inset + companion.width + gap, y: inset)
+            companionOrigin = NSPoint(x: inset, y: inset)
             bodySize = NSSize(width: primary.width + gap + companion.width, height: max(primary.height, companion.height))
         } else if let companion {
             primaryOrigin = NSPoint(x: inset, y: inset)

@@ -101,7 +101,7 @@ Use the top-right Settings button to change the language, menu bar motion, and a
 
 ## Compact panels and Codex activity
 
-The unreleased v2.7 resource surface is 340×420pt. While Codex is running, a separate 300×420pt companion appears to its right with a 12pt gap and a fixed opening position. Narrow screens use a vertically scrollable pair.
+The unreleased v2.7 resource surface is 340×420pt. While Codex is running, a separate 300×420pt companion appears to its left with a 12pt gap and a fixed opening position. Narrow screens use a vertically scrollable pair.
 
 While Codex is running, an optional icon-only robot sits to the left of the resource menu items. It types when a new token record is detected and stops after 10 seconds without another record. This is recorded activity, not live consumption or completion status. Token totals and last-record time remain in the panel and tooltip.
 

@@ -210,8 +210,8 @@ enum PanelUpdatesProbe {
             precondition(window.probeContainsCanvasPoint(NSPoint(x: surface.midX, y: surface.midY)))
         }
         precondition(!window.probeContainsCanvasPoint(NSPoint(x: horizontal.primarySurface.midX, y: 4)))
-        precondition(horizontal.companionSurface!.minX == horizontal.primarySurface.maxX + 12, "Codex stays on the right")
-        let gapX = (horizontal.primarySurface.maxX + horizontal.companionSurface!.minX) / 2
+        precondition(horizontal.companionSurface!.maxX + 12 == horizontal.primarySurface.minX, "Codex stays on the left")
+        let gapX = (horizontal.companionSurface!.maxX + horizontal.primarySurface.minX) / 2
         precondition(!window.probeContainsCanvasPoint(NSPoint(x: gapX, y: 100)), "The inter-panel gap must dismiss the pair")
         let fixedFrame = window.frame
         panel.apply(sample(73))

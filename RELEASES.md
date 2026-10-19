@@ -2,16 +2,16 @@
 
 ## v2.7.0 — Unreleased
 
-Compact resource surfaces and an optional local Codex companion. Build 27.
+Compact resource surfaces and an optional local Codex companion. Build 28.
 
 - Relayout every resource page, settings and disk cleanup in a 340×420pt surface, retaining readable type and existing controls.
-- Show a separate 300×420pt Codex surface to the right of the resource panel when Codex is running. Keep both surfaces in one presentation host with a fixed opening position, a 12pt visible gap and pass-through shadow margins; narrow displays use a vertically scrollable pair.
+- Show a separate 300×420pt Codex surface to the left of the resource panel when Codex is running. Keep both surfaces in one presentation host with a fixed opening position, a 12pt visible gap and pass-through shadow margins; narrow displays use a vertically scrollable pair.
 - Show Codex app runtime from macOS launch metadata. With explicit opt-in, read model identifiers, token counters and timestamps from local Codex session records. Display UTC-today totals and model shares for this Mac; account quota, API billing and verified work duration are unavailable.
 - Keep record reading off by default, bounded and read-only. Turning it off stops reads and clears memory. Source files contain conversations, but bodies, commands, credentials and instructions are never retained, logged or transmitted. No account request, CLI helper, new server, Codex setting change, API key or model generation is added.
 - Use validated counter deltas and mark incomplete scans. Keep aggregates in memory and leave missing values unavailable.
 
 - Add an independently selectable, icon-only Codex robot at the left of the resource menu items while the desktop app is running. Keep token totals and last-record age in the panel and tooltip. The robot types after newly observed recent usage records and stops after 10 seconds without another record; initial scans, app runtime and old catch-up records never imply live task status. Respect motion-off, Reduce Motion and sleep.
-- Migrate existing menu selections while adding the new Codex item; preserve subsequent opt-outs. Validate all 32 selections, both appearances, four languages and fixed right-side companion ordering.
+- Migrate existing menu selections while adding the new Codex item; preserve subsequent opt-outs. Validate all 32 selections, both appearances, four languages and fixed left-side companion ordering.
 
 ## v2.6.0 — 2026-10-19
 
