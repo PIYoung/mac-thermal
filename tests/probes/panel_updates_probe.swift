@@ -156,9 +156,9 @@ enum PanelUpdatesProbe {
         }
         var canvasCount = 0
         func findCanvases(_ node: NSView) {
-            if node.frame.width == 344 && ((280...320).contains(node.frame.height) || node.frame.height == 363) {
+            if node.frame.width == 308 && (node.frame.height == 277 || node.frame.height == 310) {
                 precondition(node.bounds.size == node.frame.size)
-                precondition(node.frame.maxY <= 429, "Resource content must remain above the footer divider")
+                precondition(node.frame.maxY <= 379, "Resource content must remain above the footer divider")
                 if !node.isHidden { canvasCount += 1; visit(node) }
             } else {
                 node.subviews.forEach(findCanvases)
@@ -166,6 +166,80 @@ enum PanelUpdatesProbe {
         }
         findCanvases(root)
         precondition(canvasCount == 1, "Exactly one resource or settings content canvas must be visible")
+    }
+
+    private static func surfaceHitChecks() {
+        let container = FlippedView(frame: NSRect(x: 0, y: 0, width: 800, height: 520))
+        let group = FlippedView(frame: NSRect(x: 0, y: 0, width: 800, height: 520))
+        container.addSubview(group)
+        let firstGlass = FlippedView()
+        let secondGlass = FlippedView()
+        let firstButton = NSButton(frame: NSRect(x: 328, y: 100, width: 12, height: 20))
+        let secondButton = NSButton(frame: NSRect(x: 0, y: 100, width: 18, height: 20))
+        firstGlass.addSubview(firstButton)
+        secondGlass.addSubview(secondButton)
+        let first = PanelSurfaceHost(glass: firstGlass)
+        let second = PanelSurfaceHost(glass: secondGlass, surfaceSize: NSSize(width: 300, height: 420))
+        first.frame.origin = NSPoint(x: 60, y: 40)
+        second.frame.origin = NSPoint(x: 412, y: 40)
+        group.addSubview(first)
+        group.addSubview(second)
+        precondition(first.frame.size == NSSize(width: 388, height: 468))
+        precondition(second.frame.size == NSSize(width: 348, height: 468))
+        precondition(first.hitTest(NSPoint(x: 65, y: 100)) == nil, "Transparent margin must not consume sibling input")
+        precondition(second.hitTest(NSPoint(x: 420, y: 174)) == nil, "The front host's left shadow overlaps its sibling body")
+        precondition(group.hitTest(NSPoint(x: 420, y: 174)) === firstButton,
+            "A control under the sibling shadow must receive the original click")
+        precondition(group.hitTest(NSPoint(x: 440, y: 174)) === secondButton,
+            "Both panel surfaces must remain interactive")
+        second.isHidden = true
+        precondition(group.hitTest(NSPoint(x: 420, y: 174)) === firstButton)
+        print("Shared glass hosts passed: independent sizes, parent-relative coordinates, overlapping shadow pass-through, sibling controls and hidden host")
+    }
+
+    private static func groupedWindowChecks(defaults: UserDefaults) {
+        let panel = PanelController(defaults: defaults)
+        let companion = NSViewController()
+        companion.view = PanelSurfaceHost(glass: FlippedView(), surfaceSize: NSSize(width: 300, height: 420))
+        let window = DashboardWindow(controller: panel, companion: companion)
+        let anchor = NSRect(x: 1_100, y: 880, width: 80, height: 24)
+        let horizontal = window.probeConfigure(anchor: anchor,
+            screen: NSRect(x: 0, y: 0, width: 1_440, height: 880), companion: true)
+        precondition(!window.isVisible && !horizontal.scrollsVertically && !companion.view.isHidden)
+        for surface in [horizontal.primarySurface, horizontal.companionSurface!] {
+            precondition(window.probeContainsCanvasPoint(NSPoint(x: surface.midX, y: surface.midY)))
+        }
+        precondition(!window.probeContainsCanvasPoint(NSPoint(x: horizontal.primarySurface.midX, y: 4)))
+        let gapX = (horizontal.companionSurface!.maxX + horizontal.primarySurface.minX) / 2
+        precondition(!window.probeContainsCanvasPoint(NSPoint(x: gapX, y: 100)), "The inter-panel gap must dismiss the pair")
+        let fixedFrame = window.frame
+        panel.apply(sample(73))
+        panel.probeToggleSettings()
+        panel.probeToggleSettings()
+        precondition(window.frame == fixedFrame, "Samples and settings must never move an open pair")
+
+        let stacked = window.probeConfigure(anchor: NSRect(x: 220, y: 600, width: 80, height: 24),
+            screen: NSRect(x: 0, y: 0, width: 600, height: 600), companion: true)
+        precondition(stacked.scrollsVertically)
+        window.probeScroll(to: NSPoint(x: 0, y: 200))
+        for surface in [stacked.primarySurface, stacked.companionSurface!] {
+            precondition(window.probeContainsCanvasPoint(NSPoint(x: surface.midX, y: surface.midY)),
+                "Glass hit testing must convert the scrolled document coordinates")
+            precondition(!window.probeContainsCanvasPoint(NSPoint(x: 4, y: surface.midY)),
+                "Scrolling must not turn the transparent margin into an interactive surface")
+        }
+        let gapY = (stacked.primarySurface.maxY + stacked.companionSurface!.minY) / 2
+        precondition(!window.probeContainsCanvasPoint(NSPoint(x: 100, y: gapY)))
+        precondition(window.probeContainsCanvasPoint(NSPoint(x: stacked.documentSize.width - 4, y: gapY)),
+            "The actual overlay scroller remains interactive in the right margin")
+        _ = window.probeConfigure(anchor: anchor,
+            screen: NSRect(x: 0, y: 0, width: 1_440, height: 880), companion: false)
+        precondition(companion.view.isHidden && panel.probeSelectedTab == 0)
+        _ = window.probeConfigure(anchor: anchor,
+            screen: NSRect(x: 0, y: 0, width: 1_440, height: 880), companion: true)
+        precondition(!companion.view.isHidden && !window.isVisible,
+            "Resource-only and paired layouts must safely reparent the same views without ordering a window")
+        print("Paired dashboard passed: fixed updates/settings, sibling glass hits, gap/margin dismissal after scrolling, and safe layout reattachment")
     }
 
     private static func regressionChecks(defaults: UserDefaults) {
@@ -236,7 +310,11 @@ enum PanelUpdatesProbe {
         let timesBeforeLanguage = panel.probeHistoryTimes
         for language in AppLanguage.allCases {
             L10n.setLanguage(language, defaults: defaults)
-            precondition(panel.probeTabLabels == ["CPU", "GPU", L10n.text("메모리"), "SSD", L10n.text("네트워크")])
+            precondition(panel.probeTabLabels == ["CPU", "GPU", L10n.text("메모리"), "SSD", L10n.text("통신")])
+            for label in panel.probeTabLabels {
+                let measured = (label as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]).width
+                precondition(measured <= 308 / 5 - 8, "Compact tabs must fit at the original 11pt font in every language: \(label)")
+            }
             for tab in 0..<5 {
                 panel.probeSelectTab(tab)
                 panel.view.layoutSubtreeIfNeeded()
@@ -285,7 +363,7 @@ enum PanelUpdatesProbe {
         precondition(panel.probePresentedCPUHistoryTimes == panel.probeHistoryTimes[0])
         precondition(panel.probeCPUHistoryRuns.count == 1 && panel.probeCPUHistoryRuns[0].count == 1)
         precondition(window.frame == initialFrame && panel.probeSurfaceFrames == initialSurfaceFrames)
-        precondition(PanelController.surfaceSize == NSSize(width: 380, height: 468))
+        precondition(PanelController.surfaceSize == NSSize(width: 340, height: 420))
         print("Resource tab migration/persistence, embedded rankings, selected-tab-only updates, hidden histories, settings/reopen, four-language bounds, and fixed frame checks passed")
     }
 
@@ -389,6 +467,8 @@ enum PanelUpdatesProbe {
         app.setActivationPolicy(.prohibited)
         #if PANEL_UPDATES_PROBE
         selectionChecks()
+        surfaceHitChecks()
+        withDefaults { defaults in groupedWindowChecks(defaults: defaults) }
         withDefaults { defaults in
             L10n.setLanguage(.korean, defaults: defaults)
             gpuChecks(defaults: defaults)

@@ -97,7 +97,15 @@ Click the menu bar to open a fixed-size panel. The CPU tab opens first; later, t
 <sub>All previews use synthetic example data. Glass effects may vary with the macOS version.</sub>
 
 **Korean by default · 4 languages · Light and dark appearance · Uptime · Launch at login**<br>
-Use the top-right Settings button to change the language, menu bar motion, and automatic startup. No accounts, ads, analytics, or server uploads. Graph history stays in memory.
+Use the top-right Settings button to change the language, menu bar motion, and automatic startup. The resource monitor needs no account and adds no ads, analytics, or server uploads. Graph history stays in memory.
+
+## Compact panels and Codex activity
+
+The unreleased v2.7 resource surface is 340×420pt. While Codex is running, a separate 300×420pt companion appears beside it with a 12pt gap and a fixed opening position. Narrow screens use a vertically scrollable pair.
+
+App runtime comes from the Codex launch date provided by macOS. The companion reads only numeric usage and runtime metadata from an already-running official local shared Codex server. Account daily tokens (UTC) are separate from activity time and model counters observed during this connection. Unsupported values remain unavailable. No extra model requests or API-key entry are added. Credentials, conversation bodies and configuration files are not read; counters remain in memory. Existing Codex services may be contacted by Codex to answer account-usage queries.
+
+Codex installations without the shared local server show an unavailable state. Mac Thermal never starts a server or changes Codex settings or permissions automatically; connecting a new transport needs separate review. The resource gallery above illustrates the previous release.
 
 ## Disk cleanup
 

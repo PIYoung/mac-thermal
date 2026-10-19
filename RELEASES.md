@@ -1,5 +1,15 @@
 # Releases
 
+## v2.7.0 — Unreleased
+
+Compact resource surfaces and an optional local Codex companion. Build 25.
+
+- Relayout every resource page, settings and disk cleanup in a 340×420pt surface, retaining readable type and existing controls.
+- Show a separate 300×420pt Codex surface beside the resource panel when Codex is running. Keep both surfaces in one presentation host with a fixed opening position, a 12pt visible gap and pass-through shadow margins; narrow displays use a vertically scrollable pair.
+- Show Codex app runtime from macOS launch metadata even without a shared API. Display supported numeric account usage, quota/reset information and connection-observed activity/model usage through an existing official local Codex control socket. Unknown values remain unavailable. No inference request, paid API key, new account or telemetry service is added.
+- Keep the optional connection read-only: never open conversation histories, credentials or configuration files, start/resume a turn, approve tools, create a server, enable a daemon or change Codex settings. A current-user socket and trusted installed CLI are required; otherwise show an explicit unavailable connection state.
+- Session model totals use validated counter deltas after the initial baseline. UTC account daily totals and connection-observed activity are labeled separately. Monitoring values stay in memory and are cleared across sessions.
+
 ## v2.6.0 — 2026-10-19
 
 Choose individual menu bar metrics and review disk cleanup candidates. Build 24.

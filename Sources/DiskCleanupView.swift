@@ -226,7 +226,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             button.font = .systemFont(ofSize: 10, weight: .medium)
         }
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("cleanup-file"))
-        column.width = 324
+        column.width = 288
         table.addTableColumn(column)
         table.headerView = nil
         table.backgroundColor = .clear
@@ -254,20 +254,23 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     override func layout() {
         super.layout()
         back.frame = NSRect(x: 0, y: 0, width: 57, height: 24)
-        folder.frame = NSRect(x: 64, y: 5, width: folderURL == nil ? 276 : 244, height: 14)
-        changeFolder.frame = NSRect(x: 316, y: 1, width: 25, height: 23)
-        summary.frame = NSRect(x: 4, y: 26, width: 336, height: 17)
-        body.frame = NSRect(x: 0, y: 45, width: 344, height: 208)
-        message.frame = NSRect(x: 16, y: banner.isHidden ? 15 : 37, width: 312, height: banner.isHidden ? 66 : 44)
-        detail.frame = NSRect(x: 16, y: 91, width: 312, height: 98)
-        progressBar.frame = NSRect(x: 16, y: 81, width: 312, height: 6)
-        banner.frame = NSRect(x: 16, y: 5, width: 312, height: 26)
-        scroll.frame = NSRect(x: 8, y: banner.isHidden ? 4 : 34, width: 328, height: banner.isHidden ? 200 : 170)
+        folder.frame = NSRect(x: 64, y: 5, width: folderURL == nil ? 240 : 208, height: 14)
+        changeFolder.frame = NSRect(x: 280, y: 1, width: 25, height: 23)
+        summary.frame = NSRect(x: 4, y: 26, width: 300, height: 17)
+        body.frame = NSRect(x: 0, y: 45, width: 308, height: 168)
+        let bannerHeight: CGFloat = stage == .result ? 39 : 26
+        let listTop: CGFloat = banner.isHidden ? 4 : bannerHeight + 8
+        message.frame = NSRect(x: 16, y: banner.isHidden ? 12 : bannerHeight + 12, width: 276, height: banner.isHidden ? 56 : 40)
+        let detailTop = max(86, message.frame.maxY + 6)
+        detail.frame = NSRect(x: 16, y: detailTop, width: 276, height: 156 - detailTop)
+        progressBar.frame = NSRect(x: 16, y: 73, width: 276, height: 6)
+        banner.frame = NSRect(x: 16, y: 5, width: 276, height: bannerHeight)
+        scroll.frame = NSRect(x: 8, y: listTop, width: 292, height: 164 - listTop)
         table.tableColumns.first?.width = scroll.contentSize.width
         table.frame.size.width = scroll.contentSize.width
-        notice.frame = NSRect(x: 4, y: 260, width: 336, height: 28)
-        secondary.frame = NSRect(x: 0, y: 293, width: 103, height: 24)
-        primary.frame = NSRect(x: 111, y: 293, width: 233, height: 24)
+        notice.frame = NSRect(x: 4, y: 220, width: 300, height: 28)
+        secondary.frame = NSRect(x: 0, y: 253, width: 92, height: 24)
+        primary.frame = NSRect(x: 100, y: 253, width: 208, height: 24)
     }
 
     func refreshLanguage() { render(animated: false) }
@@ -361,9 +364,9 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         case .review:
             candidateRows = plan?.candidates ?? []
             banner.isHidden = false
-            banner.stringValue = L10n.text("생성·수정 모두 30일 이상 · 설치 파일 또는 100MB 이상")
+            banner.stringValue = L10n.text("30일 이상 · 설치 파일 / 100MB 이상")
             if let plan, !plan.cancelled && !plan.truncated && !stopRequested {
-                banner.stringValue += "\n" + L10n.text("추천 자동 선택: 오래된 설치 파일만 · 대용량 파일은 직접 선택")
+                banner.stringValue += "\n" + L10n.text("추천: 설치 파일만 · 대용량 파일 직접 선택")
             }
             let chosen = candidateRows.filter { selectedIDs.contains($0.id) }
             summary.stringValue = L10n.format("선택 %d개 · 정리 대상 %@", chosen.count, cleanupBytes(totalBytes(chosen)))
@@ -422,7 +425,8 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         if pickerInFlight { primary.isEnabled = false; secondary.isEnabled = false }
         updatePrimaryAppearance()
         table.reloadData()
-        table.frame.size.height = max(banner.isHidden ? 200 : 170, CGFloat(candidateRows.count) * 72)
+        banner.maximumNumberOfLines = stage == .result ? 3 : 2
+        table.frame.size.height = max(160, CGFloat(candidateRows.count) * 72)
         needsLayout = true
         if animated, window?.isVisible == true, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             let fade = CABasicAnimation(keyPath: "opacity")

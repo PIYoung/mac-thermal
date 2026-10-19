@@ -48,6 +48,19 @@ enum DiskCleanupUIProbe {
             if !(child is NSControl), !(child is NSScrollView) { checkBounds(child) }
         }
     }
+    private static func checkPolicyTextFits(_ node: NSView) {
+        guard !node.isHidden else { return }
+        if let field = node as? NSTextField, field.maximumNumberOfLines > 1, !field.stringValue.isEmpty {
+            let content = NSAttributedString(string: field.stringValue,
+                attributes: [.font: field.font ?? NSFont.systemFont(ofSize: 9)])
+            let measured = content.boundingRect(with: NSSize(width: max(1, field.frame.width - 4), height: 1_000),
+                options: [.usesLineFragmentOrigin, .usesFontLeading])
+            precondition(ceil(measured.height) <= field.frame.height + 1,
+                "Safety and result text must fit without hiding a line: \(field.stringValue), \(measured.height) > \(field.frame.height)")
+        }
+        if !(node is NSControl), !(node is NSScrollView) { node.subviews.forEach(checkPolicyTextFits) }
+    }
+
     private static func automaticEntryChecks() throws {
         let manager = FileManager.default
         let root = URL(fileURLWithPath: "/private/tmp/MacThermalAutoEntry-" + UUID().uuidString, isDirectory: true)
@@ -77,7 +90,7 @@ enum DiskCleanupUIProbe {
             fixture.recordExecution()
             return DiskCleanupResult(items: [], cancelled: false)
         })
-        let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 344, height: 317), operations: operations, defaults: defaults)
+        let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), operations: operations, defaults: defaults)
         precondition(fixture.counts.0 == 0, "Constructing the view must never scan")
         view.onEntry()
         precondition(fixture.counts.0 == 0, "No approved folder means no scan and no Downloads fallback")
@@ -175,7 +188,7 @@ enum DiskCleanupUIProbe {
                 return DiskCleanupResult(items: items, cancelled: cancellation.isCancelled)
             })
             operations.availableBytes = { _ in 2_000_000_000 }
-            let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 344, height: 317), operations: operations, defaults: defaults)
+            let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), operations: operations, defaults: defaults)
             view.probeSetPlan(partialPlan)
             view.layoutSubtreeIfNeeded()
             precondition(visibleLabels(view).contains(where: { $0.contains(L10n.text("검사 한도에 도달해 일부 항목만 표시합니다")) }),
@@ -183,7 +196,8 @@ enum DiskCleanupUIProbe {
             view.probeSetPlan(plan)
             view.layoutSubtreeIfNeeded()
             checkBounds(view)
-            precondition(view.probeHeaderHeight <= 45 && view.probeListHeight >= 170,
+            checkPolicyTextFits(view)
+            precondition(view.probeHeaderHeight <= 45 && view.probeListHeight >= 130,
                 "Removing the duplicate title must reclaim list space")
             precondition(!visibleLabels(view).contains(L10n.text("디스크 정리")),
                 "Cleanup must not repeat the title inside its subpage")
@@ -219,7 +233,8 @@ enum DiskCleanupUIProbe {
                 "Current available space must be reported separately from moved bytes")
             view.layoutSubtreeIfNeeded()
             checkBounds(view)
-            precondition(view.frame.size == NSSize(width: 344, height: 317))
+            checkPolicyTextFits(view)
+            precondition(view.frame.size == NSSize(width: 308, height: 277))
         }
 
         defaults.set("ssd", forKey: "dashboardSelectedResourceTabV4")
@@ -250,8 +265,9 @@ enum DiskCleanupUIProbe {
             precondition(panel.probeDiskCleanupButtonTitle == L10n.text("디스크 정리"))
             panel.view.layoutSubtreeIfNeeded()
             checkBounds(cleanup)
+            checkPolicyTextFits(cleanup)
         }
-        precondition(window.frame == initialFrame && PanelController.surfaceSize == NSSize(width: 380, height: 468))
+        precondition(window.frame == initialFrame && PanelController.surfaceSize == NSSize(width: 340, height: 420))
         let remainingFiles = try fileManager.contentsOfDirectory(atPath: root.path)
         precondition(remainingFiles.count == 12,
             "UI probes must never move or remove their fixture files")

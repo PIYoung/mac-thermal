@@ -119,14 +119,15 @@ class GlassCard: FlippedView {
     }
 }
 
-private final class PanelSurfaceHost: FlippedView {
+final class PanelSurfaceHost: FlippedView {
     private let surfaceShadow = NSView()
+    let surfaceFrame: NSRect
 
-    init(glass: NSView) {
-        super.init(frame: NSRect(origin: .zero, size: PanelController.size))
-        wantsLayer = true
+    init(glass: NSView, surfaceSize: NSSize = PanelController.surfaceSize) {
         let inset = PanelController.surfaceInset
-        let surfaceFrame = NSRect(origin: NSPoint(x: inset, y: inset), size: PanelController.surfaceSize)
+        surfaceFrame = NSRect(origin: NSPoint(x: inset, y: inset), size: surfaceSize)
+        super.init(frame: NSRect(origin: .zero, size: NSSize(width: surfaceSize.width + inset * 2, height: surfaceSize.height + inset * 2)))
+        wantsLayer = true
         surfaceShadow.frame = surfaceFrame
         surfaceShadow.wantsLayer = true
         if let shadow = surfaceShadow.layer {
@@ -135,7 +136,7 @@ private final class PanelSurfaceHost: FlippedView {
             shadow.shadowOpacity = 0.18
             shadow.shadowRadius = 10
             shadow.shadowOffset = CGSize(width: 0, height: -3)
-            shadow.shadowPath = CGPath(roundedRect: NSRect(origin: .zero, size: PanelController.surfaceSize), cornerWidth: PanelController.cornerRadius, cornerHeight: PanelController.cornerRadius, transform: nil)
+            shadow.shadowPath = CGPath(roundedRect: NSRect(origin: .zero, size: surfaceSize), cornerWidth: PanelController.cornerRadius, cornerHeight: PanelController.cornerRadius, transform: nil)
         }
         addSubview(surfaceShadow)
         glass.frame = surfaceFrame
@@ -143,6 +144,12 @@ private final class PanelSurfaceHost: FlippedView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = superview.map { convert(point, from: $0) } ?? point
+        guard !isHidden, alphaValue > 0, surfaceFrame.contains(local) else { return nil }
+        return super.hitTest(point)
+    }
 }
 
 private final class UsageBar: FlippedView {
@@ -314,26 +321,26 @@ private final class ProcessRankingCard: GlassCard {
 
     init(title: String, subtitle: String, icon: String, accent: NSColor) {
         super.init(frame: .zero)
-        place(symbol(icon, color: accent), in: self, 14, 11, 13, 13)
-        place(text(title, size: 11, weight: .semibold), in: self, 34, 9, 184, 17)
+        place(symbol(icon, color: accent), in: self, 12, 9, 13, 13)
+        place(text(title, size: 11, weight: .semibold), in: self, 32, 7, 162, 17)
         let note = text(subtitle, size: 9, color: PanelColor.secondary)
         note.alignment = .right
-        place(note, in: self, 220, 11, 109, 14)
+        place(note, in: self, 200, 9, 94, 14)
         for index in 0..<3 {
-            let y = CGFloat(35 + index * 25)
+            let y = CGFloat(31 + index * 23)
             ranks[index].alignment = .center
-            place(ranks[index], in: self, 12, y + 1, 16, 16)
-            place(names[index], in: self, 37, y, 189, 18)
+            place(ranks[index], in: self, 10, y + 1, 16, 16)
+            place(names[index], in: self, 33, y, 157, 18)
             values[index].alignment = .right
-            place(values[index], in: self, 230, y, 99, 18)
+            place(values[index], in: self, 196, y, 98, 18)
             if index < 2 {
                 let separator = NSBox()
                 separator.boxType = .separator
-                place(separator, in: self, 37, y + 22, 292, 1)
+                place(separator, in: self, 33, y + 21, 261, 1)
             }
         }
-        place(empty, in: self, 16, 61, 311, 18)
-        place(count, in: self, 16, 110, 313, 12)
+        place(empty, in: self, 14, 54, 280, 18)
+        place(count, in: self, 14, 104, 280, 12)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
@@ -364,7 +371,7 @@ private final class ProcessRankingCard: GlassCard {
 }
 
 final class PanelController: NSViewController {
-    static let surfaceSize = NSSize(width: 380, height: 468)
+    static let surfaceSize = NSSize(width: 340, height: 420)
     static let surfaceInset: CGFloat = 24
     static let size = NSSize(width: surfaceSize.width + 2 * surfaceInset, height: surfaceSize.height + 2 * surfaceInset)
     static let cornerRadius: CGFloat = 22
@@ -499,7 +506,7 @@ final class PanelController: NSViewController {
     private let tabDefaults: UserDefaults
     private let tabDefaultsKey = "dashboardSelectedResourceTabV4"
     private static let tabIdentifiers = ["cpu", "gpu", "memory", "ssd", "network"]
-    private static let tabLabels = ["CPU", "GPU", "메모리", "SSD", "네트워크"]
+    private static let tabLabels = ["CPU", "GPU", "메모리", "SSD", "통신"]
     init(defaults: UserDefaults = .standard) {
         tabDefaults = defaults
         menuBarPreferences = .load(defaults: defaults)
@@ -575,40 +582,40 @@ final class PanelController: NSViewController {
         }
         brand.imageScaling = .scaleProportionallyDown
         brand.setAccessibilityElement(false)
-        place(brand, in: canvas, 16, 19, 36, 36)
-        place(text("Mac Thermal", size: 15, weight: .semibold), in: canvas, 60, 19, 174, 20)
-        place(uptimeLabel, in: canvas, 60, 41, 174, 14)
+        place(brand, in: canvas, 16, 13, 30, 30)
+        place(text("Mac Thermal", size: 15, weight: .semibold), in: canvas, 54, 11, 226, 20)
+        place(uptimeLabel, in: canvas, 54, 32, 226, 14)
         localizedToolTip(uptimeLabel, "잠자기 시간을 포함한 부팅 후 경과 시간 · 1분 단위")
-        place(menuBarSettingsButton, in: canvas, 338, 23, 24, 24)
-        place(tabs, in: canvas, 18, 66, 344, 24)
+        place(menuBarSettingsButton, in: canvas, 300, 16, 24, 24)
+        place(tabs, in: canvas, 16, 55, 308, 24)
         tabViews = Self.tabIdentifiers.map { _ in
             let content = FlippedView()
             content.wantsLayer = true
-            place(content, in: canvas, 18, 100, 344, 317)
+            place(content, in: canvas, 16, 88, 308, 277)
             return content
         }
         buildCPU(in: tabViews[0])
         buildGPU(in: tabViews[1])
         buildMemory(in: tabViews[2])
-        place(diskMonitorView, in: tabViews[3], 0, 0, 344, 317)
+        place(diskMonitorView, in: tabViews[3], 0, 0, 308, 277)
         buildDisk(in: diskMonitorView)
         buildNetwork(in: tabViews[4])
-        place(menuBarSettingsView, in: canvas, 18, 66, 344, 363)
+        place(menuBarSettingsView, in: canvas, 16, 55, 308, 310)
         buildMenuBarSettings()
         showSelectedTab()
 
         let footerLine = NSBox()
         footerLine.boxType = .separator
-        place(footerLine, in: canvas, 20, 429, 340, 1)
-        place(updated, in: canvas, 21, 437, 240, 15)
+        place(footerLine, in: canvas, 16, 379, 308, 1)
+        place(updated, in: canvas, 17, 388, 238, 15)
         let refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: L10n.text("새로고침")) ?? NSImage(), target: self, action: #selector(refreshNow))
         let quitButton = NSButton(image: NSImage(systemSymbolName: "power", accessibilityDescription: L10n.text("종료")) ?? NSImage(), target: self, action: #selector(quitApp))
-        for (button, title, x) in [(refreshButton, "지금 새로고침", CGFloat(306)), (quitButton, "Mac Thermal 종료", CGFloat(339))] {
+        for (button, title, x) in [(refreshButton, "지금 새로고침", CGFloat(267)), (quitButton, "Mac Thermal 종료", CGFloat(300))] {
             button.isBordered = false
             button.contentTintColor = PanelColor.secondary
             localizedToolTip(button, title)
             localizedAccessibilityLabel(button, title)
-            place(button, in: canvas, x, 434, 21, 21)
+            place(button, in: canvas, x, 385, 21, 21)
         }
         languageObserver = NotificationCenter.default.addObserver(forName: .appLanguageDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.refreshLanguage()
@@ -644,53 +651,52 @@ final class PanelController: NSViewController {
 
     private func buildMenuBarSettings() {
         let language = GlassCard()
-        place(language, in: menuBarSettingsView, 0, 0, 344, 44)
-        place(symbol("globe", color: PanelColor.blue), in: language, 15, 15, 14, 14)
-        place(text("언어", size: 11, weight: .semibold), in: language, 36, 13, 95, 18)
-        place(languageControl, in: language, 139, 8, 192, 28)
+        place(language, in: menuBarSettingsView, 0, 0, 308, 40)
+        place(symbol("globe", color: PanelColor.blue), in: language, 13, 13, 14, 14)
+        place(text("언어", size: 11, weight: .semibold), in: language, 34, 11, 66, 18)
+        place(languageControl, in: language, 107, 6, 188, 28)
 
         let metrics = GlassCard()
-        place(metrics, in: menuBarSettingsView, 0, 50, 344, 58)
-        place(symbol("menubar.rectangle", color: PanelColor.blue), in: metrics, 15, 9, 14, 14)
-        place(text("메뉴바 표시", size: 11, weight: .semibold), in: metrics, 36, 7, 290, 18)
+        place(metrics, in: menuBarSettingsView, 0, 46, 308, 50)
+        place(symbol("menubar.rectangle", color: PanelColor.blue), in: metrics, 13, 7, 14, 14)
+        place(text("메뉴바 표시", size: 11, weight: .semibold), in: metrics, 34, 5, 260, 18)
         for (index, metric) in MenuBarMetric.allCases.enumerated() {
             guard let control = metricControls[metric] else { continue }
-            place(control, in: metrics, 15 + CGFloat(index) * 66, 30, index == 3 ? 116 : 66, 20)
+            place(control, in: metrics, 13 + CGFloat(index) * 56, 26, index == 3 ? 114 : 56, 20)
         }
 
         let style = GlassCard()
-        place(style, in: menuBarSettingsView, 0, 114, 344, 54)
-        place(symbol("waveform", color: PanelColor.blue), in: style, 15, 7, 14, 14)
-        place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 36, 5, 290, 18)
-        place(animationStyleControl, in: style, 13, 25, 318, 26)
+        place(style, in: menuBarSettingsView, 0, 102, 308, 46)
+        place(symbol("waveform", color: PanelColor.blue), in: style, 13, 5, 14, 14)
+        place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 34, 3, 260, 18)
+        place(animationStyleControl, in: style, 11, 20, 286, 26)
 
         let motion = GlassCard()
-        place(motion, in: menuBarSettingsView, 0, 174, 344, 44)
-        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 16, 3, 265, 18)
-        place(menuBarMotionSwitch, in: motion, 292, 1, 36, 22)
-        place(text("CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기", size: 9, color: PanelColor.secondary), in: motion, 16, 25, 313, 14)
+        place(motion, in: menuBarSettingsView, 0, 154, 308, 40)
+        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 14, 11, 238, 18)
+        place(menuBarMotionSwitch, in: motion, 260, 9, 36, 22)
+        localizedToolTip(motion, "CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기")
+        localizedToolTip(menuBarMotionSwitch, "macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다")
 
         let intensity = GlassCard()
-        place(intensity, in: menuBarSettingsView, 0, 224, 344, 52)
-        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 16, 1, 240, 18)
+        place(intensity, in: menuBarSettingsView, 0, 200, 308, 58)
+        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 14, 3, 218, 18)
         motionIntensityValue.alignment = .right
-        place(motionIntensityValue, in: intensity, 278, 2, 50, 17)
-        place(motionIntensitySlider, in: intensity, 15, 19, 314, 18)
-        place(text("차분하게", size: 9, color: PanelColor.secondary), in: intensity, 17, 37, 140, 13)
+        place(motionIntensityValue, in: intensity, 244, 4, 50, 17)
+        place(motionIntensitySlider, in: intensity, 13, 22, 282, 18)
+        place(text("차분하게", size: 9, color: PanelColor.secondary), in: intensity, 15, 41, 130, 13)
         let energetic = text("활기차게", size: 9, color: PanelColor.secondary)
         energetic.alignment = .right
-        place(energetic, in: intensity, 186, 37, 141, 13)
+        place(energetic, in: intensity, 164, 41, 130, 13)
 
         let login = GlassCard()
-        place(login, in: menuBarSettingsView, 0, 282, 344, 42)
-        place(text("로그인 시 자동 실행", size: 11, weight: .semibold), in: login, 16, 12, 208, 18)
+        place(login, in: menuBarSettingsView, 0, 264, 308, 40)
+        place(text("로그인 시 자동 실행", size: 11, weight: .semibold), in: login, 14, 11, 168, 18)
         loginLabel.alignment = .right
         loginLabel.font = .systemFont(ofSize: 9)
-        place(loginLabel, in: login, 224, 13, 60, 16)
-        place(loginSwitch, in: login, 292, 10, 36, 22)
-
-        place(text("설정은 바로 적용되고 다음 실행에도 유지돼요", size: 9, color: PanelColor.secondary), in: menuBarSettingsView, 3, 330, 338, 13)
-        place(text("macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다", size: 9, color: PanelColor.secondary), in: menuBarSettingsView, 3, 344, 338, 13)
+        place(loginLabel, in: login, 188, 12, 58, 16)
+        place(loginSwitch, in: login, 260, 9, 36, 22)
+        localizedToolTip(menuBarSettingsView, "설정은 바로 적용되고 다음 실행에도 유지돼요")
         updateMenuBarControls()
     }
 
@@ -734,128 +740,128 @@ final class PanelController: NSViewController {
 
     private func buildCPU(in content: NSView) {
         let usage = GlassCard()
-        place(usage, in: content, 0, 0, 344, 130)
-        place(symbol("cpu", color: PanelColor.blue), in: usage, 15, 14, 13, 13)
-        place(text("CPU 사용률", size: 11, weight: .semibold), in: usage, 35, 11, 170, 17)
-        place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 16, 31, 193, 14)
+        place(usage, in: content, 0, 0, 308, 106)
+        place(symbol("cpu", color: PanelColor.blue), in: usage, 13, 12, 13, 13)
+        place(text("CPU 사용률", size: 11, weight: .semibold), in: usage, 33, 9, 140, 17)
+        place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 14, 29, 160, 14)
         cpuPercent.alignment = .right
-        place(cpuPercent, in: usage, 213, 7, 115, 38)
-        place(cpuGraph, in: usage, 14, 58, 316, 60)
+        place(cpuPercent, in: usage, 177, 5, 115, 38)
+        place(cpuGraph, in: usage, 14, 53, 280, 43)
 
         let thermal = GlassCard()
-        place(thermal, in: content, 0, 138, 344, 42)
-        place(text("온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 15, 13, 62, 16)
-        place(cpuTemp, in: thermal, 79, 8, 73, 26)
+        place(thermal, in: content, 0, 113, 308, 36)
+        place(text("온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 13, 10, 43, 16)
+        place(cpuTemp, in: thermal, 57, 4, 72, 26)
         thermalDetail.alignment = .right
-        place(thermalDetail, in: thermal, 157, 13, 172, 16)
-        place(cpuRanking, in: content, 0, 190, 344, 127)
+        place(thermalDetail, in: thermal, 133, 10, 161, 16)
+        place(cpuRanking, in: content, 0, 157, 308, 120)
     }
 
     private func buildGPU(in content: NSView) {
         let usage = GlassCard()
-        place(usage, in: content, 0, 0, 344, 184)
-        place(symbol("square.grid.3x3.fill", color: PanelColor.violet), in: usage, 15, 14, 13, 13)
-        place(text("GPU 사용률", size: 11, weight: .semibold), in: usage, 35, 11, 170, 17)
-        place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 16, 31, 193, 14)
+        place(usage, in: content, 0, 0, 308, 158)
+        place(symbol("square.grid.3x3.fill", color: PanelColor.violet), in: usage, 13, 12, 13, 13)
+        place(text("GPU 사용률", size: 11, weight: .semibold), in: usage, 33, 9, 140, 17)
+        place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 14, 29, 160, 14)
         gpuPercent.alignment = .right
-        place(gpuPercent, in: usage, 213, 7, 115, 38)
+        place(gpuPercent, in: usage, 177, 5, 115, 38)
         gpuGraph.color = PanelColor.violet
-        place(gpuGraph, in: usage, 14, 58, 316, 88)
-        place(gpuDetail, in: usage, 16, 158, 313, 14)
+        place(gpuGraph, in: usage, 14, 52, 280, 70)
+        place(gpuDetail, in: usage, 14, 136, 280, 14)
 
         let hardware = GlassCard()
-        place(hardware, in: content, 0, 192, 344, 125)
-        place(text("GPU 모델", size: 10, weight: .medium, color: PanelColor.secondary), in: hardware, 16, 12, 312, 16)
-        place(gpuModel, in: hardware, 15, 32, 313, 28)
+        place(hardware, in: content, 0, 165, 308, 112)
+        place(text("GPU 모델", size: 10, weight: .medium, color: PanelColor.secondary), in: hardware, 14, 9, 280, 16)
+        place(gpuModel, in: hardware, 13, 29, 281, 26)
         let divider = NSBox()
         divider.boxType = .separator
-        place(divider, in: hardware, 16, 70, 312, 1)
-        place(text("GPU 코어", size: 10, weight: .medium, color: PanelColor.secondary), in: hardware, 16, 91, 143, 16)
+        place(divider, in: hardware, 14, 65, 280, 1)
+        place(text("GPU 코어", size: 10, weight: .medium, color: PanelColor.secondary), in: hardware, 14, 85, 130, 16)
         gpuCores.alignment = .right
-        place(gpuCores, in: hardware, 171, 84, 157, 28)
+        place(gpuCores, in: hardware, 151, 78, 143, 28)
     }
 
     private func buildMemory(in content: NSView) {
         let capacity = GlassCard()
-        place(capacity, in: content, 0, 0, 344, 130)
-        place(symbol("memorychip", color: PanelColor.violet), in: capacity, 15, 15, 14, 14)
-        place(text("사용 중인 메모리", size: 11, weight: .semibold), in: capacity, 36, 13, 170, 18)
-        place(memoryPressure, in: capacity, 235, 12, 94, 23)
-        place(memoryUsed, in: capacity, 14, 35, 245, 40)
+        place(capacity, in: content, 0, 0, 308, 106)
+        place(symbol("memorychip", color: PanelColor.violet), in: capacity, 13, 13, 14, 14)
+        place(text("사용 중인 메모리", size: 11, weight: .semibold), in: capacity, 34, 11, 161, 18)
+        place(memoryPressure, in: capacity, 201, 9, 94, 23)
+        place(memoryUsed, in: capacity, 12, 31, 218, 40)
         memoryPercent.alignment = .right
-        place(memoryPercent, in: capacity, 259, 51, 69, 18)
-        place(memoryTotal, in: capacity, 17, 86, 310, 16)
-        place(memoryBar, in: capacity, 16, 113, 312, 5)
+        place(memoryPercent, in: capacity, 236, 43, 58, 18)
+        place(memoryTotal, in: capacity, 15, 77, 278, 16)
+        place(memoryBar, in: capacity, 14, 94, 280, 5)
         localizedToolTip(memoryUsed, "활성·비활성·고정 메모리와 압축 메모리에서 파일 캐시·회수 가능한 페이지를 제외한 추정 사용량입니다.")
 
         let secondary = GlassCard()
-        place(secondary, in: content, 0, 138, 344, 42)
+        place(secondary, in: content, 0, 113, 308, 36)
         for (x, title, field, note) in [
-            (CGFloat(15), "압축 메모리", memoryCompressed, "RAM 안에서 압축한 크기"),
-            (CGFloat(187), "스왑 사용량", memorySwap, "SSD에 옮겨 둔 메모리")
+            (CGFloat(13), "압축 메모리", memoryCompressed, "RAM 안에서 압축한 크기"),
+            (CGFloat(167), "스왑 사용량", memorySwap, "SSD에 옮겨 둔 메모리")
         ] {
-            place(text(title, size: 9, weight: .medium, color: PanelColor.secondary), in: secondary, x, 4, 142, 13)
-            place(field, in: secondary, x - 1, 17, 143, 23)
+            place(text(title, size: 9, weight: .medium, color: PanelColor.secondary), in: secondary, x, 2, 126, 13)
+            place(field, in: secondary, x - 1, 15, 127, 21)
             localizedToolTip(field, note)
         }
         let divider = NSBox()
         divider.boxType = .separator
-        place(divider, in: secondary, 171, 9, 1, 24)
-        place(memoryRanking, in: content, 0, 190, 344, 127)
+        place(divider, in: secondary, 153, 7, 1, 22)
+        place(memoryRanking, in: content, 0, 157, 308, 120)
     }
 
     private func buildDisk(in content: NSView) {
         let capacity = GlassCard()
-        place(capacity, in: content, 0, 0, 344, 130)
-        place(symbol("internaldrive", color: PanelColor.violet), in: capacity, 15, 15, 14, 14)
-        place(text("내장 SSD", size: 11, weight: .semibold), in: capacity, 36, 13, 176, 18)
-        place(diskCleanupButton, in: capacity, 226, 9, 105, 25)
-        place(diskFree, in: capacity, 14, 35, 313, 40)
-        place(diskBar, in: capacity, 16, 85, 312, 5)
-        place(diskCapacity, in: capacity, 17, 102, 310, 16)
+        place(capacity, in: content, 0, 0, 308, 106)
+        place(symbol("internaldrive", color: PanelColor.violet), in: capacity, 13, 13, 14, 14)
+        place(text("내장 SSD", size: 11, weight: .semibold), in: capacity, 34, 11, 148, 18)
+        place(diskCleanupButton, in: capacity, 190, 7, 105, 25)
+        place(diskFree, in: capacity, 12, 31, 283, 36)
+        place(diskBar, in: capacity, 14, 76, 280, 5)
+        place(diskCapacity, in: capacity, 15, 88, 278, 14)
         localizedToolTip(capacity, "시동 볼륨의 전체 용량과 현재 사용 가능한 공간입니다. APFS 공유 공간에 따라 값이 바뀔 수 있습니다.")
 
         let activity = GlassCard()
-        place(activity, in: content, 0, 138, 344, 137)
-        place(symbol("arrow.up.arrow.down", color: PanelColor.secondary), in: activity, 15, 12, 13, 13)
-        place(text("디스크 활동", size: 11, weight: .semibold), in: activity, 34, 10, 168, 17)
+        place(activity, in: content, 0, 113, 308, 128)
+        place(symbol("arrow.up.arrow.down", color: PanelColor.secondary), in: activity, 13, 10, 13, 13)
+        place(text("디스크 활동", size: 11, weight: .semibold), in: activity, 32, 8, 160, 17)
         let recent = text("최근 1분", size: 9, color: PanelColor.secondary)
         recent.alignment = .right
-        place(recent, in: activity, 236, 12, 92, 14)
+        place(recent, in: activity, 202, 10, 92, 14)
         for (x, title, field, graph, color) in [
-            (CGFloat(16), "↓  읽기", diskRead, diskReadGraph, PanelColor.blue),
-            (CGFloat(187), "↑  쓰기", diskWrite, diskWriteGraph, PanelColor.violet)
+            (CGFloat(14), "↓  읽기", diskRead, diskReadGraph, PanelColor.blue),
+            (CGFloat(168), "↑  쓰기", diskWrite, diskWriteGraph, PanelColor.violet)
         ] {
-            place(text(title, size: 10, weight: .medium, color: color), in: activity, x, 35, 142, 15)
-            place(field, in: activity, x - 2, 51, 148, 28)
-            place(graph, in: activity, x, 94, 141, 29)
+            place(text(title, size: 10, weight: .medium, color: color), in: activity, x, 32, 126, 15)
+            place(field, in: activity, x - 2, 47, 128, 28)
+            place(graph, in: activity, x, 83, 126, 30)
         }
         let divider = NSBox()
         divider.boxType = .separator
-        place(divider, in: activity, 171, 36, 1, 87)
+        place(divider, in: activity, 153, 33, 1, 80)
         localizedToolTip(activity, "내장 물리 SSD의 읽기·쓰기 바이트/초 합계. 그래프는 실제 측정값의 최근 1분 이력입니다.")
 
         let thermal = GlassCard()
-        place(thermal, in: content, 0, 283, 344, 34)
-        place(symbol("thermometer.medium", color: PanelColor.violet), in: thermal, 15, 10, 13, 13)
-        place(text("SSD 온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 35, 10, 180, 15)
+        place(thermal, in: content, 0, 248, 308, 29)
+        place(symbol("thermometer.medium", color: PanelColor.violet), in: thermal, 13, 8, 13, 13)
+        place(text("SSD 온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 33, 8, 156, 15)
         ssdTemp.alignment = .right
-        place(ssdTemp, in: thermal, 234, 4, 94, 26)
+        place(ssdTemp, in: thermal, 200, 1, 94, 26)
     }
 
     private func buildNetwork(in content: NSView) {
         for (y, title, value, graph, color) in [
             (CGFloat(0), "↓  다운로드", downValue, downGraph, PanelColor.teal),
-            (CGFloat(164), "↑  업로드", upValue, upGraph, PanelColor.blue)
+            (CGFloat(143), "↑  업로드", upValue, upGraph, PanelColor.blue)
         ] {
             let card = GlassCard()
-            place(card, in: content, 0, y, 344, 153)
-            place(text(title, size: 11, weight: .semibold, color: color), in: card, 16, 12, 220, 18)
+            place(card, in: content, 0, y, 308, 134)
+            place(text(title, size: 11, weight: .semibold, color: color), in: card, 14, 10, 180, 18)
             let recent = text("최근 1분", size: 9, color: PanelColor.secondary)
             recent.alignment = .right
-            place(recent, in: card, 236, 14, 92, 14)
-            place(value, in: card, 14, 34, 314, 36)
-            place(graph, in: card, 16, 80, 312, 60)
+            place(recent, in: card, 202, 11, 92, 14)
+            place(value, in: card, 12, 31, 282, 34)
+            place(graph, in: card, 14, 75, 280, 46)
             localizedToolTip(card, "Wi-Fi·유선 인터페이스의 바이트/초 합계. 그래프는 실제 측정값의 최근 1분 이력입니다.")
         }
     }

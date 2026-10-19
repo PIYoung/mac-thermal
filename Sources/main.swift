@@ -80,7 +80,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let menuContent = MenuBarContent(frame: .zero)
     private let panel = PanelController()
-    private lazy var dashboard = DashboardWindow(controller: panel)
+    private let codexPanel = CodexPanelController()
+    private let codexMonitor = CodexMonitor()
+    private var codexSnapshot = CodexMonitorSnapshot.pending
+    private lazy var dashboard: DashboardWindow = {
+        let window = DashboardWindow(controller: panel, companion: codexPanel,
+                                     companionSize: CodexPanelController.surfaceSize)
+        window.companionIsAvailable = { CodexMonitor.isCodexRunning() }
+        window.prepareCompanion = { [weak self] in self?.codexPanel.prepareForPresentation() }
+        return window
+    }()
     private let sampleQueue = DispatchQueue(label: "local.mac-thermal.metrics", qos: .utility)
     private var timer: DispatchSourceTimer?
     private var screenObserver: NSObjectProtocol?
@@ -104,6 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuContent.attach(to: button)
         }
         panel.refresh = { [weak self] in self?.requestSample() }
+        codexPanel.refresh = { [weak self] in self?.codexMonitor.refresh() }
+        codexMonitor.onUpdate = { [weak self] snapshot in
+            self?.codexSnapshot = snapshot
+            self?.codexPanel.apply(snapshot)
+        }
+        codexMonitor.start()
         panel.menuBarPreferencesChanged = { [weak self] preferences in
             guard let self else { return }
             self.menuContent.preferences = preferences
@@ -154,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusItem.length = menuContent.contentWidth
         }
         panel.apply(sample)
+        if dashboard.isVisible { codexPanel.apply(codexSnapshot) }
     }
 
     @objc private func togglePanel() {
@@ -208,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         menuContent.stop()
+        codexMonitor.stop()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         timer?.cancel()
         sampleQueue.sync {

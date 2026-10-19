@@ -36,7 +36,11 @@ enum LocalizationProbe {
         for (key, value) in L10n.cleanupTranslations where existing[key] != nil {
             require(value == existing[key]!, "Conflicting cleanup translation: \(key)")
         }
-        return existing.merging(L10n.cleanupTranslations) { left, _ in left }
+        let cleanup = existing.merging(L10n.cleanupTranslations) { left, _ in left }
+        for (key, value) in L10n.codexTranslations where cleanup[key] != nil {
+            require(value == cleanup[key]!, "Conflicting Codex translation: \(key)")
+        }
+        return cleanup.merging(L10n.codexTranslations) { left, _ in left }
     }
     private static func testPreferences() {
         let suiteName = "MacThermal.LocalizationProbe.\(UUID().uuidString)"
@@ -113,7 +117,7 @@ enum LocalizationProbe {
         require(originalStoredValue == finalStoredValue, "Probe changed actual app language preference")
     }
     private static func testLiteralCoverage(_ project: URL, tables: [String: [String]]) throws {
-        let sourceNames = ["DiskCleanup.swift", "DiskCleanupView.swift", "Panel.swift", "LiquidTabs.swift", "MenuBarContent.swift", "MenuBarPreferences.swift", "Uptime.swift", "LoginItem.swift", "main.swift", "Resources.swift", "DashboardWindow.swift"]
+        let sourceNames = ["DiskCleanup.swift", "DiskCleanupView.swift", "Panel.swift", "CodexPanel.swift", "LiquidTabs.swift", "MenuBarContent.swift", "MenuBarPreferences.swift", "Uptime.swift", "LoginItem.swift", "main.swift", "Resources.swift", "DashboardWindow.swift"]
         let regex = try NSRegularExpression(pattern: #"L10n\.(?:text|format)\(\s*"((?:\\.|[^"\\])*)""#)
         let literalRegex = try NSRegularExpression(pattern: #""((?:\\.|[^"\\])*)""#)
         var callCount = 0
@@ -169,32 +173,28 @@ enum LocalizationProbe {
         }
     }
     private static func reportWidths(_ tables: [String: [String]]) {
-        // Fixed frame contracts from the existing 380 pt body. These are layout warnings,
+        // Fixed frame contracts from the compact 340 pt resource body. These are layout warnings,
         // not screenshots and do not assert appearance outside the measured label region.
         let contracts: [(String, CGFloat, CGFloat)] = [
-            ("CPU 애니메이션 스타일", 11, 290),
-            ("메뉴바 움직임", 11, 265),
-            ("움직임 강도", 11, 240),
-            ("로그인 시 자동 실행", 11, 208),
-            ("설정은 바로 적용되고 다음 실행에도 유지돼요", 9, 338),
-            ("macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다", 9, 338),
-            ("CPU는 사용률 · 네트워크는 전송량 · SSD 물결은 읽기/쓰기", 9, 313),
-            ("메모리 압박은 macOS가 판단한 현재 상태입니다", 9, 320),
-            ("CPU 비율은 전체 코어를 합친 100% 기준입니다", 9, 338),
-            ("압축 메모리", 10, 119),
-            ("스왑 사용량", 10, 119),
-            ("내장 SSD · 사용 가능 공간", 11, 220),
-            ("사용 중인 메모리", 11, 170),
+            ("CPU 애니메이션 스타일", 11, 260),
+            ("메뉴바 움직임", 11, 238),
+            ("움직임 강도", 11, 218),
+            ("로그인 시 자동 실행", 11, 168),
+            ("압축 메모리", 9, 126),
+            ("스왑 사용량", 9, 126),
+            ("내장 SSD", 11, 148),
+            ("사용 중인 메모리", 11, 161),
             ("압박 정상", 10, 78),
             ("압박 주의", 10, 78),
             ("압박 높음", 10, 78),
-            ("RAM 안에서 압축한 크기", 9, 140),
-            ("SSD에 옮겨 둔 메모리", 9, 140),
-            ("다음 측정부터 CPU 순위를 표시합니다", 11, 311),
-            ("실제 점유 메모리", 9, 125),
-            ("전체 CPU 기준", 9, 125)
+            ("다음 측정부터 CPU 순위를 표시합니다", 11, 280),
+            ("실제 점유 메모리", 9, 94),
+            ("전체 CPU 기준", 9, 94),
+            ("CPU 프로세스 TOP 3", 11, 162),
+            ("메모리 프로세스 TOP 3", 11, 162),
+            ("통신", 11, 53)
         ]
-        let semiboldKeys: Set<String> = ["CPU 애니메이션 스타일", "메뉴바 움직임", "움직임 강도", "로그인 시 자동 실행", "압축 메모리", "스왑 사용량", "내장 SSD · 사용 가능 공간", "사용 중인 메모리", "압박 정상", "압박 주의", "압박 높음"]
+        let semiboldKeys: Set<String> = ["CPU 애니메이션 스타일", "메뉴바 움직임", "움직임 강도", "로그인 시 자동 실행", "압축 메모리", "스왑 사용량", "내장 SSD", "사용 중인 메모리", "압박 정상", "압박 주의", "압박 높음", "CPU 프로세스 TOP 3", "메모리 프로세스 TOP 3", "통신"]
         var warnings: [String] = []
         for (key, fontSize, width) in contracts where tables[key] != nil {
             for language in AppLanguage.allCases {

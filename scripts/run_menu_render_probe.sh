@@ -19,7 +19,7 @@ resources = (project / 'Sources/Resources.swift').read_text().split('enum Resour
 (project / 'build' / 'ProbeModels.swift').write_text(main + '\n' + resources)
 PY
 xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$build_dir/module-cache" \
-  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" \
+  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" "$source_dir/CodexTranslations.swift" \
   "$build_dir/ProbeModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/MenuBarContent.swift" "$project_dir/tests/probes/menu_render_probe.swift" \
   -framework AppKit -framework QuartzCore -o "$build_dir/menu_render_probe"

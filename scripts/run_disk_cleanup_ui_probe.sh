@@ -18,11 +18,11 @@ PY
 xcrun swiftc -O -D PANEL_UPDATES_PROBE -target arm64-apple-macosx14.0 \
   -module-cache-path "$check_dir/module-cache" \
   "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" \
-  "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" \
+  "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" "$source_dir/CodexTranslations.swift" \
   "$check_dir/ProbeModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/Uptime.swift" "$source_dir/CPUUsageHistory.swift" "$source_dir/LiquidTabs.swift" \
   "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" \
-  "$source_dir/Panel.swift" "$source_dir/DashboardWindow.swift" \
+  "$source_dir/Panel.swift" "$source_dir/DashboardLayout.swift" "$source_dir/DashboardWindow.swift" \
   "$project_dir/tests/probes/disk_cleanup_ui_probe.swift" \
   -framework AppKit -framework QuartzCore -o "$check_dir/disk-cleanup-ui-probe"
 "$check_dir/disk-cleanup-ui-probe"

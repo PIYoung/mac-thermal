@@ -25,7 +25,7 @@ info = {'CFBundleExecutable': 'ReadmeAssets', 'CFBundleIdentifier': 'local.mac-t
 (artwork / 'ReadmeAssets.app' / 'Contents' / 'Info.plist').write_bytes(plistlib.dumps(info))
 PY
 xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$artwork_dir/module-cache" \
-  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" \
+  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" "$source_dir/CodexTranslations.swift" \
   "$artwork_dir/ReadmeModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/MenuBarContent.swift" "$project_dir/scripts/render-readme-assets.swift" \
   -framework AppKit -framework QuartzCore -framework ImageIO -framework UniformTypeIdentifiers \
