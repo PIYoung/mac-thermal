@@ -17,14 +17,12 @@ struct DashboardLayout {
         let usable = NSRect(x: screen.minX + 8, y: screen.minY + 8,
                             width: max(0, screen.width - 16), height: max(0, screen.height - 10))
         let horizontal = companion.map { primary.width + gap + $0.width <= usable.width } ?? true
-        let companionOnLeft = horizontal && companion != nil && anchor.midX >= screen.midX
         let primaryOrigin: NSPoint
         let companionOrigin: NSPoint?
         let bodySize: NSSize
         if let companion, horizontal {
-            let offset = companion.width + gap
-            primaryOrigin = NSPoint(x: inset + (companionOnLeft ? offset : 0), y: inset)
-            companionOrigin = NSPoint(x: inset + (companionOnLeft ? 0 : primary.width + gap), y: inset)
+            primaryOrigin = NSPoint(x: inset, y: inset)
+            companionOrigin = NSPoint(x: inset + primary.width + gap, y: inset)
             bodySize = NSSize(width: primary.width + gap + companion.width, height: max(primary.height, companion.height))
         } else if let companion {
             primaryOrigin = NSPoint(x: inset, y: inset)

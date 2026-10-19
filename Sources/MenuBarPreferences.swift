@@ -8,7 +8,7 @@ enum MenuBarAnimationStyle: Int, CaseIterable {
 }
 
 enum MenuBarMetric: String, CaseIterable {
-    case cpu, gpu, ssd, network
+    case cpu, gpu, ssd, network, codex
 
     var title: String {
         switch self {
@@ -16,6 +16,7 @@ enum MenuBarMetric: String, CaseIterable {
         case .gpu: return "GPU"
         case .ssd: return "SSD"
         case .network: return L10n.text("네트워크")
+        case .codex: return "Codex"
         }
     }
 }
@@ -30,7 +31,8 @@ struct MenuBarPreferences: Equatable {
     private static let motionKey = "menuBarMotionEnabledV2"
     private static let intensityKey = "menuBarMotionIntensityV2"
     private static let primaryMetricKey = "menuBarPrimaryMetricV1"
-    private static let visibleMetricsKey = "menuBarVisibleMetricsV1"
+    private static let visibleMetricsKey = "menuBarVisibleMetricsV2"
+    private static let legacyVisibleMetricsKey = "menuBarVisibleMetricsV1"
 
     static func load(defaults: UserDefaults = .standard) -> Self {
         let storedIntensity = defaults.object(forKey: intensityKey) as? Double ?? 1.2
@@ -41,10 +43,14 @@ struct MenuBarPreferences: Equatable {
             } else {
                 visibleMetrics = Set(MenuBarMetric.allCases)
             }
+        } else if let values = defaults.stringArray(forKey: legacyVisibleMetricsKey),
+                  values.allSatisfy({ MenuBarMetric(rawValue: $0) != nil }) {
+            // Add the newly requested Codex item once; V2 preserves later opt-outs.
+            visibleMetrics = Set(values.compactMap(MenuBarMetric.init(rawValue:))).union([.codex])
         } else {
             switch defaults.object(forKey: primaryMetricKey) as? Int {
-            case 0: visibleMetrics = [.cpu, .ssd, .network]
-            case 1: visibleMetrics = [.gpu, .ssd, .network]
+            case 0: visibleMetrics = [.cpu, .ssd, .network, .codex]
+            case 1: visibleMetrics = [.gpu, .ssd, .network, .codex]
             default: visibleMetrics = Set(MenuBarMetric.allCases)
             }
         }

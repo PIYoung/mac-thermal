@@ -34,6 +34,8 @@ enum DashboardLayoutProbe {
                                 precondition(layout.primarySurface.minY == other.minY)
                                 let distance = max(layout.primarySurface.minX, other.minX) - min(layout.primarySurface.maxX, other.maxX)
                                 precondition(distance == 12)
+                                precondition(other.minX == layout.primarySurface.maxX + 12,
+                                             "Codex must remain to the right for every anchor and screen")
                             } else {
                                 precondition(layout.scrollsVertically && other.minY == layout.primarySurface.maxY + 12)
                             }

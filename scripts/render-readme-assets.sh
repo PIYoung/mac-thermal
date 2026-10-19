@@ -27,7 +27,7 @@ PY
 xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$artwork_dir/module-cache" \
   "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" "$source_dir/CodexTranslations.swift" \
   "$artwork_dir/ReadmeModels.swift" "$source_dir/MenuBarPreferences.swift" \
-  "$source_dir/MenuBarContent.swift" "$project_dir/scripts/render-readme-assets.swift" \
+  "$source_dir/CodexModels.swift" "$source_dir/CodexMenuState.swift" "$source_dir/MenuBarContent.swift" "$project_dir/scripts/render-readme-assets.swift" \
   -framework AppKit -framework QuartzCore -framework ImageIO -framework UniformTypeIdentifiers \
   -o "$helper_dir/Contents/MacOS/ReadmeAssets"
 "$helper_dir/Contents/MacOS/ReadmeAssets" "$image_dir"

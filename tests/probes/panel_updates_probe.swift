@@ -210,7 +210,8 @@ enum PanelUpdatesProbe {
             precondition(window.probeContainsCanvasPoint(NSPoint(x: surface.midX, y: surface.midY)))
         }
         precondition(!window.probeContainsCanvasPoint(NSPoint(x: horizontal.primarySurface.midX, y: 4)))
-        let gapX = (horizontal.companionSurface!.maxX + horizontal.primarySurface.minX) / 2
+        precondition(horizontal.companionSurface!.minX == horizontal.primarySurface.maxX + 12, "Codex stays on the right")
+        let gapX = (horizontal.primarySurface.maxX + horizontal.companionSurface!.minX) / 2
         precondition(!window.probeContainsCanvasPoint(NSPoint(x: gapX, y: 100)), "The inter-panel gap must dismiss the pair")
         let fixedFrame = window.frame
         panel.apply(sample(73))
@@ -338,8 +339,8 @@ enum PanelUpdatesProbe {
             }
             panel.probeToggleSettings()
             checkContentBounds(panel.view)
-            precondition(panel.probeMetricTitles == ["CPU", "GPU", "SSD", L10n.text("네트워크")])
-            precondition(panel.probeMetricLabelsFit, "All four native checkbox labels must fit in every language")
+            precondition(panel.probeMetricTitles == ["CPU", "GPU", "SSD", L10n.text("네트워크"), "Codex"])
+            precondition(panel.probeMetricLabelsFit, "All five native checkbox labels must fit in every language")
             precondition(panel.probeVisibleMetrics == Set(MenuBarMetric.allCases))
             panel.probeClickMetric(.cpu)
             precondition(!panel.probeVisibleMetrics.contains(.cpu) && !panel.probeCPUStyleEnabled)
@@ -370,7 +371,7 @@ enum PanelUpdatesProbe {
     private static func menuMetricChecks(defaults: UserDefaults) {
         let all = Set(MenuBarMetric.allCases)
         precondition(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all,
-            "Fresh installs must show all four menu bar metrics")
+            "Fresh installs select resources and the conditional Codex tile")
         let original = MenuBarPreferences(style: .orbit, motionEnabled: true, intensity: 1.35, visibleMetrics: all)
         original.save(defaults: defaults)
         let panel = PanelController(defaults: defaults)
@@ -401,7 +402,7 @@ enum PanelUpdatesProbe {
             panel.probeClickMetric(metric)
             checkSelection()
         }
-        precondition(expected.isEmpty && callbacks.count == 4, "All four items can be switched off independently")
+        precondition(expected.isEmpty && callbacks.count == all.count, "All menu items can be switched off independently")
         let reopened = PanelController(defaults: defaults)
         _ = reopened.view
         reopened.probeToggleSettings()
@@ -414,7 +415,7 @@ enum PanelUpdatesProbe {
             panel.probeClickMetric(metric)
             checkSelection()
         }
-        precondition(expected == all && callbacks.count == 8)
+        precondition(expected == all && callbacks.count == all.count * 2)
         print("Native menu checkbox actions passed: independent visibility, immediate callbacks/persistence, empty selection/reopen, preserved motion preferences, and fixed bounds")
     }
 

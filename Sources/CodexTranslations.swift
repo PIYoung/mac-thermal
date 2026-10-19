@@ -54,5 +54,13 @@ extension L10n {
         "갱신 %@": ["Updated %@", "更新 %@", "更新于%@"],
         "업데이트 정보 없음": ["No update information", "更新情報なし", "没有更新信息"],
         "Codex 지금 새로고침": ["Refresh Codex now", "Codexを今すぐ更新", "立即刷新Codex"],
+        "기록 없음": ["No record", "記録なし", "暂无记录"],
+        "방금 기록": ["Just now", "たった今", "刚刚记录"],
+        "%lld분 전": ["%lldm ago", "%lld分前", "%lld分钟前"],
+        "%lld시간 전": ["%lldh ago", "%lld時間前", "%lld小时前"],
+        "%lld일 전": ["%lldd ago", "%lld日前", "%lld天前"],
+        "Codex · 오늘 토큰 (UTC) %@ · %@": ["Codex · UTC tokens today %@ · %@", "Codex · 今日のトークン (UTC) %@ · %@", "Codex · 今日令牌 (UTC) %@ · %@"],
+        "움직임은 새 토큰 기록을 뜻합니다. 작업 중·완료 상태를 나타내지 않습니다.": ["Motion means a new token record arrived. It does not indicate working or completion.", "動きは新しいトークン記録の到着を示します。作業中や完了の状態ではありません。", "动画表示收到新的令牌记录，不代表正在工作或已完成。"],
+        "Codex 앱 실행 중에만 표시합니다. 새 토큰 기록이 들어오면 잠깐 움직입니다.": ["Shown only while the Codex app is running. Briefly animates when a new token record arrives.", "Codexアプリ実行中のみ表示します。新しいトークン記録が届くと短く動きます。", "仅在Codex应用运行时显示，收到新的令牌记录后短暂播放动画。"],
     ]
 }

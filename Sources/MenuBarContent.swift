@@ -6,6 +6,8 @@ final class MenuBarContent: NSObject {
     static let imageSize = NSSize(width: 336, height: 22)
     private weak var button: NSStatusBarButton?
     private var sample = Snapshot.pending
+    private var codexActivity = CodexMenuActivity()
+    private var codexFrame = 0
     private var baseImage: CGImage?
     private var ink = NSColor.labelColor.cgColor
     private var scale: CGFloat = 2
@@ -31,13 +33,16 @@ final class MenuBarContent: NSObject {
         let textWidth: CGFloat
     }
     private var layout: [GroupLayout] = []
-    private var orderedMetrics: [MenuBarMetric] { MenuBarMetric.allCases.filter(preferences.visibleMetrics.contains) }
+    private var orderedMetrics: [MenuBarMetric] {
+        MenuBarMetric.allCases.filter { preferences.visibleMetrics.contains($0) && ($0 != .codex || codexActivity.isVisible) }
+    }
     private var canvasSize: NSSize { NSSize(width: displayWidth, height: Self.imageSize.height) }
 
     var preferences = MenuBarPreferences.load() {
         didSet {
             guard preferences != oldValue else { return }
             lastTick = nil
+            if !preferences.motionEnabled || !preferences.visibleMetrics.contains(.codex) { codexActivity.cancelGesture() }
             if preferences.visibleMetrics != oldValue.visibleMetrics {
                 textSignature = ""
                 rebuildBase()
@@ -94,6 +99,16 @@ final class MenuBarContent: NSObject {
 
     var contentWidth: CGFloat { ceil((button?.image?.size.width ?? displayWidth) + 6) }
 
+    func update(codex: CodexMonitorSnapshot) {
+        codexActivity.receive(codex)
+        if !motionAllowed || systemSleeping || displaySleeping || !preferences.visibleMetrics.contains(.codex) {
+            codexActivity.cancelGesture()
+        }
+        // Visibility can change without a resource sample or preference change.
+        textSignature = ""
+        update(sample: sample)
+    }
+
     func update(sample: Snapshot) {
         self.sample = sample
         let lines = labels
@@ -121,10 +136,12 @@ final class MenuBarContent: NSObject {
         (preferences.visibleMetrics.contains(.cpu) && (validPercentage(sample.cpuUsage) ?? 0) > 0) ||
         (preferences.visibleMetrics.contains(.gpu) && (validPercentage(sample.resources.gpu.utilizationPercent) ?? 0) > 0) ||
         (preferences.visibleMetrics.contains(.ssd) && [sample.resources.disk.readBytesPerSecond, sample.resources.disk.writeBytesPerSecond].contains { (validRate($0) ?? 0) > 0 }) ||
-        (preferences.visibleMetrics.contains(.network) && [sample.upload, sample.download].contains { (validRate($0) ?? 0) > 0 })
+        (preferences.visibleMetrics.contains(.network) && [sample.upload, sample.download].contains { (validRate($0) ?? 0) > 0 }) ||
+        (preferences.visibleMetrics.contains(.codex) && codexActivity.isAnimating(at: ProcessInfo.processInfo.systemUptime))
     }
 
     private func configureAnimation() {
+        if !motionAllowed || systemSleeping || displaySleeping { codexActivity.cancelGesture() }
         guard let window = button?.window, window.isVisible, !systemSleeping, !displaySleeping, motionAllowed, hasActivity else {
             stop()
             displayFrame()
@@ -161,6 +178,7 @@ final class MenuBarContent: NSObject {
             let period = diskActivity < 100_000 ? 5.0 : diskActivity < 5_000_000 ? 3.0 : diskActivity < 50_000_000 ? 1.6 : 1.0
             diskPhase = (diskPhase + elapsed / max(0.9, period / sqrt(intensity))).truncatingRemainder(dividingBy: 1)
         }
+        codexFrame = Int(now * 8) % 4
         displayFrame()
     }
 
@@ -184,6 +202,8 @@ final class MenuBarContent: NSObject {
                 return ["R " + rateLabel(sample.resources.disk.readBytesPerSecond), "W " + rateLabel(sample.resources.disk.writeBytesPerSecond)]
             case .network:
                 return ["↑ " + rateLabel(sample.upload), "↓ " + rateLabel(sample.download)]
+            case .codex:
+                return ["CX " + codexActivity.tokenLabel, codexActivity.recentLabel(now: sample.time)]
             }
         }
     }
@@ -234,6 +254,12 @@ final class MenuBarContent: NSObject {
                         L10n.format("SSD 사용 용량 %@ · 온도 %@", used, temperature(sample.ssdTemperature))]
             case .network:
                 return [L10n.format("업로드 %@ · 다운로드 %@", rateLabel(sample.upload), rateLabel(sample.download))]
+            case .codex:
+                let state = codexActivity.tokens.map { L10n.format("%lld 토큰", $0) } ?? L10n.text("확인 불가")
+                return [L10n.format("Codex · 오늘 토큰 (UTC) %@ · %@", state, codexActivity.recentLabel(now: sample.time)),
+                        L10n.text("이 Mac의 로컬 기록에 남은 UTC 오늘 토큰입니다. 계정 전체 사용량이 아닙니다."),
+                        L10n.text("움직임은 새 토큰 기록을 뜻합니다. 작업 중·완료 상태를 나타내지 않습니다.")] +
+                        (codexActivity.snapshot.incomplete && codexActivity.canShowUsage ? [L10n.text("일부 로컬 기록만 집계했습니다")] : [])
             }
         }
         if lines.isEmpty { lines = [L10n.text("표시 항목 없음 · 아이콘을 눌러 패널 열기")] }
@@ -271,7 +297,7 @@ final class MenuBarContent: NSObject {
                 let top = (lines[index * 2] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
                 let bottom = (lines[index * 2 + 1] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .medium)]).width
                 let offset: CGFloat = metric == .ssd ? 18 : metric == .network ? 20 : 29
-                let cap: CGFloat = metric == .cpu || metric == .gpu ? 52 : 55
+                let cap: CGFloat = metric == .codex ? 62 : metric == .cpu || metric == .gpu ? 52 : 55
                 let textWidth = min(cap, ceil(max(top, bottom)))
                 let width = offset + textWidth
                 layout.append(GroupLayout(metric: metric, origin: cursor, width: width, textOffset: offset, textWidth: textWidth))
@@ -326,6 +352,8 @@ final class MenuBarContent: NSObject {
             case .cpu: drawCPU(in: context, phase: animated ? cpuPhase : 0)
             case .gpu: drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
             case .ssd: drawCapacity(in: context, phase: animated ? diskPhase : 0, animated: animated)
+            case .codex:
+                drawCodex(in: context, frame: animated && codexActivity.isAnimating(at: ProcessInfo.processInfo.systemUptime) ? codexFrame : 0)
             case .network:
                 drawFlow(in: context, x: 0, bytes: sample.upload, phase: animated ? uploadPhase : 0.45, upward: true, animated: animated)
                 drawFlow(in: context, x: 9, bytes: sample.download, phase: animated ? downloadPhase : 0.45, upward: false, animated: animated)
@@ -335,6 +363,31 @@ final class MenuBarContent: NSObject {
         let width = displayWidth
         guard let image = context.makeImage()?.cropping(to: CGRect(x: 0, y: 0, width: width * scale, height: Self.imageSize.height * scale)) else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: width, height: Self.imageSize.height))
+    }
+
+    /// Original 26pt robot and keyboard, drawn entirely from basic shapes.
+    /// A four-pose hand gesture runs for 1.25s only after a fresh usage record.
+    private func drawCodex(in context: CGContext, frame: Int) {
+        context.setStrokeColor(ink)
+        context.setFillColor(ink)
+        context.setLineWidth(1.1)
+        context.setLineCap(.round)
+        let head = CGRect(x: 5, y: 9, width: 16, height: 10)
+        context.addPath(CGPath(roundedRect: head, cornerWidth: 3, cornerHeight: 3, transform: nil))
+        context.strokePath()
+        context.move(to: CGPoint(x: 13, y: 19)); context.addLine(to: CGPoint(x: 13, y: 21)); context.strokePath()
+        context.fillEllipse(in: CGRect(x: 8.5, y: 13, width: 1.8, height: 2.2))
+        context.fillEllipse(in: CGRect(x: 15.7, y: 13, width: 1.8, height: 2.2))
+        context.move(to: CGPoint(x: 11, y: 10.8)); context.addLine(to: CGPoint(x: 15, y: 10.8)); context.strokePath()
+        context.addPath(CGPath(roundedRect: CGRect(x: 3, y: 1.5, width: 20, height: 3.5), cornerWidth: 1.2, cornerHeight: 1.2, transform: nil))
+        context.strokePath()
+        for column in 0..<4 { context.fill(CGRect(x: 6 + Double(column) * 4, y: 2.7, width: 1.7, height: 0.8)) }
+        let leftY: CGFloat = frame == 1 ? 4.2 : frame == 3 ? 6.7 : 5.5
+        let rightY: CGFloat = frame == 3 ? 4.2 : frame == 1 ? 6.7 : 5.5
+        context.move(to: CGPoint(x: 6, y: 9)); context.addLine(to: CGPoint(x: 7.5, y: leftY))
+        context.move(to: CGPoint(x: 20, y: 9)); context.addLine(to: CGPoint(x: 18.5, y: rightY)); context.strokePath()
+        context.fillEllipse(in: CGRect(x: 5.8, y: leftY - 0.7, width: 3.2, height: 1.7))
+        context.fillEllipse(in: CGRect(x: 17, y: rightY - 0.7, width: 3.2, height: 1.7))
     }
 
     private func drawCPU(in context: CGContext, phase: Double) {
@@ -440,6 +493,29 @@ final class MenuBarContent: NSObject {
             }
         }
         context.restoreGState()
+    }
+
+    /// Deterministic paired-menu fixture; no source records, app or timer needed.
+    static func previewCodex(sample: Snapshot, snapshot: CodexMonitorSnapshot,
+                             preferences: MenuBarPreferences, dark: Bool, frame: Int = 0,
+                             sleeping: Bool = false) -> (NSImage?, [MenuBarMetric: CGRect], String) {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        let now = ProcessInfo.processInfo.systemUptime
+        var baseline = snapshot
+        baseline.dailyTokens = max(0, (snapshot.dailyTokens ?? 0) - 1)
+        baseline.lastRecordAt = snapshot.lastRecordAt?.addingTimeInterval(-1)
+        content.codexActivity.receive(baseline, now: sample.time.addingTimeInterval(-1), uptime: now)
+        content.codexActivity.receive(snapshot, now: sample.time, uptime: now)
+        content.preferences = preferences
+        content.systemSleeping = sleeping
+        content.previewAppearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        content.codexFrame = frame
+        content.rebuildBase()
+        let frames = Dictionary(uniqueKeysWithValues: content.layout.map {
+            ($0.metric, CGRect(x: $0.origin, y: 0, width: $0.width, height: Self.imageSize.height))
+        })
+        return (content.composite(), frames, content.accessibilityLines.joined(separator: "\n"))
     }
 
     /// Offscreen fixtures exercise the same painter without changing the menu bar.

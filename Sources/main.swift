@@ -116,8 +116,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexPanel.refresh = { [weak self] in self?.codexMonitor.refresh() }
         codexPanel.recordsEnabledChanged = { [weak self] enabled in self?.codexMonitor.setRecordsEnabled(enabled) }
         codexMonitor.onUpdate = { [weak self] snapshot in
-            self?.codexSnapshot = snapshot
-            self?.codexPanel.apply(snapshot)
+            guard let self else { return }
+            self.codexSnapshot = snapshot
+            self.codexPanel.apply(snapshot)
+            self.menuContent.update(codex: snapshot)
+            self.statusItem.length = self.menuContent.contentWidth
         }
         codexMonitor.start()
         panel.menuBarPreferencesChanged = { [weak self] preferences in

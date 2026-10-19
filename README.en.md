@@ -101,7 +101,9 @@ Use the top-right Settings button to change the language, menu bar motion, and a
 
 ## Compact panels and Codex activity
 
-The unreleased v2.7 resource surface is 340×420pt. While Codex is running, a separate 300×420pt companion appears beside it with a 12pt gap and a fixed opening position. Narrow screens use a vertically scrollable pair.
+The unreleased v2.7 resource surface is 340×420pt. While Codex is running, a separate 300×420pt companion appears to its right with a 12pt gap and a fixed opening position. Narrow screens use a vertically scrollable pair.
+
+The menu bar also shows a selectable `CX` tile while Codex is running: local UTC-today tokens, a `~` marker for partial totals, and last-record age. An original robot briefly types when a new token record arrives. This is not live task or completion status.
 
 App runtime comes from the Codex launch date provided by macOS. **Record reading is off by default.** Enable it in the companion to extract model identifiers, token counters and timestamps from `~/.codex/sessions` and display **this Mac's UTC-today usage**. These files also contain conversations, but bodies, commands and credentials are not retained or transmitted, and source files are never changed. Turning reading off stops reads and clears the in-memory aggregation.
 

@@ -7,10 +7,10 @@ struct MenuRenderProbe {
         case failed(String)
         var description: String { switch self { case .failed(let message): return message } }
     }
-    static let all = Set(MenuBarMetric.allCases)
+    static let all: Set<MenuBarMetric> = [.cpu, .gpu, .ssd, .network]
     static var combinations: [Set<MenuBarMetric>] {
         (0..<16).map { mask in
-            Set(MenuBarMetric.allCases.enumerated().compactMap { mask & (1 << $0.offset) != 0 ? $0.element : nil })
+            Set(MenuBarMetric.allCases.filter { $0 != .codex }.enumerated().compactMap { mask & (1 << $0.offset) != 0 ? $0.element : nil })
         }
     }
     static func check(_ condition: @autoclosure () throws -> Bool, _ message: String) throws {
@@ -72,27 +72,32 @@ struct MenuRenderProbe {
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.removePersistentDomain(forName: name)
         try check(MenuBarPreferences.load(defaults: defaults) == MenuBarPreferences(), "fresh preferences mismatch")
-        try check(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all, "fresh launch must show all four metrics")
-        for (old, expected) in [(0, Set<MenuBarMetric>([.cpu, .ssd, .network])),
-                                (1, Set<MenuBarMetric>([.gpu, .ssd, .network])), (2, all), (-1, all), (1234, all)] {
+        try check(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all.union([.codex]), "fresh launch includes Codex")
+        for (old, expected) in [(0, Set<MenuBarMetric>([.cpu, .ssd, .network, .codex])),
+                                (1, Set<MenuBarMetric>([.gpu, .ssd, .network, .codex])), (2, all.union([.codex])), (-1, all.union([.codex])), (1234, all.union([.codex]))] {
             defaults.set(old, forKey: "menuBarPrimaryMetricV1")
             try check(MenuBarPreferences.load(defaults: defaults).visibleMetrics == expected, "legacy selection migration failed: \(old)")
         }
+        for selected in combinations {
+            defaults.set(selected.map(\.rawValue), forKey: "menuBarVisibleMetricsV1")
+            try check(MenuBarPreferences.load(defaults: defaults).visibleMetrics == selected.union([.codex]), "upgrade lost resource choices or Codex default")
+        }
+        defaults.removeObject(forKey: "menuBarVisibleMetricsV1")
         for style in MenuBarAnimationStyle.allCases {
-            for visible in combinations {
+            for visible in combinations + combinations.map({ $0.union([.codex]) }) {
                 let expected = MenuBarPreferences(style: style, motionEnabled: false, intensity: 0.95, visibleMetrics: visible)
                 expected.save(defaults: defaults)
                 try check(MenuBarPreferences.load(defaults: defaults) == expected, "visibility preference roundtrip failed")
-                try check(defaults.stringArray(forKey: "menuBarVisibleMetricsV1") == MenuBarMetric.allCases.filter(visible.contains).map(\.rawValue),
+                try check(defaults.stringArray(forKey: "menuBarVisibleMetricsV2") == MenuBarMetric.allCases.filter(visible.contains).map(\.rawValue),
                     "saved visibility array has unstable order")
             }
         }
         defaults.set(0, forKey: "menuBarPrimaryMetricV1")
-        defaults.set([], forKey: "menuBarVisibleMetricsV1")
+        defaults.set([], forKey: "menuBarVisibleMetricsV2")
         try check(MenuBarPreferences.load(defaults: defaults).visibleMetrics.isEmpty, "explicit empty selection was lost to legacy migration")
         for invalid: Any in ["gpu", 12, ["cpu", "unknown"], [true]] {
-            defaults.set(invalid, forKey: "menuBarVisibleMetricsV1")
-            try check(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all, "malformed visibility did not fall back to all")
+            defaults.set(invalid, forKey: "menuBarVisibleMetricsV2")
+            try check(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all.union([.codex]), "malformed visibility did not fall back to all")
         }
         defaults.set(1234, forKey: "menuBarAnimationStyleV2")
         defaults.set(Double.infinity, forKey: "menuBarMotionIntensityV2")
@@ -104,7 +109,7 @@ struct MenuRenderProbe {
         try check(MenuBarPreferences.load(defaults: defaults).intensity == 1.5, "high intensity not clamped")
         MenuBarPreferences(intensity: .nan).save(defaults: defaults)
         try check(MenuBarPreferences.load(defaults: defaults).intensity == 1.2, "nonfinite save not normalized")
-        print("PASS preferences: four visible by default, legacy CPU/GPU/both migration, 16 selections including empty, ordered persistence, invalid values")
+        print("PASS preferences: five selected by default, legacy selection migration, 32 selections including empty, ordered persistence, invalid values")
     }
     static func layoutChecks(in directory: URL) throws {
         let fixtures: [(String, Snapshot)] = [
@@ -228,6 +233,85 @@ struct MenuRenderProbe {
         try check(MenuBarContent.gpuWavePeriod(load: 1, intensity: 1.2) > MenuBarContent.gpuWavePeriod(load: 100, intensity: 1.2), "GPU wave does not speed up with load")
         print("PASS cache and accessibility: immediate selection/sample updates, only visible metrics announced, GPU tile boundaries")
     }
+    static func codexChecks(in directory: URL) throws {
+        let now = sample().time
+        let started = now.addingTimeInterval(-3600)
+        func record(_ age: TimeInterval = 0, tokens: Int64 = 123_456) -> CodexMonitorSnapshot {
+            CodexMonitorSnapshot(appStartedAt: started, connection: .connected, recordsEnabled: true,
+                recordsCount: 12, lastRecordAt: now.addingTimeInterval(-age), dailyTokens: tokens, updatedAt: now)
+        }
+        var state = CodexMenuActivity()
+        state.receive(record(), now: now, uptime: 10)
+        try check(!state.isAnimating(at: 10), "initial scan animated as fresh activity")
+        var next = record(tokens: 123_457)
+        next.lastRecordAt = now.addingTimeInterval(1)
+        state.receive(next, now: now.addingTimeInterval(1), uptime: 11)
+        try check(state.isAnimating(at: 11) && !state.isAnimating(at: 12.25), "gesture must stop after 1.25s")
+        state.receive(next, now: now.addingTimeInterval(2), uptime: 12)
+        try check(state.gestureEndsAt == 12.25, "duplicate snapshot restarted gesture")
+        state.cancelGesture()
+        var old = next
+        old.lastRecordAt = now.addingTimeInterval(2)
+        old.dailyTokens = 123_458
+        state.receive(old, now: now.addingTimeInterval(90), uptime: 90)
+        try check(!state.isAnimating(at: 90), "old catch-up records animate")
+        var off = record(); off.recordsEnabled = false
+        state.receive(off, now: now, uptime: 100)
+        try check(state.tokens == nil && state.tokenLabel == "—" && !state.isAnimating(at: 100), "OFF exposes stale usage")
+        state.receive(record(), now: now, uptime: 101)
+        try check(!state.isAnimating(at: 101), "re-enable replayed catch-up gesture")
+        var closed = record(); closed.appStartedAt = nil
+        state.receive(closed, now: now, uptime: 102)
+        try check(!state.isVisible && state.tokens == nil, "closed Codex must not retain a menu slot")
+        var partial = record(tokens: 0); partial.incomplete = true
+        state.receive(partial, now: now, uptime: 103)
+        try check(state.tokens == nil, "partial zero presented as confirmed zero")
+        partial.dailyTokens = 123_456
+        state.receive(partial, now: now, uptime: 104)
+        try check(state.tokenLabel == "~123K", "partial totals must be visible in the menu")
+        let suite = "menu-codex-probe-\(UUID().uuidString)"
+        let isolated = UserDefaults(suiteName: suite)!
+        defer { isolated.removePersistentDomain(forName: suite) }
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: isolated)
+            for dark in [false, true] {
+                for mask in 0..<32 {
+                    let visible = Set(MenuBarMetric.allCases.enumerated().compactMap { mask & (1 << $0.offset) != 0 ? $0.element : nil })
+                    let prefs = MenuBarPreferences(visibleMetrics: visible)
+                    let (optionalImage, layout, text) = MenuBarContent.previewCodex(sample: sample(), snapshot: record(), preferences: prefs, dark: dark, frame: 1)
+                    try check(Set(layout.keys) == visible, "Codex layout selection mismatch")
+                    let image = optionalImage!
+                    try check(image.size.width <= 436, "paired menu exceeds content cap")
+                    let frames = MenuBarMetric.allCases.compactMap { layout[$0] }
+                    for (left, right) in zip(frames, frames.dropFirst()) { try check(right.minX - left.maxX == 7, "Codex spacing is not 7pt") }
+                    if let end = frames.last { try check(end.maxX + 2 == image.size.width, "Codex leaves a trailing gap") }
+                    try check(text.contains("Codex") == visible.contains(.codex), "hidden Codex announced to VoiceOver")
+                    let (other, _, _) = MenuBarContent.previewCodex(sample: sample(), snapshot: record(), preferences: prefs, dark: dark, frame: 3)
+                    if visible.contains(.codex), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                        let frame = layout[.codex]!
+                        try check(try pixels(image, region: frame) != pixels(other!, region: frame), "fresh record robot is static")
+                    }
+                    for disabled in [true, false] {
+                        let stoppedPrefs = MenuBarPreferences(motionEnabled: false, visibleMetrics: visible)
+                        let a = MenuBarContent.previewCodex(sample: sample(), snapshot: record(), preferences: disabled ? stoppedPrefs : prefs, dark: dark, frame: 1, sleeping: !disabled).0!
+                        let b = MenuBarContent.previewCodex(sample: sample(), snapshot: record(), preferences: disabled ? stoppedPrefs : prefs, dark: dark, frame: 3, sleeping: !disabled).0!
+                        try check(try pixels(a) == pixels(b), "OFF or sleeping Codex still animates")
+                    }
+                    if mask == 31, language == .korean {
+                        let png = NSBitmapImageRep(cgImage: try cgImage(image)).representation(using: .png, properties: [:])!
+                        try png.write(to: directory.appendingPathComponent("codex-\(dark ? "dark" : "light").png"))
+                    }
+                }
+                for fixture in [off, closed, partial, record(120), record(7200), record(172800)] {
+                    let (image, layout, text) = MenuBarContent.previewCodex(sample: sample(), snapshot: fixture, preferences: MenuBarPreferences(), dark: dark)
+                    try check(image != nil && (layout[.codex] != nil) == (fixture.appStartedAt != nil), "Codex runtime visibility fallback failed")
+                    if !fixture.recordsEnabled { try check(!text.contains("123456"), "OFF tooltip leaked a stale token count") }
+                }
+            }
+        }
+        L10n.setLanguage(.korean, defaults: isolated)
+        print("PASS Codex menu: 32 selections × four languages × two appearances, source states, finite fresh-record gesture, no catch-up/re-enable replay, OFF/sleep gates")
+    }
     static func benchmark() throws {
         let frames = 1_000
         for visible in [all, Set<MenuBarMetric>([.ssd, .network]), []] {
@@ -273,6 +357,7 @@ struct MenuRenderProbe {
             try layoutChecks(in: directory)
             try motionChecks()
             try cacheAndAccessibilityChecks()
+            try codexChecks(in: directory)
             if CommandLine.arguments.contains("--benchmark") { try benchmark() }
             try contactSheet(in: directory)
             print("OUTPUT \(directory.path)")
