@@ -2,7 +2,7 @@
 
 ## v2.6.0 — Unreleased
 
-Choose individual menu bar metrics and review disk cleanup candidates. Build 22.
+Choose individual menu bar metrics and review disk cleanup candidates. Build 23.
 
 - Show CPU, GPU, SSD, and network by default, with four independent checkboxes in Settings. Save choices across launches and migrate the old primary-metric preference.
 - Fit each visible group to its actual text width with compact, consistent spacing, including between SSD and network. Hidden groups leave no reserved space.
@@ -18,6 +18,7 @@ Choose individual menu bar metrics and review disk cleanup candidates. Build 22.
 - Remove the redundant cleanup title and add 24pt to the file list. Keep back navigation and folder controls in one row.
 - Remember an explicitly selected folder and inspect it on later cleanup entry, with stable scope checks and a Forget folder action. Never scan on application launch or ordinary panel/tab reopening.
 - Precheck only old installer candidates after a complete scan; leave large files and incomplete scans unchecked. Keep exact final confirmation and per-file revalidation before moving anything to Trash.
+- Keep cleanup primary-action labels white and semibold on the accent button, with a distinct disabled text color.
 
 ## v2.5.1 — 2026-10-19
 

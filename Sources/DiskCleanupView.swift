@@ -210,7 +210,6 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             button.font = .systemFont(ofSize: 10, weight: .medium)
         }
         primary.bezelColor = .controlAccentColor
-        primary.contentTintColor = .white
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("cleanup-file"))
         column.width = 324
         table.addTableColumn(column)
@@ -406,6 +405,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             }
         }
         if pickerInFlight { primary.isEnabled = false; secondary.isEnabled = false }
+        updatePrimaryAppearance()
         table.reloadData()
         table.frame.size.height = max(banner.isHidden ? 200 : 170, CGFloat(candidateRows.count) * 72)
         needsLayout = true
@@ -414,6 +414,17 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             fade.fromValue = 0.82; fade.toValue = 1; fade.duration = 0.12
             body.layer?.add(fade, forKey: "cleanupStage")
         }
+    }
+    private func updatePrimaryAppearance() {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let title = NSAttributedString(string: primary.title, attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: primary.isEnabled ? NSColor.white : NSColor.disabledControlTextColor,
+            .paragraphStyle: paragraph
+        ])
+        primary.attributedTitle = title
+        primary.attributedAlternateTitle = title
     }
     private var scanDetail: String {
         guard let plan else { return "" }
@@ -593,6 +604,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             let chosen = self.plan?.candidates.filter { self.selectedIDs.contains($0.id) } ?? []
             self.summary.stringValue = L10n.format("선택 %d개 · 정리 대상 %@", chosen.count, cleanupBytes(self.totalBytes(chosen)))
             self.primary.isEnabled = !chosen.isEmpty
+            self.updatePrimaryAppearance()
         }
         return view
     }
