@@ -8,6 +8,7 @@ struct CodexMonitorProbe {
         protocolAndFrames()
         observations()
         usageAndQuotas()
+        quotaBucketSelection()
         try socketSecurity()
         lifecycle()
         print("Codex monitor fixtures passed: read-only methods/opt-outs, bounded frames, absent-app lifecycle, stale delivery cancellation, numeric filtering, account/model attribution baselines, dedup/rollback/thread isolation, union activity time, approval exclusion and secure socket metadata. No live daemon, credentials, conversation history, model call or account endpoint was accessed.")
@@ -175,6 +176,38 @@ struct CodexMonitorProbe {
         precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) == nil)
         records[url.path] = nil
         precondition(CodexEndpointSecurity.inspect(socketURL: url, homeURL: home, readMetadata: { records[$0] }) == nil)
+    }
+
+    private static func quotaBucketSelection() {
+        func bucket(_ used: Double) -> [String: Any] {
+            ["primary": ["usedPercent": used, "windowDurationMins": 300],
+             "secondary": ["usedPercent": used + 10, "windowDurationMins": 10_080]]
+        }
+        var state = CodexObservationStore()
+        state.limits(["rateLimitsByLimitId": ["aaa-model": bucket(5), "codex": bucket(20), "zzz-model": bucket(40)], "rateLimits": bucket(77)])
+        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas.allSatisfy { $0.name.hasPrefix("codex.") })
+        precondition(state.snapshot.quotas[0].usedPercent == 20)
+        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "aaa-model", "primary": ["usedPercent": 1]]])
+        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 20,
+            "A model-specific notification cannot replace or append default account quota rows")
+        var legacy = bucket(77)
+        legacy["limitId"] = "zzz-model"
+        state.limits(["rateLimitsByLimitId": ["codex": bucket(20), "zzz-model": bucket(40)], "rateLimits": legacy])
+        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 40)
+        precondition(state.snapshot.quotas.allSatisfy { $0.name.hasPrefix("zzz-model.") })
+        state.limits(["rateLimitsByLimitId": ["only-model": bucket(5)], "rateLimits": [:]])
+        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 5)
+        state.limits(["rateLimitsByLimitId": ["aaa-model": bucket(5), "zzz-model": bucket(40)], "rateLimits": bucket(77)])
+        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 77)
+        precondition(state.snapshot.quotas.allSatisfy { $0.name.hasPrefix("legacy.") })
+        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "aaa-model", "primary": ["usedPercent": 1]]])
+        precondition(state.snapshot.quotas.count == 2 && state.snapshot.quotas[0].usedPercent == 77)
+        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["primary": ["usedPercent": 78.5]]])
+        precondition(state.snapshot.quotas[0].usedPercent == 78.5)
+        state.limits(["rateLimitsByLimitId": ["aaa-model": bucket(5), "zzz-model": bucket(40)], "rateLimits": [:]])
+        precondition(state.snapshot.quotas.isEmpty, "Ambiguous model buckets must remain unavailable without a default view")
+        state.notification(method: "account/rateLimits/updated", parameters: ["rateLimits": ["limitId": "aaa-model", "primary": ["usedPercent": 1]]])
+        precondition(state.snapshot.quotas.isEmpty)
     }
 
     private static func lifecycle() {

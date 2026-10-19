@@ -168,6 +168,7 @@ enum CodexEndpointSecurity {
 
 struct CodexObservationStore {
     enum Activity { case unknown, idle, active, waiting }
+    private enum QuotaSelection { case identified(String), legacy }
     struct ThreadMetadata {
         var activity: Activity = .unknown
         var startedAt: Date?
@@ -187,6 +188,7 @@ struct CodexObservationStore {
     private var baselines: [String: [String: Counters]] = [:]
     private var totals: [String: CodexModelUsage] = [:]
     private var quotaWindows: [String: CodexQuota] = [:]
+    private var quotaSelection: QuotaSelection?
     private var lastMonotonic: TimeInterval?
 
     mutating func advance(monotonic: TimeInterval) {
@@ -212,6 +214,7 @@ struct CodexObservationStore {
             snapshot.lifetimeTokens = nil
             snapshot.quotas = []
             quotaWindows.removeAll()
+            quotaSelection = nil
             snapshot.updatedAt = nil
         }
         snapshot.connection = value
@@ -318,7 +321,17 @@ struct CodexObservationStore {
     mutating func notification(method: String, parameters: [String: Any]) {
         guard CodexReadProtocol.notifications.contains(method) else { return }
         if method == "account/rateLimits/updated" {
-            if let limits = parameters["rateLimits"] as? [String: Any] { quota(limits, bucket: nil, sparse: true) }
+            guard let limits = parameters["rateLimits"] as? [String: Any], let quotaSelection else { return }
+            switch quotaSelection {
+            case .identified(let id):
+                guard CodexReadProtocol.identifier(limits["limitId"]) == id else { return }
+                quota(limits, bucket: id, sparse: true)
+            case .legacy:
+                // An anonymous historical default update cannot be assumed to
+                // describe a different explicitly identified model bucket.
+                guard limits["limitId"] == nil || limits["limitId"] is NSNull else { return }
+                quota(limits, bucket: "legacy", sparse: true)
+            }
             return
         }
         guard let id = CodexReadProtocol.identifier(parameters["threadId"]), loaded.contains(id) else { return }
@@ -349,9 +362,33 @@ struct CodexObservationStore {
 
     mutating func limits(_ value: [String: Any]) {
         quotaWindows.removeAll()
+        quotaSelection = nil
+        let legacy = value["rateLimits"] as? [String: Any]
+        let legacyID = legacy.flatMap { CodexReadProtocol.identifier($0["limitId"]) }
         if let buckets = value["rateLimitsByLimitId"] as? [String: [String: Any]], !buckets.isEmpty {
-            for (name, bucket) in buckets.prefix(16) { quota(bucket, bucket: name, sparse: false) }
-        } else if let legacy = value["rateLimits"] as? [String: Any] { quota(legacy, bucket: nil, sparse: false) }
+            let chosen: (String, [String: Any])?
+            if let legacyID, let bucket = buckets[legacyID] { chosen = (legacyID, bucket) }
+            else if let bucket = buckets["codex"] { chosen = ("codex", bucket) }
+            else if buckets.count == 1, let entry = buckets.first, CodexReadProtocol.identifier(entry.key) != nil { chosen = (entry.key, entry.value) }
+            else { chosen = nil }
+            if let (id, bucket) = chosen {
+                quotaSelection = .identified(id)
+                quota(bucket, bucket: id, sparse: false)
+                return
+            }
+        }
+        if let legacy {
+            let hasWindow = ["primary", "secondary"].contains { kind in
+                (legacy[kind] as? [String: Any]).flatMap { CodexReadProtocol.percentage($0["usedPercent"]) } != nil
+            }
+            if let legacyID {
+                quotaSelection = .identified(legacyID)
+                quota(legacy, bucket: legacyID, sparse: false)
+            } else if hasWindow {
+                quotaSelection = .legacy
+                quota(legacy, bucket: "legacy", sparse: false)
+            }
+        }
         snapshot.quotas = quotaWindows.values.sorted { $0.name < $1.name }
     }
 
