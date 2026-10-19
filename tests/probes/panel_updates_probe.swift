@@ -151,7 +151,7 @@ enum PanelUpdatesProbe {
             for child in node.subviews where !child.isHidden {
                 let container = node.bounds.insetBy(dx: -0.5, dy: -0.5)
                 precondition(container.contains(child.frame), "Visible content outside its parent: \(type(of: child)) \(child.frame) in \(node.bounds)")
-                if !(child is NSControl) { visit(child) }
+                if !(child is NSControl) && !(child is NSScrollView) { visit(child) }
             }
         }
         var canvasCount = 0

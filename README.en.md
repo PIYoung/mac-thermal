@@ -99,6 +99,14 @@ Click the menu bar to open a fixed-size panel. The CPU tab opens first; later, t
 **Korean by default · 4 languages · Light and dark appearance · Uptime · Launch at login**<br>
 Use the top-right Settings button to change the language, menu bar motion, and automatic startup. No accounts, ads, analytics, or server uploads. Graph history stays in memory.
 
+## Disk cleanup
+
+Choose a local folder that is not cloud-synced from **Disk cleanup** at the top right of the SSD card. It lists DMG/PKG installers and files of at least 100 MB whose creation and modification dates are both at least 30 days old as candidates. Age and size do not mean a file is unnecessary, and every checkbox starts unchecked.
+
+Review each file's location, size, modification date, and candidate reason. Confirm the selected count and size before **moving the files to Trash**. System and known cloud locations, hidden files, symbolic links, package contents, version-controlled projects, and blanket cache removal are excluded. Stop scanning or remaining moves at any time; results distinguish moved, skipped, and failed items.
+
+Bytes moved to Trash are not reclaimed space. The app never empties Trash or permanently deletes files; open Trash from the result to review them. Third-party sync folders in arbitrary locations cannot all be identified and must be excluded by the user. Scan lists stay in memory, file contents are not read, and no data is uploaded.
+
 ## Install
 
 Runs on an **Apple Silicon Mac with macOS 14 or later**. Release binaries are ARM64 only; Intel Macs are not supported.

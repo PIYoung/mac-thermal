@@ -73,7 +73,7 @@ enum L10n {
 
     // Korean keys are also the Korean source text. Translations are original
     // project text ordered as English, Japanese, and Simplified Chinese.
-    static let translations: [String: [String]] = panelTranslations.merging(systemTranslations) { panel, _ in panel }
+    static let translations: [String: [String]] = panelTranslations.merging(systemTranslations) { panel, _ in panel }.merging(cleanupTranslations) { existing, _ in existing }
 
     static func text(_ key: String) -> String {
         text(key, language: language)

@@ -25,9 +25,9 @@ PY
 xcrun swift -module-cache-path "$preview_dir/module-cache" "$project_dir/scripts/DrawIcon.swift" "$preview_dir/AppIcon.iconset"
 iconutil -c icns "$preview_dir/AppIcon.iconset" -o "$helper_dir/Contents/Resources/AppIcon.icns"
 xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$preview_dir/module-cache" \
-  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" \
+  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" \
   "$preview_dir/DocModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/Uptime.swift" "$source_dir/CPUUsageHistory.swift" "$source_dir/LiquidTabs.swift" \
-  "$source_dir/Panel.swift" "$project_dir/scripts/render-doc-preview.swift" \
+  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/Panel.swift" "$project_dir/scripts/render-doc-preview.swift" \
   -framework AppKit -framework QuartzCore -o "$helper_dir/Contents/MacOS/DocPreview"
 "$helper_dir/Contents/MacOS/DocPreview" "$project_dir/docs/images/mac-thermal-cpu.png" "$project_dir/build/panel-previews"

@@ -32,7 +32,11 @@ enum LocalizationProbe {
         for (key, value) in first where second[key] != nil {
             require(value == second[key]!, "Conflicting duplicate translation: \(key)")
         }
-        return first.merging(second) { left, _ in left }
+        let existing = first.merging(second) { left, _ in left }
+        for (key, value) in L10n.cleanupTranslations where existing[key] != nil {
+            require(value == existing[key]!, "Conflicting cleanup translation: \(key)")
+        }
+        return existing.merging(L10n.cleanupTranslations) { left, _ in left }
     }
     private static func testPreferences() {
         let suiteName = "MacThermal.LocalizationProbe.\(UUID().uuidString)"
@@ -109,7 +113,7 @@ enum LocalizationProbe {
         require(originalStoredValue == finalStoredValue, "Probe changed actual app language preference")
     }
     private static func testLiteralCoverage(_ project: URL, tables: [String: [String]]) throws {
-        let sourceNames = ["Panel.swift", "LiquidTabs.swift", "MenuBarContent.swift", "MenuBarPreferences.swift", "Uptime.swift", "LoginItem.swift", "main.swift", "Resources.swift", "DashboardWindow.swift"]
+        let sourceNames = ["DiskCleanup.swift", "DiskCleanupView.swift", "Panel.swift", "LiquidTabs.swift", "MenuBarContent.swift", "MenuBarPreferences.swift", "Uptime.swift", "LoginItem.swift", "main.swift", "Resources.swift", "DashboardWindow.swift"]
         let regex = try NSRegularExpression(pattern: #"L10n\.(?:text|format)\(\s*"((?:\\.|[^"\\])*)""#)
         let literalRegex = try NSRegularExpression(pattern: #""((?:\\.|[^"\\])*)""#)
         var callCount = 0

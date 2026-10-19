@@ -33,14 +33,14 @@ models = models.replace('ThermalStatus(ProcessInfo.processInfo.thermalState)', '
 (build / 'ProbeModels.swift').write_text(models + '\n' + resources)
 PY
 common_sources=(
-  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift"
+  "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift"
   "$build_dir/ProbeModels.swift" "$source_dir/MenuBarPreferences.swift" "$source_dir/Uptime.swift"
   "$source_dir/CPUUsageHistory.swift" "$source_dir/LiquidTabs.swift"
   "$project_dir/tests/probes/panel_updates_probe.swift"
 )
 xcrun swiftc -O -D PANEL_UPDATES_PROBE -target arm64-apple-macosx14.0 \
   -module-cache-path "$build_dir/module-cache" "${common_sources[@]}" \
-  "$source_dir/Panel.swift" "$source_dir/DashboardWindow.swift" \
+  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/Panel.swift" "$source_dir/DashboardWindow.swift" \
   -framework AppKit -framework QuartzCore -o "$build_dir/panel-updates-probe"
 if [[ "$benchmark" == true ]]; then
   if [[ -n "$baseline_panel" ]]; then

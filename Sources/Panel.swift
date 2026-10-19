@@ -3,7 +3,7 @@ import Foundation
 import QuartzCore
 import ObjectiveC
 
-private enum PanelColor {
+enum PanelColor {
     static let blue = NSColor(calibratedRed: 0.20, green: 0.48, blue: 0.96, alpha: 1)
     static let teal = NSColor(calibratedRed: 0.04, green: 0.64, blue: 0.61, alpha: 1)
     static let violet = NSColor(calibratedRed: 0.54, green: 0.39, blue: 0.88, alpha: 1)
@@ -84,7 +84,7 @@ private func symbol(_ name: String, color: NSColor) -> NSImageView {
     return image
 }
 
-private class FlippedView: NSView {
+class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
@@ -108,7 +108,7 @@ private final class GlassCanvas: FlippedView {
     }
 }
 
-private class GlassCard: FlippedView {
+class GlassCard: FlippedView {
     var radius: CGFloat = 16
     override func draw(_ dirtyRect: NSRect) {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
@@ -398,8 +398,18 @@ final class PanelController: NSViewController {
     private let memoryRanking = ProcessRankingCard(title: "메모리 프로세스 TOP 3", subtitle: "실제 점유 메모리", icon: "memorychip", accent: PanelColor.violet)
     private let diskFree = text("—", size: 31, weight: .medium, digits: true)
     private let diskCapacity = text("전체 용량 정보 없음", size: 11, color: PanelColor.secondary)
-    private let diskPercent = text("—", size: 11, weight: .semibold, digits: true)
     private let diskBar = UsageBar()
+    private let diskMonitorView = FlippedView()
+    private var diskCleanupView: DiskCleanupView?
+    private lazy var diskCleanupButton: NSButton = {
+        let button = NSButton(title: L10n.text("디스크 정리"), target: self, action: #selector(openDiskCleanup))
+        button.bezelStyle = .rounded
+        button.controlSize = .small
+        button.font = .systemFont(ofSize: 10, weight: .medium)
+        localizedAccessibilityLabel(button, "디스크 정리")
+        localizedToolTip(button, "폴더와 정리할 파일을 직접 선택하고 확인한 뒤 휴지통으로 이동합니다")
+        return button
+    }()
     private let diskRead = text("측정 중", size: 20, weight: .medium, digits: true)
     private let diskWrite = text("측정 중", size: 20, weight: .medium, digits: true)
     private let diskReadGraph = Sparkline(color: PanelColor.blue)
@@ -580,7 +590,8 @@ final class PanelController: NSViewController {
         buildCPU(in: tabViews[0])
         buildGPU(in: tabViews[1])
         buildMemory(in: tabViews[2])
-        buildDisk(in: tabViews[3])
+        place(diskMonitorView, in: tabViews[3], 0, 0, 344, 317)
+        buildDisk(in: diskMonitorView)
         buildNetwork(in: tabViews[4])
         place(menuBarSettingsView, in: canvas, 18, 66, 344, 363)
         buildMenuBarSettings()
@@ -617,6 +628,8 @@ final class PanelController: NSViewController {
         animationStyleControl.removeAllItems()
         animationStyleControl.addItems(withTitles: [MenuBarAnimationStyle.rhythm.title, MenuBarAnimationStyle.orbit.title])
         for metric in MenuBarMetric.allCases { metricControls[metric]?.title = metric.title }
+        diskCleanupButton.title = L10n.text("디스크 정리")
+        diskCleanupView?.refreshLanguage()
         languageControl.selectItem(at: AppLanguage.allCases.firstIndex(of: L10n.language) ?? 0)
         updateMenuBarControls()
         showSelectedTab()
@@ -795,12 +808,11 @@ final class PanelController: NSViewController {
         let capacity = GlassCard()
         place(capacity, in: content, 0, 0, 344, 130)
         place(symbol("internaldrive", color: PanelColor.violet), in: capacity, 15, 15, 14, 14)
-        place(text("내장 SSD · 사용 가능 공간", size: 11, weight: .semibold), in: capacity, 36, 13, 214, 18)
-        diskPercent.alignment = .right
-        place(diskPercent, in: capacity, 253, 15, 75, 16)
+        place(text("내장 SSD", size: 11, weight: .semibold), in: capacity, 36, 13, 176, 18)
+        place(diskCleanupButton, in: capacity, 226, 9, 105, 25)
         place(diskFree, in: capacity, 14, 35, 313, 40)
-        place(diskCapacity, in: capacity, 17, 86, 310, 16)
-        place(diskBar, in: capacity, 16, 113, 312, 5)
+        place(diskBar, in: capacity, 16, 85, 312, 5)
+        place(diskCapacity, in: capacity, 17, 102, 310, 16)
         localizedToolTip(capacity, "시동 볼륨의 전체 용량과 현재 사용 가능한 공간입니다. APFS 공유 공간에 따라 값이 바뀔 수 있습니다.")
 
         let activity = GlassCard()
@@ -1043,12 +1055,24 @@ final class PanelController: NSViewController {
 
     private func applyDisk(_ sample: Snapshot) {
         let disk = sample.resources.disk
-        diskFree.attributedStringValue = sizeText(disk.availableBytes, size: 31, binary: false)
-        diskCapacity.stringValue = L10n.format("전체 %@", bytesString(disk.totalBytes, binary: false))
-        let percentage = disk.totalBytes.flatMap { total in disk.availableBytes.map { total > 0 ? max(0, total - $0) / total * 100 : 0 } }
+        let total = disk.totalBytes.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        let available = disk.availableBytes.flatMap { value in
+            value.isFinite && value >= 0 && (total.map { value <= $0 } ?? true) ? value : nil
+        }
+        let used = total.flatMap { total in available.map { total - $0 } }
+        let percentage = total.flatMap { total in used.map { $0 / total * 100 } }
+        let usageLine = NSMutableAttributedString(attributedString: sizeText(used, size: 27, binary: false))
+        usageLine.append(NSAttributedString(string: " / " + bytesString(total, binary: false), attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 17, weight: .medium), .foregroundColor: PanelColor.secondary]))
+        if let percentage {
+            usageLine.append(NSAttributedString(string: String(format: " (%.0f%%)", percentage), attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: PanelColor.secondary]))
+        }
+        diskFree.attributedStringValue = usageLine
+        diskFree.setAccessibilityLabel(L10n.format("SSD 사용 %@, 전체 %@", bytesString(used, binary: false), bytesString(total, binary: false)))
+        diskCapacity.stringValue = L10n.format("사용 가능 %@", bytesString(available, binary: false))
         diskBar.value = percentage
         diskBar.color = PanelColor.violet
-        diskPercent.stringValue = percentage.map { L10n.format("사용 %.0f%%", $0) } ?? "—"
         let placeholder = disk.deviceCount > 0 ? L10n.text("측정 중") : L10n.text("정보 없음")
         diskRead.attributedStringValue = rateText(disk.readBytesPerSecond, placeholder: placeholder)
         diskWrite.attributedStringValue = rateText(disk.writeBytesPerSecond, placeholder: placeholder)
@@ -1059,6 +1083,26 @@ final class PanelController: NSViewController {
         ssdTemp.attributedStringValue = temperature
         ssdTemp.toolTip = L10n.format("내장 SSD NAND 센서 %d개 중 최댓값", sample.ssdSensors)
         ssdTemp.setAccessibilityLabel(L10n.format("SSD 온도 %@", sample.ssdTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
+    }
+
+    @objc private func openDiskCleanup() {
+        let cleanup: DiskCleanupView
+        if let existing = diskCleanupView { cleanup = existing }
+        else {
+            cleanup = DiskCleanupView(frame: diskMonitorView.bounds)
+            cleanup.didClose = { [weak self] in self?.closeDiskCleanup() }
+            cleanup.didFinish = { [weak self] in self?.refresh?() }
+            tabViews[3].addSubview(cleanup)
+            diskCleanupView = cleanup
+        }
+        diskMonitorView.isHidden = true
+        cleanup.isHidden = false
+    }
+
+    private func closeDiskCleanup() {
+        diskCleanupView?.isHidden = true
+        diskMonitorView.isHidden = false
+        if presentationIsVisible { presentLatestSnapshot() }
     }
 
     private func applyNetwork(_ sample: Snapshot) {
@@ -1117,6 +1161,10 @@ extension PanelController {
     var probeCPUStyleEnabled: Bool { animationStyleControl.isEnabled }
     var probeMotionControlEnabled: Bool { menuBarMotionSwitch.isEnabled }
     var probeIntensityControlEnabled: Bool { motionIntensitySlider.isEnabled }
+    func probeOpenDiskCleanup() { diskCleanupButton.performClick(nil) }
+    func probeCloseDiskCleanup() { closeDiskCleanup() }
+    var probeDiskCleanupView: DiskCleanupView? { diskCleanupView }
+    var probeDiskCleanupButtonTitle: String { diskCleanupButton.title }
     var probeStrings: [String: String] {
         ["cpu": cpuTemp.stringValue, "cpuPercent": cpuPercent.stringValue,
          "gpuPercent": gpuPercent.stringValue, "gpuModel": gpuModel.stringValue,
