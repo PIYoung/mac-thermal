@@ -20,7 +20,7 @@
 
 - **Menu bar:** CPU temperature and usage, GPU usage, SSD read/write rates, network speeds and animated indicators.
 - **Click-open panel:** CPU, GPU, memory, SSD and network tabs, recent graphs, top three CPU/memory processes and system uptime.
-- **Codex:** A companion on the left shows app runtime, local tokens today and model usage. A menu bar robot moves when a new token record arrives.
+- **Codex:** A left companion shows local tokens today, input/output, cache reuse and model TOP 3. Optional account quota and activity summaries share a scrolling card layout with an original slim scrollbar.
 - **Disk cleanup:** Review candidates in a chosen folder, then confirm before moving selected files to Trash.
 - **Settings:** Choose metrics, motion and startup at login. Korean by default; English, Japanese and Simplified Chinese supported.
 
@@ -51,7 +51,7 @@ Quit the existing app first. Installs into `~/Applications`; no `sudo` required.
 
 Codex record reading is **OFF by default**. When enabled, only model names, token numbers and timestamps from `~/.codex/sessions` are aggregated in memory. These files also contain conversations, but bodies, commands and credentials are never kept, displayed or transferred. Source files are unchanged; switching off stops reading and clears aggregation.
 
-Usage covers **this Mac’s records for today (UTC)**, not account totals or billing. Optional [official sign-in](docs/CODEX_ACCOUNT.md) adds account remaining quota and a reset countdown in the panel. The robot stops after 10 seconds without another new record; it does not indicate live token consumption or task completion.
+Usage covers **this Mac’s records for today (UTC)**, not account totals or billing. Optional [official sign-in](docs/CODEX_ACCOUNT.md) adds remaining account quota and reset countdowns after separate consent. Daily numeric summaries and lifetime/streak account summaries each require additional opt-in. There is no developer collection server, analytics SDK or remote log upload. The robot stops after 10 seconds without another new record; it does not indicate live token consumption or task completion.
 
 ---
 

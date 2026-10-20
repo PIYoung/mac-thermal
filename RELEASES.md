@@ -1,5 +1,17 @@
 # Releases
 
+## v2.10.5 — 2026-10-20
+
+Codex account insights and a refined scrolling companion. Build 42.
+
+- Add optional Codex-managed ChatGPT sign-in for remaining quota and reset countdowns. Use an independently installed OpenAI-signed helper with a private, isolated credential store; never import existing desktop credentials or make model calls.
+- Keep daily account statistics and five lifetime/peak/streak/longest-turn summary values behind separate default-off reviews. Missing or stale values remain unknown; disabling clears the approved in-memory data. No developer collection server, analytics SDK, remote logging or usage-history files.
+- Show local input/output composition, cache reuse, reasoning share and model TOP 3; click a model to expand details. Keep local UTC-today records distinct from account-wide statistics. Local record reading moves to Settings, directly below Language.
+- Keep the original title header and fixed 300×420pt companion. Scroll the quota card with the other cards, using an original translucent 3pt thumb that emphasizes during interaction while preserving native drag, paging and accessibility.
+- Update four-language documentation and synthetic Codex previews. Retain the compact menu robot, menu animation limits, paired-panel placement and reviewed disk cleanup.
+
+Apple Silicon · macOS 14+. DMG, ZIP and SHA256SUMS are provided. Community builds are ad-hoc signed, without Developer ID signing or Apple notarization. MIT licensed; bundled notices are preserved. Made with OpenAI Codex and user feedback.
+
 ## v2.7.1 — 2026-10-20
 
 Reduce menu bar rendering overhead. Build 29.
