@@ -42,3 +42,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Optional external runtime — OpenAI Codex
+Account quota integration uses the documented account APIs of a separately
+installed OpenAI-signed Codex app-server over private stdio. No Codex source,
+binary, logo or assets are copied or redistributed in Mac Thermal. The JSON-RPC
+client and quota UI are original project code. The installed OpenAI software and
+ChatGPT sign-in remain subject to their own licenses and service terms.
+Protocol reference: https://learn.chatgpt.com/docs/app-server
+Account integration details: docs/CODEX_ACCOUNT.md

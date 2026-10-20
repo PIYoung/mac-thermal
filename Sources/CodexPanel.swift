@@ -67,7 +67,7 @@ private final class CodexBar: FlippedView {
     }
 }
 
-/// Numeric local-record metadata only. This view never opens history files or reads task text.
+/// Numeric account quota and local-record metadata only. No authentication data.
 final class CodexPanelController: NSViewController {
     static let surfaceSize = NSSize(width: 300, height: 420)
     static let size = NSSize(width: 348, height: 468)
@@ -77,6 +77,14 @@ final class CodexPanelController: NSViewController {
     private var languageObserver: NSObjectProtocol?
     private let connection = CodexPill(frame: .zero)
     private let activityCard = GlassCard()
+    private let quotaCard = GlassCard()
+    private let quotaTitles = (0..<2).map { _ in codexText(size: 10, weight: .medium) }
+    private let quotaValues = (0..<2).map { _ in codexText(size: 11, weight: .semibold, digits: true) }
+    private let quotaResets = (0..<2).map { _ in codexText(size: 9, secondary: true, digits: true) }
+    private let quotaBars = (0..<2).map { _ in CodexBar() }
+    private let quotaStatus = codexText(size: 11, secondary: true, lines: 2)
+    private let quotaElapsed = codexText(size: 9, secondary: true, digits: true)
+    private lazy var accountButton = NSButton(image: NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(accountClicked))
     private let totalsCard = GlassCard()
     private let modelsCard = GlassCard()
     private let recordsCard = GlassCard()
@@ -109,6 +117,7 @@ final class CodexPanelController: NSViewController {
     private lazy var refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(refreshNow))
     var refresh: (() -> Void)?
     var recordsEnabledChanged: ((Bool) -> Void)?
+    var accountAction: (() -> Void)?
     #if PANEL_UPDATES_PROBE
     private var probeVisible = false
     #endif
@@ -148,7 +157,12 @@ final class CodexPanelController: NSViewController {
         codexPlace(icon, in: canvas, 15, 16, 19, 19)
         let brand = codexText(size: 16, weight: .semibold)
         brand.stringValue = "Codex"
-        codexPlace(brand, in: canvas, 42, 12, 156, 25)
+        codexPlace(brand, in: canvas, 42, 12, 130, 25)
+        quotaElapsed.alignment = .right
+        codexPlace(quotaElapsed, in: canvas, 98, 20, 78, 14)
+        accountButton.isBordered = false
+        accountButton.contentTintColor = .secondaryLabelColor
+        codexPlace(accountButton, in: canvas, 180, 14, 21, 23)
         codexPlace(connection, in: canvas, 205, 15, 80, 21)
         codexPlace(activityCard, in: canvas, 12, 48, 276, 64)
         codexPlace(activity, in: activityCard, 12, 10, 142, 19)
@@ -157,6 +171,17 @@ final class CodexPanelController: NSViewController {
         codexPlace(model, in: activityCard, 12, 37, 140, 16)
         counts.alignment = .right
         codexPlace(counts, in: activityCard, 152, 37, 112, 16)
+        codexPlace(quotaCard, in: canvas, 12, 48, 276, 64)
+        for index in 0..<2 {
+            let y = CGFloat(7 + index * 27)
+            codexPlace(quotaTitles[index], in: quotaCard, 12, y, 66, 15)
+            codexPlace(quotaValues[index], in: quotaCard, 80, y - 1, 70, 16)
+            quotaResets[index].alignment = .right
+            codexPlace(quotaResets[index], in: quotaCard, 152, y, 112, 15)
+            codexPlace(quotaBars[index], in: quotaCard, 12, y + 17, 252, 3)
+        }
+        quotaStatus.alignment = .center
+        codexPlace(quotaStatus, in: quotaCard, 12, 16, 252, 34)
         codexPlace(totalsCard, in: canvas, 12, 120, 276, 72)
         codexPlace(dailyTitle, in: totalsCard, 12, 9, 118, 16)
         codexPlace(dailyValue, in: totalsCard, 10, 27, 120, 29)
@@ -202,8 +227,9 @@ final class CodexPanelController: NSViewController {
         guard isViewLoaded, presentationIsVisible else { return }
         render()
     }
-    func prepareForPresentation() { _ = view; render() }
+    func prepareForPresentation() { _ = view; renderNow = Date(); render() }
     @objc private func refreshNow() { refresh?() }
+    @objc private func accountClicked() { accountAction?() }
     @objc private func recordsChanged() {
         let enabled = recordsSwitch.state == .on
         guard latest.recordsEnabled != enabled else { return }
@@ -280,6 +306,7 @@ final class CodexPanelController: NSViewController {
             elapsed.toolTip = L10n.text("정보 없음")
         }
         elapsed.setAccessibilityLabel(elapsed.toolTip)
+        renderQuota()
         dailyTitle.stringValue = L10n.text("오늘 토큰 (UTC)")
         let daily = enabled ? latest.dailyTokens.flatMap { $0 >= 0 && !(latest.incomplete && $0 == 0) ? $0 : nil } : nil
         dailyValue.stringValue = tokenText(daily)
@@ -336,15 +363,74 @@ final class CodexPanelController: NSViewController {
             L10n.format(stale ? "이전 값 · %@" : "갱신 %@", dateText($0))
         } ?? notice ?? L10n.text("업데이트 정보 없음")
         updated.toolTip = enabled && latest.incomplete ? recordsStatus.toolTip : notice ?? L10n.text("이 Mac의 로컬 기록만 집계합니다")
-        refreshButton.isEnabled = enabled
+        refreshButton.isEnabled = enabled || latest.quota.isEnabled
         refreshButton.toolTip = L10n.text("Codex 지금 새로고침")
         refreshButton.setAccessibilityLabel(L10n.text("Codex 지금 새로고침"))
+    }
+
+    private func renderQuota() {
+        let quota = latest.quota
+        activityCard.isHidden = quota.isEnabled
+        quotaCard.isHidden = !quota.isEnabled
+        quotaElapsed.isHidden = !quota.isEnabled
+        quotaElapsed.stringValue = elapsed.stringValue
+        quotaElapsed.toolTip = elapsed.toolTip
+        accountButton.contentTintColor = quota.connection == .connected ? PanelColor.blue : .secondaryLabelColor
+        accountButton.toolTip = L10n.text(quota.isEnabled ? "ChatGPT 한도 관리" : "ChatGPT 한도 연결")
+        accountButton.setAccessibilityLabel(accountButton.toolTip)
+        accountButton.isEnabled = quota.connection != .disconnecting
+        quotaCard.toolTip = L10n.text("계정의 Codex 한도입니다. 로컬 토큰 집계와 별개이며 리셋 후에는 서버 확인을 기다립니다.")
+        let showRows = quota.isFresh(at: renderNow) && !quota.windows.isEmpty
+        quotaStatus.isHidden = showRows
+        let statusKey: String
+        switch quota.connection {
+        case .disconnected: statusKey = "ChatGPT 한도 연결"
+        case .disconnecting: statusKey = "계정 연결 해제 중"
+        case .connecting: statusKey = "계정 한도 확인 중"
+        case .authorizing: statusKey = "브라우저에서 로그인을 완료하세요"
+        case .connected: statusKey = quota.windows.isEmpty ? "한도 정보 없음" : "한도 갱신 대기 중"
+        case .unavailable: statusKey = "한도를 확인할 수 없습니다 · 계정 버튼으로 재시도"
+        case .needsLogin: statusKey = "ChatGPT 로그인이 필요합니다"
+        case .helperMissing: statusKey = "지원되는 Codex 앱이 필요합니다"
+        }
+        quotaStatus.stringValue = L10n.text(statusKey)
+        for index in 0..<2 {
+            let window = quota.windows.first { $0.slot == index }
+            for field in [quotaTitles[index], quotaValues[index], quotaResets[index]] { field.isHidden = !showRows || window == nil }
+            quotaBars[index].isHidden = !showRows || window == nil
+            guard let window else { continue }
+            if let minutes = window.durationMinutes {
+                let unit = minutes % 1440 == 0 ? "d" : minutes % 60 == 0 ? "h" : "m"
+                let number = minutes % 1440 == 0 ? minutes / 1440 : minutes % 60 == 0 ? minutes / 60 : minutes
+                quotaTitles[index].stringValue = "\(number)\(unit)"
+            } else { quotaTitles[index].stringValue = L10n.text(index == 0 ? "단기 한도" : "장기 한도") }
+            let remaining = window.remaining(at: renderNow)
+            quotaValues[index].stringValue = remaining.map { L10n.format("잔여 %.0f%%", $0) } ?? "—"
+            quotaValues[index].textColor = quota.blocked || (remaining ?? 100) < 10 ? .systemRed : (remaining ?? 100) < 25 ? .systemOrange : .labelColor
+            quotaBars[index].color = quota.blocked || (remaining ?? 100) < 10 ? .systemRed : (remaining ?? 100) < 25 ? .systemOrange : PanelColor.blue
+            quotaBars[index].fraction = remaining.map { $0 / 100 }
+            if quota.blocked {
+                quotaResets[index].stringValue = L10n.text("계정 사용 제한")
+            } else if let reset = window.resetsAt {
+                let seconds = reset.timeIntervalSince(renderNow)
+                if seconds <= 0 { quotaResets[index].stringValue = L10n.text("리셋 확인 중") }
+                else {
+                    let total = Int(ceil(min(seconds, 315_576_000)))
+                    let text = total >= 86400 ? String(format: "%dd %02d:%02d", total / 86400, total / 3600 % 24, total / 60 % 60) : String(format: "%02d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
+                    quotaResets[index].stringValue = L10n.format("리셋 %@", text)
+                }
+            } else { quotaResets[index].stringValue = L10n.text("리셋 정보 없음") }
+            quotaBars[index].setAccessibilityLabel([quotaTitles[index].stringValue, quotaValues[index].stringValue, quotaResets[index].stringValue].joined(separator: ", "))
+        }
     }
 
 }
 
 #if PANEL_UPDATES_PROBE
 extension CodexPanelController {
+    var probeQuotaStrings: [String] { quotaTitles.map(\.stringValue) + quotaValues.map(\.stringValue) + quotaResets.map(\.stringValue) }
+    var probeQuotaIsVisible: Bool { !quotaCard.isHidden }
+    var probeQuotaStatus: String { quotaStatus.stringValue }
     func probeSetVisible(_ visible: Bool) { probeVisible = visible }
     func probeRefresh() { refreshButton.performClick(nil) }
     func probeSetRecordsEnabled(_ enabled: Bool) {

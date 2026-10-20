@@ -163,6 +163,29 @@ enum LoginItemManager {
             runtime.connection = .notRunning
             panel.apply(runtime)
             precondition(panel.probeStrings["elapsed"] == "—", "A stopped app must not show a continuing runtime")
+            var account = sample
+            let fresh = Date()
+            account.quota = CodexQuotaSnapshot(connection: .connected, windows: [
+                CodexQuotaWindow(slot: 0, usedPercent: 32, durationMinutes: 300, resetsAt: fresh.addingTimeInterval(7200)),
+                CodexQuotaWindow(slot: 1, usedPercent: 75, durationMinutes: 10080, resetsAt: fresh.addingTimeInterval(4 * 86400))
+            ], fetchedAt: fresh)
+            panel.apply(account)
+            precondition(panel.probeQuotaIsVisible && panel.probeQuotaStrings.prefix(2) == ["5h", "7d"])
+            precondition(panel.probeQuotaStrings[2] == L10n.format("잔여 %.0f%%", 68.0))
+            precondition(panel.probeQuotaStrings[4].hasPrefix(L10n.format("리셋 %@", "")))
+            account.recordsEnabled = false
+            panel.apply(account); panel.probeRefresh()
+            precondition(refreshes == 2 && panel.probeQuotaIsVisible, "Quota refresh is independent of local records")
+            bounds(canvas(panel))
+            account.quota.windows[0] = CodexQuotaWindow(slot: 0, usedPercent: 32, durationMinutes: 300, resetsAt: fresh.addingTimeInterval(-1))
+            panel.apply(account)
+            precondition(panel.probeQuotaStrings[2] == "—" && panel.probeQuotaStrings[4] == L10n.text("리셋 확인 중"))
+            account.quota.fetchedAt = fresh.addingTimeInterval(-181)
+            panel.apply(account)
+            precondition(panel.probeQuotaStatus == L10n.text("한도 갱신 대기 중"))
+            account.quota = CodexQuotaSnapshot()
+            panel.apply(account)
+            precondition(!panel.probeQuotaIsVisible)
             bounds(canvas(panel))
         }
         if let index = CommandLine.arguments.firstIndex(of: "--render"), CommandLine.arguments.indices.contains(index + 1) {
@@ -172,6 +195,10 @@ enum LoginItemManager {
             documentation.appStartedAt = Date().addingTimeInterval(-8_280)
             documentation.currentModel = "model-alpha"
             documentation.dailyTokens = 267_000
+            documentation.quota = CodexQuotaSnapshot(connection: .connected, windows: [
+                CodexQuotaWindow(slot: 0, usedPercent: 32, durationMinutes: 300, resetsAt: Date().addingTimeInterval(7200)),
+                CodexQuotaWindow(slot: 1, usedPercent: 75, durationMinutes: 10080, resetsAt: Date().addingTimeInterval(4 * 86400))
+            ], fetchedAt: Date())
             documentation.models = [CodexModelUsage(model: "model-alpha", totalTokens: 182_000),
                                     CodexModelUsage(model: "model-beta", totalTokens: 64_000),
                                     CodexModelUsage(model: "model-gamma", totalTokens: 21_000)]

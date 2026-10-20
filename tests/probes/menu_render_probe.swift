@@ -325,6 +325,44 @@ struct MenuRenderProbe {
         L10n.setLanguage(.korean, defaults: isolated)
         print("PASS Codex menu: 32 selections × four languages × two appearances, source states, finite fresh-record gesture, no catch-up/re-enable replay, OFF/sleep gates")
     }
+    static func quotaChecks(in directory: URL) throws {
+        let time = sample().time
+        var local = CodexMonitorSnapshot(appStartedAt: time.addingTimeInterval(-120), connection: .connected)
+        let painter = MenuBarContent.previewQuotaUpdater(sample: sample())
+        let (off, offLayout) = painter(local)
+        local.quota = CodexQuotaSnapshot(connection: .connected, windows: [
+            CodexQuotaWindow(slot: 0, usedPercent: 32, durationMinutes: 300, resetsAt: time.addingTimeInterval(3600)),
+            CodexQuotaWindow(slot: 1, usedPercent: 75, durationMinutes: 10080, resetsAt: time.addingTimeInterval(86400))
+        ], fetchedAt: time)
+        let (on, layout) = painter(local)
+        try check(offLayout[.codex]?.width == 26 && layout[.codex]?.width == 42 && on!.size.width == off!.size.width + 16, "Quota ring must reserve exactly 16 additional points")
+        for metric in all {
+            try check(layout[metric]!.minX == offLayout[metric]!.minX + 16, "Quota ring changed resource spacing")
+            try check(try pixels(on!, region: layout[metric]) == pixels(off!, region: offLayout[metric]), "Quota ring changed neighboring resource pixels")
+        }
+        let ring = CGRect(x: layout[.codex]!.minX + 27, y: 3, width: 15, height: 16)
+        let fullPixels = try pixels(on!, region: ring)
+        var warning = local
+        warning.quota.windows = [CodexQuotaWindow(slot: 0, usedPercent: 95, durationMinutes: 300, resetsAt: time.addingTimeInterval(3600))]
+        let (low, lowLayout) = painter(warning)
+        try check(lowLayout[.codex] == layout[.codex] && (try pixels(low!, region: ring)) != fullPixels, "Low quota must update ring color/fill without resizing")
+        local.quota.fetchedAt = time.addingTimeInterval(-181)
+        let stale = painter(local).0!
+        local.quota = CodexQuotaSnapshot(connection: .unavailable)
+        let unknown = painter(local).0!
+        try check(try pixels(stale, region: ring) == pixels(unknown, region: ring), "Stale quota must use the unknown ring")
+        try check(try pixels(unknown, region: ring) != fullPixels, "Unknown quota must never look like a known percentage")
+        local.appStartedAt = nil; local.connection = .notRunning
+        try check(painter(local).1[.codex] != nil, "Connected account quota remains available when desktop is closed")
+        local.quota = CodexQuotaSnapshot()
+        try check(painter(local).1[.codex] == nil, "Disconnected account must restore runtime-based visibility")
+        local.appStartedAt = time; local.connection = .connected
+        let restored = painter(local)
+        try check(restored.1[.codex]?.width == 26 && (try pixels(restored.0!)) == pixels(off!), "Disconnect must restore cached compact menu pixels")
+        try NSBitmapImageRep(cgImage: cgImage(on!)).representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent("codex-quota-light.png"))
+        print("PASS Codex quota ring: live cache/width transitions, unchanged neighbors, low/unknown/stale states, account visibility independent of desktop; synthetic only")
+    }
+
     static func appearanceCacheChecks() throws {
         let painter = MenuBarContent.previewAppearanceRenderer(sample: sample(thermal: .serious))
         let (light, _) = painter(false, nil, false)
@@ -407,6 +445,7 @@ struct MenuRenderProbe {
             try motionChecks()
             try cacheAndAccessibilityChecks()
             try codexChecks(in: directory)
+            try quotaChecks(in: directory)
             try appearanceCacheChecks()
             if CommandLine.arguments.contains("--benchmark") { try benchmark() }
             try contactSheet(in: directory)

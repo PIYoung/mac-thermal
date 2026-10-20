@@ -8,6 +8,7 @@ final class MenuBarContent: NSObject {
     private var sample = Snapshot.pending
     private var codexActivity = CodexMenuActivity()
     private var codexFrame = 0
+    private var codexQuota = CodexQuotaSnapshot()
     private var baseImage: CGImage?
     private struct AppearanceKey: Hashable {
         let name: String
@@ -57,7 +58,7 @@ final class MenuBarContent: NSObject {
     }
     private var layout: [GroupLayout] = []
     private var orderedMetrics: [MenuBarMetric] {
-        MenuBarMetric.menuOrder.filter { preferences.visibleMetrics.contains($0) && ($0 != .codex || codexActivity.isVisible) }
+        MenuBarMetric.menuOrder.filter { preferences.visibleMetrics.contains($0) && ($0 != .codex || codexActivity.isVisible || codexQuota.isEnabled) }
     }
     private var canvasSize: NSSize { NSSize(width: displayWidth, height: Self.imageSize.height) }
 
@@ -125,6 +126,7 @@ final class MenuBarContent: NSObject {
 
     func update(codex: CodexMonitorSnapshot) {
         codexActivity.receive(codex)
+        codexQuota = codex.quota
         if !motionAllowed || systemSleeping || displaySleeping || !preferences.visibleMetrics.contains(.codex) {
             codexActivity.cancelGesture()
         }
@@ -137,7 +139,7 @@ final class MenuBarContent: NSObject {
         frameRenderings.removeAll()
         self.sample = sample
         let lines = labels
-        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)"
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)|quota:\(codexQuota.isEnabled)"
         if signature != textSignature || baseImage == nil {
             textSignature = signature
             rebuildBase(labels: lines)
@@ -298,7 +300,8 @@ final class MenuBarContent: NSObject {
                 return [L10n.format("Codex · 오늘 토큰 (UTC) %@ · %@", state, codexActivity.recentLabel(now: sample.time)),
                         L10n.text("이 Mac의 로컬 기록에 남은 UTC 오늘 토큰입니다. 계정 전체 사용량이 아닙니다."),
                         L10n.text("새 토큰 기록을 감지하면 움직이고 추가 기록이 없으면 10초 뒤 멈춥니다. 실시간 토큰 소비·작업 완료 여부는 확인할 수 없습니다.")] +
-                        (codexActivity.snapshot.incomplete && codexActivity.canShowUsage ? [L10n.text("일부 로컬 기록만 집계했습니다")] : [])
+                        (codexActivity.snapshot.incomplete && codexActivity.canShowUsage ? [L10n.text("일부 로컬 기록만 집계했습니다")] : []) +
+                        (codexQuota.isEnabled ? [codexQuota.blocked ? L10n.text("계정 사용 제한") : codexQuota.remaining(at: sample.time).map { L10n.format("Codex 계정 잔여 %.0f%%", $0) } ?? L10n.text("계정 한도 확인 중")] : [])
             }
         }
         if lines.isEmpty { lines = [L10n.text("표시 항목 없음 · 아이콘을 눌러 패널 열기")] }
@@ -323,7 +326,7 @@ final class MenuBarContent: NSObject {
 
     private func rebuildBase(labels preparedLabels: [String]? = nil) {
         let lines = preparedLabels ?? labels
-        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)"
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)|quota:\(codexQuota.isEnabled)"
         if signature != layoutSignature || layoutSignature.isEmpty {
             layoutSignature = signature
             baseRenderings.removeAll()
@@ -331,8 +334,9 @@ final class MenuBarContent: NSObject {
             var cursor: CGFloat = 2
             for (index, metric) in orderedMetrics.enumerated() {
                 if metric == .codex {
-                    layout.append(GroupLayout(metric: metric, origin: cursor, width: 26, textOffset: 26, textWidth: 0))
-                    cursor += 26 + 7
+                    let width: CGFloat = codexQuota.isEnabled ? 42 : 26
+                    layout.append(GroupLayout(metric: metric, origin: cursor, width: width, textOffset: width, textWidth: 0))
+                    cursor += width + 7
                     continue
                 }
                 let top = (lines[index * 2] as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9.3, weight: .medium)]).width
@@ -420,6 +424,7 @@ final class MenuBarContent: NSObject {
             case .ssd: drawCapacity(in: context, phase: animated ? diskPhase : 0, animated: animated)
             case .codex:
                 drawCodex(in: context, frame: codexPose)
+                if codexQuota.isEnabled { drawQuota(in: context) }
             case .network:
                 drawFlow(in: context, x: 0, bytes: sample.upload, phase: animated ? uploadPhase : 0.45, upward: true, animated: animated)
                 drawFlow(in: context, x: 9, bytes: sample.download, phase: animated ? downloadPhase : 0.45, upward: false, animated: animated)
@@ -434,6 +439,29 @@ final class MenuBarContent: NSObject {
         if frameRenderings.count >= 8 { frameRenderings.removeAll() }
         frameRenderings[key] = frame
         return frame
+    }
+
+    /// Static account quota ring. Unknown/expired data has no invented fill.
+    private func drawQuota(in context: CGContext) {
+        let remaining = codexQuota.remaining(at: sample.time)
+        let color: CGColor = codexQuota.blocked || (remaining ?? 100) < 10 ? NSColor.systemRed.cgColor :
+            (remaining ?? 100) < 25 ? NSColor.systemOrange.cgColor : ink
+        let circle = CGRect(x: 28, y: 5, width: 12, height: 12)
+        context.setLineWidth(1.8)
+        context.setStrokeColor(color.copy(alpha: 0.20) ?? color)
+        context.strokeEllipse(in: circle)
+        context.setStrokeColor(color)
+        guard let remaining else {
+            context.setLineDash(phase: 0, lengths: [1.5, 2])
+            context.strokeEllipse(in: circle)
+            return
+        }
+        context.setLineCap(.round)
+        if remaining > 0 {
+            context.addArc(center: CGPoint(x: 34, y: 11), radius: 6, startAngle: .pi / 2,
+                           endAngle: .pi / 2 - .pi * 2 * CGFloat(remaining / 100), clockwise: true)
+            context.strokePath()
+        }
     }
 
     /// Original 26pt robot and keyboard, drawn entirely from basic shapes.
@@ -578,6 +606,7 @@ final class MenuBarContent: NSObject {
         baseline.lastRecordAt = snapshot.lastRecordAt?.addingTimeInterval(-1)
         content.codexActivity.receive(baseline, now: sample.time.addingTimeInterval(-1), uptime: now)
         content.codexActivity.receive(snapshot, now: sample.time, uptime: now)
+        content.codexQuota = snapshot.quota
         content.preferences = preferences
         content.systemSleeping = sleeping
         content.previewAppearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -590,6 +619,19 @@ final class MenuBarContent: NSObject {
     }
 
     #if MENU_RENDER_PROBE
+    static func previewQuotaUpdater(sample: Snapshot) -> (CodexMonitorSnapshot) -> (NSImage?, [MenuBarMetric: CGRect]) {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        content.preferences = MenuBarPreferences(motionEnabled: false)
+        content.previewAppearance = NSAppearance(named: .aqua)
+        return { snapshot in
+            content.update(codex: snapshot)
+            return (content.composite(), Dictionary(uniqueKeysWithValues: content.layout.map {
+                ($0.metric, CGRect(x: $0.origin, y: 0, width: $0.width, height: Self.imageSize.height))
+            }))
+        }
+    }
+
     /// Exercise AppKit's alternating snapshot appearances on one cached painter.
     static func previewAppearanceRenderer(sample: Snapshot) -> (Bool, Snapshot?, Bool) -> (NSImage?, Int) {
         let content = MenuBarContent(frame: .zero)

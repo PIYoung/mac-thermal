@@ -82,11 +82,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let panel = PanelController()
     private let codexPanel = CodexPanelController()
     private let codexMonitor = CodexMonitor()
+    private let quotaClient = CodexQuotaClient()
+    private lazy var accountPresenter = CodexAccountPresenter(client: quotaClient)
+    private var accountObservers: [NSObjectProtocol] = []
     private var codexSnapshot = CodexMonitorSnapshot.pending
     private lazy var dashboard: DashboardWindow = {
         let window = DashboardWindow(controller: panel, companion: codexPanel,
                                      companionSize: CodexPanelController.surfaceSize)
-        window.companionIsAvailable = { CodexMonitor.isCodexRunning() }
+        window.companionIsAvailable = { [weak self] in CodexMonitor.isCodexRunning() || self?.quotaClient.latest.isEnabled == true }
         window.prepareCompanion = { [weak self] in self?.codexPanel.prepareForPresentation() }
         return window
     }()
@@ -113,17 +116,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuContent.attach(to: button)
         }
         panel.refresh = { [weak self] in self?.requestSample() }
-        codexPanel.refresh = { [weak self] in self?.codexMonitor.refresh() }
+        codexPanel.refresh = { [weak self] in self?.codexMonitor.refresh(); self?.quotaClient.refresh() }
+        codexPanel.accountAction = { [weak self] in self?.accountPresenter.showAccount() }
         codexPanel.recordsEnabledChanged = { [weak self] enabled in self?.codexMonitor.setRecordsEnabled(enabled) }
         codexMonitor.onUpdate = { [weak self] snapshot in
             guard let self else { return }
             self.codexSnapshot = snapshot
-            self.codexPanel.apply(snapshot)
-            self.menuContent.update(codex: snapshot)
-            if abs(self.statusItem.length - self.menuContent.contentWidth) > 0.5 {
-                self.statusItem.length = self.menuContent.contentWidth
-            }
+            self.codexSnapshot.quota = self.quotaClient.latest
+            self.renderCodex()
         }
+        quotaClient.onUpdate = { [weak self] quota in
+            guard let self else { return }
+            self.codexSnapshot.quota = quota
+            self.renderCodex()
+            self.accountPresenter.receive(quota)
+        }
+        quotaClient.onDeviceLogin = { [weak self] url, code in self?.accountPresenter.showDeviceLogin(url: url, code: code) }
+        quotaClient.onCredentialRemovalFailure = { [weak self] in self?.accountPresenter.showRemovalFailure() }
+        let workspace = NSWorkspace.shared.notificationCenter
+        accountObservers.append(workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.suspend() })
+        accountObservers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.startSavedConnection() })
+        quotaClient.startSavedConnection()
         codexMonitor.start()
         panel.menuBarPreferencesChanged = { [weak self] preferences in
             guard let self else { return }
@@ -170,7 +183,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in self?.render(snapshot) }
     }
 
+    private func renderCodex() {
+        codexPanel.apply(codexSnapshot)
+        menuContent.update(codex: codexSnapshot)
+        if abs(statusItem.length - menuContent.contentWidth) > 0.5 { statusItem.length = menuContent.contentWidth }
+    }
+
     private func render(_ sample: Snapshot) {
+        quotaClient.tick()
         lastSample = sample
         menuContent.update(sample: sample)
         if abs(statusItem.length - menuContent.contentWidth) > 0.5 {
@@ -233,6 +253,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         menuContent.stop()
         codexMonitor.stop()
+        quotaClient.stop()
+        accountObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         timer?.cancel()
         sampleQueue.sync {
