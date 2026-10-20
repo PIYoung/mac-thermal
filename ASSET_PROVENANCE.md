@@ -30,6 +30,6 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 
 - Codex 상세 지표: 입력·출력 구성 막대, 숫자 카드와 펼침 UI는 이 프로젝트에서 작성한 AppKit 도형·시스템 글꼴입니다. 외부 코드·이미지·차트 패키지를 추가하지 않습니다.
 
-- Codex 커스텀 스크롤바: 자체 NSBezierPath·NSGradient로 그린 3pt 손잡이와 6pt 강조 상태입니다. AppKit NSScroller의 드래그·페이지 이동·접근성 동작은 유지하며 외부 자산이나 코드를 추가하지 않습니다.
+- Codex·설정 공용 커스텀 스크롤바: 자체 NSBezierPath·NSGradient로 그린 3pt 손잡이와 6pt 강조 상태입니다. AppKit NSScroller의 드래그·페이지 이동·접근성 동작은 유지하며 외부 자산이나 코드를 추가하지 않습니다.
 
 - 선택형 한도 리셋 알림: 이 프로젝트에서 작성한 상태 비교·설정 코드와 macOS UserNotifications API를 사용합니다. 설정의 bell.badge는 앱 내부 알림 기능을 설명하는 시스템 SF Symbol이며, 외부 코드·아이콘 파일·패키지는 추가하지 않습니다.

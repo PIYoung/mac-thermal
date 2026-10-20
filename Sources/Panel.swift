@@ -19,6 +19,88 @@ enum PanelColor {
     static let divider = adaptive(.black.withAlphaComponent(0.07), .white.withAlphaComponent(0.10))
 }
 
+/// Original glass-style artwork on the native scroller: native hit testing,
+/// dragging, paging and accessibility remain intact. No repeating animation.
+final class GlassScroller: NSScroller {
+    private var hovering = false
+    private var dragging = false
+    private var scrolling = false
+    private var settleTimer: Timer?
+    private var hoverTracking: NSTrackingArea?
+    override class var isCompatibleWithOverlayScrollers: Bool { false }
+    override var isOpaque: Bool { false }
+    private var emphasized: Bool { hovering || dragging || scrolling }
+    private var thumbFrame: NSRect {
+        let native = rect(for: .knob)
+        guard !native.isEmpty else { return .zero }
+        let width: CGFloat = emphasized ? 6 : 3
+        return NSRect(x: bounds.midX - width / 2, y: native.minY + 1, width: width, height: max(0, native.height - 2))
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(tracking); hoverTracking = tracking
+    }
+    override func mouseEntered(with event: NSEvent) { setHover(true) }
+    override func mouseExited(with event: NSEvent) { setHover(false) }
+    private func setHover(_ value: Bool) {
+        guard hovering != value else { return }
+        hovering = value; needsDisplay = true
+    }
+    override func trackKnob(with event: NSEvent) {
+        dragging = true; needsDisplay = true
+        defer { dragging = false; indicateScroll() }
+        super.trackKnob(with: event)
+    }
+    func indicateScroll() {
+        guard window?.isVisible == true else { return }
+        settleTimer?.invalidate()
+        scrolling = true; needsDisplay = true
+        let timer = Timer(timeInterval: 0.8, repeats: false) { [weak self] _ in
+            self?.scrolling = false; self?.settleTimer = nil; self?.needsDisplay = true
+        }
+        settleTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            settleTimer?.invalidate(); settleTimer = nil
+            hovering = false; dragging = false; scrolling = false
+        }
+    }
+    deinit { settleTimer?.invalidate() }
+    override func draw(_ dirtyRect: NSRect) {
+        drawKnobSlot(in: bounds, highlight: emphasized)
+        drawKnob()
+    }
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
+        // Keep the resting track completely transparent.
+        guard emphasized else { return }
+        let rail = NSRect(x: bounds.midX - 1, y: 3, width: 2, height: max(0, bounds.height - 6))
+        NSColor.labelColor.withAlphaComponent(0.055).setFill()
+        NSBezierPath(roundedRect: rail, xRadius: 1, yRadius: 1).fill()
+    }
+    override func drawKnob() {
+        let thumb = thumbFrame
+        guard !thumb.isEmpty else { return }
+        let path = NSBezierPath(roundedRect: thumb, xRadius: thumb.width / 2, yRadius: thumb.width / 2)
+        if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast || NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            NSColor.secondaryLabelColor.setFill(); path.fill()
+        } else {
+            let alpha: CGFloat = emphasized ? 0.62 : 0.30
+            NSGradient(starting: PanelColor.blue.withAlphaComponent(alpha), ending: PanelColor.teal.withAlphaComponent(alpha * 0.82))?.draw(in: path, angle: 90)
+            NSColor.white.withAlphaComponent(emphasized ? 0.30 : 0.15).setStroke()
+            path.lineWidth = 0.5; path.stroke()
+        }
+    }
+    #if PANEL_UPDATES_PROBE
+    var probeThumbFrame: NSRect { thumbFrame }
+    func probeHover(_ hovered: Bool) { setHover(hovered) }
+    #endif
+}
+
 /// Keep source keys on views so a language switch updates the existing hierarchy.
 private final class LocalizedTextField: NSTextField {
     let localizationKey: String
@@ -439,6 +521,8 @@ final class PanelController: NSViewController {
     private var tabViews: [NSView] = []
     private let menuBarSettingsView = FlippedView()
     private let settingsScroll = NSScrollView()
+    private let settingsScroller = GlassScroller()
+    private var settingsScrollObserver: NSObjectProtocol?
     private var codexRecordsState = CodexRecordsSettingsState.disabled
     private let codexRecordsStatus = text("꺼짐 · 기본값", size: 9, color: PanelColor.secondary)
     private lazy var codexRecordsSwitch: NSSwitch = {
@@ -680,11 +764,14 @@ final class PanelController: NSViewController {
         settingsScroll.drawsBackground = false
         settingsScroll.hasVerticalScroller = true
         settingsScroll.autohidesScrollers = true
-        settingsScroll.scrollerStyle = .overlay
+        settingsScroll.verticalScroller = settingsScroller
+        settingsScroll.scrollerStyle = .legacy
         place(settingsScroll, in: canvas, 16, 55, 308, 310)
-        // Reserve the native scroller width even when macOS forces always-visible scrollbars.
+        // Share the Codex thumb style while retaining a stable native hit lane.
         menuBarSettingsView.frame = NSRect(x: 0, y: 0, width: 290, height: 472)
         settingsScroll.documentView = menuBarSettingsView
+        settingsScroll.contentView.postsBoundsChangedNotifications = true
+        settingsScrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: settingsScroll.contentView, queue: .main) { [weak self] _ in self?.settingsScroller.indicateScroll() }
         buildMenuBarSettings()
         showSelectedTab()
 
@@ -710,6 +797,7 @@ final class PanelController: NSViewController {
 
     deinit {
         if let languageObserver { NotificationCenter.default.removeObserver(languageObserver) }
+        if let settingsScrollObserver { NotificationCenter.default.removeObserver(settingsScrollObserver) }
     }
 
     private func refreshLanguage() {

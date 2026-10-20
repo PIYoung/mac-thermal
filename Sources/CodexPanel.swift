@@ -67,88 +67,6 @@ private final class CodexBar: FlippedView {
     }
 }
 
-/// Original glass-style artwork on the native scroller: native hit testing,
-/// dragging, paging and accessibility remain intact. No repeating animation.
-private final class CodexGlassScroller: NSScroller {
-    private var hovering = false
-    private var dragging = false
-    private var scrolling = false
-    private var settleTimer: Timer?
-    private var hoverTracking: NSTrackingArea?
-    override class var isCompatibleWithOverlayScrollers: Bool { false }
-    override var isOpaque: Bool { false }
-    private var emphasized: Bool { hovering || dragging || scrolling }
-    private var thumbFrame: NSRect {
-        let native = rect(for: .knob)
-        guard !native.isEmpty else { return .zero }
-        let width: CGFloat = emphasized ? 6 : 3
-        return NSRect(x: bounds.midX - width / 2, y: native.minY + 1, width: width, height: max(0, native.height - 2))
-    }
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTracking { removeTrackingArea(hoverTracking) }
-        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
-        addTrackingArea(tracking); hoverTracking = tracking
-    }
-    override func mouseEntered(with event: NSEvent) { setHover(true) }
-    override func mouseExited(with event: NSEvent) { setHover(false) }
-    private func setHover(_ value: Bool) {
-        guard hovering != value else { return }
-        hovering = value; needsDisplay = true
-    }
-    override func trackKnob(with event: NSEvent) {
-        dragging = true; needsDisplay = true
-        defer { dragging = false; indicateScroll() }
-        super.trackKnob(with: event)
-    }
-    func indicateScroll() {
-        guard window?.isVisible == true else { return }
-        settleTimer?.invalidate()
-        scrolling = true; needsDisplay = true
-        let timer = Timer(timeInterval: 0.8, repeats: false) { [weak self] _ in
-            self?.scrolling = false; self?.settleTimer = nil; self?.needsDisplay = true
-        }
-        settleTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window == nil {
-            settleTimer?.invalidate(); settleTimer = nil
-            hovering = false; dragging = false; scrolling = false
-        }
-    }
-    deinit { settleTimer?.invalidate() }
-    override func draw(_ dirtyRect: NSRect) {
-        drawKnobSlot(in: bounds, highlight: emphasized)
-        drawKnob()
-    }
-    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
-        // Keep the resting track completely transparent.
-        guard emphasized else { return }
-        let rail = NSRect(x: bounds.midX - 1, y: 3, width: 2, height: max(0, bounds.height - 6))
-        NSColor.labelColor.withAlphaComponent(0.055).setFill()
-        NSBezierPath(roundedRect: rail, xRadius: 1, yRadius: 1).fill()
-    }
-    override func drawKnob() {
-        let thumb = thumbFrame
-        guard !thumb.isEmpty else { return }
-        let path = NSBezierPath(roundedRect: thumb, xRadius: thumb.width / 2, yRadius: thumb.width / 2)
-        if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast || NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
-            NSColor.secondaryLabelColor.setFill(); path.fill()
-        } else {
-            let alpha: CGFloat = emphasized ? 0.62 : 0.30
-            NSGradient(starting: PanelColor.blue.withAlphaComponent(alpha), ending: PanelColor.teal.withAlphaComponent(alpha * 0.82))?.draw(in: path, angle: 90)
-            NSColor.white.withAlphaComponent(emphasized ? 0.30 : 0.15).setStroke()
-            path.lineWidth = 0.5; path.stroke()
-        }
-    }
-    #if PANEL_UPDATES_PROBE
-    var probeThumbFrame: NSRect { thumbFrame }
-    func probeHover(_ hovered: Bool) { setHover(hovered) }
-    #endif
-}
-
 /// Original compact numeric grid with optional input/output composition strip.
 private final class CodexInsightGrid: GlassCard {
     let heading = codexText(size: 11, weight: .semibold)
@@ -246,7 +164,7 @@ final class CodexPanelController: NSViewController {
     private let quotaElapsed = codexText(size: 9, secondary: true, digits: true)
     private lazy var accountButton = NSButton(image: NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(accountClicked))
     private let insightsScroll = NSScrollView()
-    private let glassScroller = CodexGlassScroller()
+    private let glassScroller = GlassScroller()
     private var scrollObserver: NSObjectProtocol?
     private let insightsDocument = FlippedView()
     private let breakdownCard = CodexInsightGrid("토큰 구성 · 이 Mac", keys: ["입력 토큰", "출력 토큰", "캐시 재사용률", "출력 중 추론"], composition: true)
