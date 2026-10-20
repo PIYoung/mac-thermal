@@ -785,7 +785,7 @@ final class PanelController: NSViewController {
         place(text("Mac Thermal", size: 15, weight: .semibold), in: canvas, 54, 11, 153, 20)
         place(uptimeLabel, in: canvas, 54, 32, 153, 14)
         localizedToolTip(uptimeLabel, "잠자기 시간을 포함한 부팅 후 경과 시간 · 1분 단위")
-        place(adviceButton, in: canvas, 211, 13, 82, 32)
+        place(adviceButton, in: canvas, 217, 15, 76, 28)
         place(menuBarSettingsButton, in: canvas, 300, 16, 24, 24)
         place(tabs, in: canvas, 16, 55, 308, 24)
         tabViews = Self.tabIdentifiers.map { _ in
@@ -1575,7 +1575,7 @@ extension PanelController {
     var probeAdviceView: HealthAdviceView { adviceContent }
     var probeAdviceButtonFits: Bool { (adviceButton.cell?.cellSize.width ?? 0) <= adviceButton.frame.width }
     var probeAdviceEntryIsProminent: Bool {
-        !adviceButton.isHidden && adviceButton.frame == NSRect(x: 211, y: 13, width: 82, height: 32) && adviceButton.image != nil
+        !adviceButton.isHidden && adviceButton.frame == NSRect(x: 217, y: 15, width: 76, height: 28) && adviceButton.image != nil
     }
     var probeAdviceHeaderFits: Bool {
         (uptimeLabel.stringValue as NSString).size(withAttributes: [.font: uptimeLabel.font!]).width <= uptimeLabel.frame.width
