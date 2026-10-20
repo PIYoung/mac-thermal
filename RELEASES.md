@@ -1,16 +1,20 @@
 # Releases
 
-## Unreleased — v2.14.1
+## v2.14.1 — 2026-10-20
+
+On-device resource explanations and two-speed Codex robot animation. Build 49.
 
 - Give the original Codex robot two speeds: a slow idle cycle while the desktop app is running, and an eight-fps activity cycle for ten seconds after fresh local token records. Return to idle without new records; retain motion-off, Reduce Motion, hidden-item and sleep gates.
 - Keep the same data scope and eight-second record polling. Run the shared timer at a lower cadence when only the idle robot is animating, reuse unchanged frames, and preserve menu width and fixed panel positions.
 
-## Unreleased — v2.14.0
+### On-device guidance (first public release)
 
 - Add an AI help button for each resource tab, displaying current state, verified evidence and three fixed suggested actions within the existing panel. Reuse the shared slim scroller.
 - Use Apple SystemLanguageModel.default only when explicitly requested, supported and ready. Supply sanitized numeric measurements and trusted app guidance; no process identities, file data, records, accounts, cloud fallback, tools or external packages.
 - Keep deterministic warning rules, gap-aware duration/trend evidence and fixed actions independent of generated prose. Pause inference for heat/high memory pressure; handle cancellation, time limits, stale/invalid output and unavailable models with basic guidance.
 - Preserve macOS 14+ monitoring using weak framework linking; on-device AI requires supported macOS 26+ and user-enabled Apple Intelligence. No automatic setting changes or notifications.
+
+Apple Silicon · macOS 14+. On-device AI additionally requires macOS 26+, a supported Mac and ready Apple Intelligence. Basic guidance remains available without the model. DMG, ZIP and SHA256SUMS are provided. Community builds are ad-hoc signed, without Developer ID signing or Apple notarization. MIT licensed; bundled notices are preserved. Made with OpenAI Codex and user feedback.
 
 ## v2.13.1 — 2026-10-20
 
