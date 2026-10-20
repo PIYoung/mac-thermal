@@ -167,6 +167,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     private var confirmation: Confirmation?
     private var result: DiskCleanupResult?
     private var cancellation: DiskCleanupCancellation?
+    private var scanDelayTimer: Timer?
     private var stopRequested = false
     private var pickerInFlight = false
     private var jobGeneration: UInt = 0
@@ -257,7 +258,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         render(animated: false)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
-    deinit { if let languageObserver { NotificationCenter.default.removeObserver(languageObserver) } }
+    deinit { scanDelayTimer?.invalidate(); if let languageObserver { NotificationCenter.default.removeObserver(languageObserver) } }
     override func layout() {
         super.layout()
         back.frame = NSRect(x: 0, y: 0, width: 57, height: 24)
@@ -324,6 +325,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         }
     }
     private func render(animated: Bool = true) {
+        if stage != .scanning { scanDelayTimer?.invalidate(); scanDelayTimer = nil }
         back.title = "‹ SSD"
         back.setAccessibilityLabel(L10n.text("SSD 모니터로 돌아가기"))
         folder.stringValue = automaticHome ? L10n.text("내 홈 폴더 · 자동 검사") : (folderURL?.path ?? L10n.text("선택한 폴더만 검사합니다"))
@@ -373,7 +375,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             secondary.isEnabled = !stopRequested
         case .scanning:
             summary.stringValue = L10n.text("폴더 검사 중")
-            message.stringValue = L10n.text("파일을 변경하지 않고 정리 후보를 찾고 있습니다")
+            message.stringValue = L10n.text(stopRequested ? "중지 요청됨 · 시스템 접근 응답 후 종료됩니다" : "파일을 변경하지 않고 정리 후보를 찾고 있습니다")
             detail.stringValue = L10n.format("확인 %d개 · 후보 %d개", progress.visitedCount, progress.candidateCount)
             primary.title = L10n.text("검사 중")
             primary.isEnabled = false
@@ -564,6 +566,14 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         stopRequested = false; errorMessage = nil; plan = nil; confirmation = nil; result = nil; resultAvailableBytes = nil; selectedIDs = []; recommendedIDs = []
         progress = DiskCleanupProgress(visitedCount: 0, candidateCount: 0, completedCount: 0, totalCount: 0)
         stage = .scanning; render()
+        if scanningHome {
+            let timer = Timer(timeInterval: 5, repeats: false) { [weak self] _ in
+                guard let self, self.stage == .scanning, self.progress.visitedCount == 0, !self.stopRequested else { return }
+                self.message.stringValue = L10n.text("폴더 접근 응답을 기다리고 있습니다. macOS 확인창이 있다면 응답해 주세요.")
+            }
+            scanDelayTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        }
         queue.async { [weak self] in
             guard let self else { return }
             do {
@@ -627,7 +637,13 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     private func updateProgress(_ progress: DiskCleanupProgress) {
         guard isBusy else { return }
         self.progress = progress
-        if stage == .scanning { detail.stringValue = L10n.format("확인 %d개 · 후보 %d개", progress.visitedCount, progress.candidateCount) }
+        if stage == .scanning {
+            detail.stringValue = L10n.format("확인 %d개 · 후보 %d개", progress.visitedCount, progress.candidateCount)
+            if progress.visitedCount > 0 {
+                scanDelayTimer?.invalidate(); scanDelayTimer = nil
+                message.stringValue = L10n.text(stopRequested ? "중지 요청됨 · 시스템 접근 응답 후 종료됩니다" : "파일을 변경하지 않고 정리 후보를 찾고 있습니다")
+            }
+        }
         else {
             message.stringValue = L10n.format("처리 %d / %d개", progress.completedCount, progress.totalCount)
             progressBar.doubleValue = progress.totalCount > 0 ? Double(progress.completedCount) / Double(progress.totalCount) * 100 : 0

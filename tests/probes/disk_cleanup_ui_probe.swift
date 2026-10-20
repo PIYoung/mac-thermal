@@ -30,8 +30,8 @@ private final class ExecutionFixture: @unchecked Sendable {
 
 @main
 enum DiskCleanupUIProbe {
-    private static func waitUntil(line: UInt = #line, _ condition: () -> Bool) {
-        let deadline = Date().addingTimeInterval(5)
+    private static func waitUntil(line: UInt = #line, timeout: TimeInterval = 5, _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(timeout)
         while !condition(), Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(0.01))
         }
@@ -124,14 +124,17 @@ enum DiskCleanupUIProbe {
         let started = DispatchSemaphore(value: 0), finish = DispatchSemaphore(value: 0)
         var stoppingOperations = homeOperations
         stoppingOperations.scanHome = { cancellation, _ in
-            started.signal(); _ = finish.wait(timeout: .now() + 2)
+            started.signal(); _ = finish.wait(timeout: .now() + 8)
             precondition(cancellation.isCancelled)
             return plan
         }
         let stopping = DiskCleanupView(frame: homeView.frame, operations: stoppingOperations, defaults: defaults)
         stopping.onEntry(); stopping.probePressPrimary()
         precondition(started.wait(timeout: .now() + 2) == .success)
-        stopping.probePressSecondary(); finish.signal()
+        waitUntil(timeout: 7) { visibleLabels(stopping).contains(L10n.text("폴더 접근 응답을 기다리고 있습니다. macOS 확인창이 있다면 응답해 주세요.")) }
+        stopping.probePressSecondary()
+        precondition(visibleLabels(stopping).contains(L10n.text("중지 요청됨 · 시스템 접근 응답 후 종료됩니다")))
+        finish.signal()
         waitUntil { stopping.probeStage == "review" }
         precondition(stopping.probeSelectedIDs.isEmpty && stopping.probeBanner.contains(L10n.text("검사를 중지해 일부 항목만 표시합니다")))
         print("Home cleanup UI passed: four-language scope disclosure before explicit scan, injectable scanner only, no prechecked files, exact review, cancellation, no launch/reopen scans and no Trash calls")

@@ -3,6 +3,9 @@ import Foundation
 // Original project translations: English, Japanese, Simplified Chinese.
 extension L10n {
     static let cleanupTranslations: [String: [String]] = [
+        "폴더 접근 응답을 기다리고 있습니다. macOS 확인창이 있다면 응답해 주세요.": ["Waiting for folder access. Respond to any macOS access dialog.", "フォルダへのアクセス応答を待機中です。macOSの確認画面があれば応答してください。", "正在等待文件夹访问响应。如出现macOS访问确认窗口，请作出选择。"],
+        "중지 요청됨 · 시스템 접근 응답 후 종료됩니다": ["Stop requested · waiting for system access to return", "中止を要求済み · システムのアクセス応答後に終了", "已请求停止 · 系统访问响应后结束"],
+
         "내 홈 폴더 · 자동 검사": ["Home · Auto scan", "ホーム · 自動検査", "主文件夹 · 自动扫描"],
         "특정 폴더만 검사": ["Choose one folder", "フォルダを指定", "指定文件夹"],
         "홈 폴더 자동 검사로 전환": ["Switch to home scan", "ホームの自動検査へ", "切换为主文件夹扫描"],
