@@ -3,6 +3,7 @@ import Foundation
 // Original Mac Thermal translations: English, Japanese, Simplified Chinese.
 extension L10n {
     static let codexTranslations: [String: [String]] = [
+        "계정 한도": ["Account quota", "アカウント上限", "账号额度"],
         "ChatGPT 한도 연결": ["Connect ChatGPT quota", "ChatGPTの上限に接続", "连接ChatGPT额度"],
         "ChatGPT 한도 관리": ["Manage ChatGPT quota", "ChatGPTの上限を管理", "管理ChatGPT额度"],
         "계정 연결 해제 중": ["Disconnecting account", "アカウント切断中", "正在断开账号"],

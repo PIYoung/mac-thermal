@@ -380,6 +380,7 @@ final class CodexPanelController: NSViewController {
         accountButton.setAccessibilityLabel(accountButton.toolTip)
         accountButton.isEnabled = quota.connection != .disconnecting
         quotaCard.toolTip = L10n.text("계정의 Codex 한도입니다. 로컬 토큰 집계와 별개이며 리셋 후에는 서버 확인을 기다립니다.")
+        if quota.isEnabled { connection.update(L10n.text("계정 한도"), color: quota.connection == .connected ? PanelColor.blue : .secondaryLabelColor) }
         let showRows = quota.isFresh(at: renderNow) && !quota.windows.isEmpty
         quotaStatus.isHidden = showRows
         let statusKey: String
@@ -395,15 +396,20 @@ final class CodexPanelController: NSViewController {
         }
         quotaStatus.stringValue = L10n.text(statusKey)
         for index in 0..<2 {
-            let window = quota.windows.first { $0.slot == index }
+            let window = quota.windows.indices.contains(index) ? quota.windows[index] : nil
             for field in [quotaTitles[index], quotaValues[index], quotaResets[index]] { field.isHidden = !showRows || window == nil }
             quotaBars[index].isHidden = !showRows || window == nil
             guard let window else { continue }
+            let y = CGFloat(quota.windows.count == 1 ? 20 : 7 + index * 27)
+            quotaTitles[index].frame.origin.y = y
+            quotaValues[index].frame.origin.y = y - 1
+            quotaResets[index].frame.origin.y = y
+            quotaBars[index].frame.origin.y = y + 17
             if let minutes = window.durationMinutes {
                 let unit = minutes % 1440 == 0 ? "d" : minutes % 60 == 0 ? "h" : "m"
                 let number = minutes % 1440 == 0 ? minutes / 1440 : minutes % 60 == 0 ? minutes / 60 : minutes
                 quotaTitles[index].stringValue = "\(number)\(unit)"
-            } else { quotaTitles[index].stringValue = L10n.text(index == 0 ? "단기 한도" : "장기 한도") }
+            } else { quotaTitles[index].stringValue = L10n.text(window.slot == 0 ? "단기 한도" : "장기 한도") }
             let remaining = window.remaining(at: renderNow)
             quotaValues[index].stringValue = remaining.map { L10n.format("잔여 %.0f%%", $0) } ?? "—"
             quotaValues[index].textColor = quota.blocked || (remaining ?? 100) < 10 ? .systemRed : (remaining ?? 100) < 25 ? .systemOrange : .labelColor
@@ -431,6 +437,7 @@ extension CodexPanelController {
     var probeQuotaStrings: [String] { quotaTitles.map(\.stringValue) + quotaValues.map(\.stringValue) + quotaResets.map(\.stringValue) }
     var probeQuotaIsVisible: Bool { !quotaCard.isHidden }
     var probeQuotaStatus: String { quotaStatus.stringValue }
+    var probeQuotaVisibleRows: Int { quotaTitles.filter { !$0.isHidden }.count }
     func probeSetVisible(_ visible: Bool) { probeVisible = visible }
     func probeRefresh() { refreshButton.performClick(nil) }
     func probeSetRecordsEnabled(_ enabled: Bool) {

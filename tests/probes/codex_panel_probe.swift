@@ -183,6 +183,11 @@ enum LoginItemManager {
             account.quota.fetchedAt = fresh.addingTimeInterval(-181)
             panel.apply(account)
             precondition(panel.probeQuotaStatus == L10n.text("한도 갱신 대기 중"))
+            account.quota.fetchedAt = fresh
+            account.quota.windows = [account.quota.windows[1]]
+            panel.apply(account)
+            precondition(panel.probeQuotaVisibleRows == 1 && panel.probeQuotaStrings[0] == "7d", "A sole secondary window must occupy the first visible row")
+            bounds(canvas(panel))
             account.quota = CodexQuotaSnapshot()
             panel.apply(account)
             precondition(!panel.probeQuotaIsVisible)
