@@ -400,6 +400,24 @@ enum PanelUpdatesProbe {
         panel.updateCodexRecords(.ready)
         precondition(changes == [false, true], "Collector snapshots must never send switch actions")
         precondition(panel.probeCodexRecordsStatus == L10n.text("읽기 전용 · 외부 전송 없음"))
+        var alertActions: [Bool] = []
+        panel.codexResetNotificationsChanged = { alertActions.append($0) }
+        for language in AppLanguage.allCases {
+            panel.updateCodexResetNotifications(enabled: false, statusKey: "꺼짐 · 기본값", requesting: false)
+            L10n.setLanguage(language, defaults: defaults)
+            panel.probeToggleSettings(); checkContentBounds(panel.view); panel.probeToggleSettings()
+            precondition(!panel.probeResetNotificationsEnabled && panel.probeResetNotificationsCanChange)
+            precondition(panel.probeResetNotificationsStatus == L10n.text("꺼짐 · 기본값"))
+            precondition(alertActions.isEmpty, "Layout and language must never request notification permission")
+        }
+        panel.probeSetResetNotifications(true)
+        precondition(alertActions == [true], "Only explicit switch action requests enable")
+        panel.updateCodexResetNotifications(enabled: false, statusKey: "알림 권한 확인 중", requesting: true)
+        precondition(!panel.probeResetNotificationsCanChange)
+        panel.updateCodexResetNotifications(enabled: true, statusKey: "켜짐 · 서버 갱신 확인 후 알림", requesting: false)
+        precondition(panel.probeResetNotificationsEnabled && panel.probeResetNotificationsCanChange)
+        panel.probeSetResetNotifications(false)
+        precondition(alertActions == [true, false], "Explicit off is delivered independently of local record reading")
         print("Moved Codex record setting passed: pre-load state, four-language privacy, native switch callbacks, no consent change on render/navigation")
     }
 

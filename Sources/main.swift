@@ -83,6 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let codexPanel = CodexPanelController()
     private let codexMonitor = CodexMonitor()
     private let quotaClient = CodexQuotaClient()
+    private let resetNotificationTransport = CodexNativeResetNotifications()
+    private lazy var resetNotifications = CodexResetNotifications(transport: resetNotificationTransport)
     private lazy var accountPresenter = CodexAccountPresenter(client: quotaClient)
     private var accountObservers: [NSObjectProtocol] = []
     private var codexSnapshot = CodexMonitorSnapshot.pending
@@ -121,6 +123,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexPanel.usageAction = { [weak self] in self?.accountPresenter.showUsageReview() }
         codexPanel.summaryAction = { [weak self] in self?.accountPresenter.showSummaryReview() }
         panel.codexRecordsEnabledChanged = { [weak self] enabled in self?.codexMonitor.setRecordsEnabled(enabled) }
+        panel.codexResetNotificationsChanged = { [weak self] enabled in self?.resetNotifications.setEnabled(enabled) }
+        resetNotifications.onChange = { [weak self] in
+            guard let self else { return }
+            self.panel.updateCodexResetNotifications(enabled: self.resetNotifications.enabled,
+                statusKey: self.resetNotifications.statusKey, requesting: self.resetNotifications.requesting)
+        }
+        resetNotificationTransport.mayPresent = { [weak self] in self?.resetNotifications.enabled == true }
+        resetNotifications.start()
         codexMonitor.onUpdate = { [weak self] snapshot in
             guard let self else { return }
             self.codexSnapshot = snapshot
@@ -129,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         quotaClient.onUpdate = { [weak self] quota in
             guard let self else { return }
+            self.resetNotifications.receive(quota)
             self.codexSnapshot.quota = quota
             self.renderCodex()
             self.accountPresenter.receive(quota)
@@ -259,6 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         menuContent.stop()
         codexMonitor.stop()
+        resetNotifications.stop()
         quotaClient.stop()
         accountObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }

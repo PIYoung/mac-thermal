@@ -472,6 +472,34 @@ final class PanelController: NSViewController {
         codexRecordsEnabledChanged?(enabled)
     }
 
+    private var resetNotificationsEnabled = false
+    private var resetNotificationsStatusKey = "꺼짐 · 기본값"
+    private var resetNotificationsRequesting = false
+    private let resetNotificationsStatus = text("꺼짐 · 기본값", size: 9, color: PanelColor.secondary)
+    private lazy var resetNotificationsSwitch: NSSwitch = {
+        let control = NSSwitch(); control.controlSize = .small
+        control.target = self; control.action = #selector(changeResetNotifications)
+        localizedAccessibilityLabel(control, "한도 리셋 알림")
+        return control
+    }()
+    var codexResetNotificationsChanged: ((Bool) -> Void)?
+    func updateCodexResetNotifications(enabled: Bool, statusKey: String, requesting: Bool) {
+        resetNotificationsEnabled = enabled; resetNotificationsStatusKey = statusKey
+        resetNotificationsRequesting = requesting
+        if isViewLoaded { renderResetNotificationsSetting() }
+    }
+    private func renderResetNotificationsSetting() {
+        resetNotificationsSwitch.state = resetNotificationsEnabled ? .on : .off
+        resetNotificationsSwitch.isEnabled = !resetNotificationsRequesting
+        resetNotificationsStatus.stringValue = L10n.text(resetNotificationsStatusKey)
+        resetNotificationsStatus.toolTip = resetNotificationsStatus.stringValue
+    }
+    @objc private func changeResetNotifications() {
+        let enabled = resetNotificationsSwitch.state == .on
+        guard enabled != resetNotificationsEnabled else { return }
+        codexResetNotificationsChanged?(enabled)
+    }
+
     private var showingMenuBarSettings = false
     private var languageObserver: NSObjectProtocol?
     private var latestSnapshot = Snapshot.pending
@@ -655,7 +683,7 @@ final class PanelController: NSViewController {
         settingsScroll.scrollerStyle = .overlay
         place(settingsScroll, in: canvas, 16, 55, 308, 310)
         // Reserve the native scroller width even when macOS forces always-visible scrollbars.
-        menuBarSettingsView.frame = NSRect(x: 0, y: 0, width: 290, height: 388)
+        menuBarSettingsView.frame = NSRect(x: 0, y: 0, width: 290, height: 472)
         settingsScroll.documentView = menuBarSettingsView
         buildMenuBarSettings()
         showSelectedTab()
@@ -696,6 +724,7 @@ final class PanelController: NSViewController {
         languageControl.selectItem(at: AppLanguage.allCases.firstIndex(of: L10n.language) ?? 0)
         updateMenuBarControls()
         renderCodexRecordsSetting()
+        renderResetNotificationsSetting()
         showSelectedTab()
         updateLoginState()
     }
@@ -726,8 +755,20 @@ final class PanelController: NSViewController {
         place(codexRecordsStatus, in: records, 14, 60, 262, 14)
         renderCodexRecordsSetting()
 
+        let alerts = GlassCard()
+        place(alerts, in: menuBarSettingsView, 0, 130, 290, 78)
+        place(symbol("bell.badge", color: PanelColor.blue), in: alerts, 13, 10, 14, 14)
+        place(text("한도 리셋 알림", size: 11, weight: .semibold), in: alerts, 34, 8, 200, 18)
+        place(resetNotificationsSwitch, in: alerts, 242, 7, 36, 22)
+        let notice = text("계정 한도 연결 후 사용 · 잠금화면에 표시될 수 있음", size: 9, color: PanelColor.secondary)
+        notice.maximumNumberOfLines = 2; notice.lineBreakMode = .byWordWrapping
+        place(notice, in: alerts, 14, 31, 262, 27)
+        place(resetNotificationsStatus, in: alerts, 14, 60, 262, 14)
+        localizedToolTip(alerts, "앱 실행 중 한도 갱신을 확인하면 알립니다. 끄면 이 앱의 리셋 알림을 중지하고 지웁니다. 추가 조회·외부 전송은 없습니다.")
+        renderResetNotificationsSetting()
+
         let metrics = GlassCard()
-        place(metrics, in: menuBarSettingsView, 0, 130, 290, 50)
+        place(metrics, in: menuBarSettingsView, 0, 214, 290, 50)
         place(symbol("menubar.rectangle", color: PanelColor.blue), in: metrics, 13, 7, 14, 14)
         place(text("메뉴바 표시", size: 11, weight: .semibold), in: metrics, 34, 5, 242, 18)
         for (index, metric) in MenuBarMetric.allCases.enumerated() {
@@ -739,20 +780,20 @@ final class PanelController: NSViewController {
         }
 
         let style = GlassCard()
-        place(style, in: menuBarSettingsView, 0, 186, 290, 46)
+        place(style, in: menuBarSettingsView, 0, 270, 290, 46)
         place(symbol("waveform", color: PanelColor.blue), in: style, 13, 5, 14, 14)
         place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 34, 3, 242, 18)
         place(animationStyleControl, in: style, 11, 20, 268, 26)
 
         let motion = GlassCard()
-        place(motion, in: menuBarSettingsView, 0, 238, 290, 40)
+        place(motion, in: menuBarSettingsView, 0, 322, 290, 40)
         place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 14, 11, 220, 18)
         place(menuBarMotionSwitch, in: motion, 242, 9, 36, 22)
         localizedToolTip(motion, "CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기")
         localizedToolTip(menuBarMotionSwitch, "macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다")
 
         let intensity = GlassCard()
-        place(intensity, in: menuBarSettingsView, 0, 284, 290, 58)
+        place(intensity, in: menuBarSettingsView, 0, 368, 290, 58)
         place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 14, 3, 200, 18)
         motionIntensityValue.alignment = .right
         place(motionIntensityValue, in: intensity, 226, 4, 50, 17)
@@ -763,7 +804,7 @@ final class PanelController: NSViewController {
         place(energetic, in: intensity, 146, 41, 130, 13)
 
         let login = GlassCard()
-        place(login, in: menuBarSettingsView, 0, 348, 290, 40)
+        place(login, in: menuBarSettingsView, 0, 432, 290, 40)
         place(text("로그인 시 자동 실행", size: 11, weight: .semibold), in: login, 14, 11, 150, 18)
         loginLabel.alignment = .right
         loginLabel.font = .systemFont(ofSize: 9)
@@ -1229,6 +1270,13 @@ extension PanelController {
         changeTab()
     }
     func probeToggleSettings() { toggleMenuBarSettings() }
+    var probeResetNotificationsEnabled: Bool { resetNotificationsSwitch.state == .on }
+    var probeResetNotificationsCanChange: Bool { resetNotificationsSwitch.isEnabled }
+    var probeResetNotificationsStatus: String { resetNotificationsStatus.stringValue }
+    func probeSetResetNotifications(_ enabled: Bool) {
+        resetNotificationsSwitch.state = enabled ? .on : .off
+        resetNotificationsSwitch.sendAction(resetNotificationsSwitch.action, to: resetNotificationsSwitch.target)
+    }
     var probeCodexRecordsEnabled: Bool { codexRecordsSwitch.state == .on }
     var probeCodexRecordsStatus: String { codexRecordsStatus.stringValue }
     var probeCodexPrivacyFits: Bool {

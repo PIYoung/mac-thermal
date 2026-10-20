@@ -207,3 +207,49 @@ struct CodexWeekInsight {
             peakDay: known.max { ($0.tokens ?? 0) < ($1.tokens ?? 0) }?.day)
     }
 }
+
+/// Observes confirmed quota-window transitions only. No deadline alarm, history
+/// persistence or additional polling. At most two numeric baselines are retained.
+struct CodexQuotaResetDetector {
+    private struct Baseline {
+        let reset: Date
+        let duration: Int?
+        let fetched: Date
+    }
+    private var baselines: [Int: Baseline] = [:]
+    private var lastClock: Date?
+    mutating func clear() { baselines.removeAll(); lastClock = nil }
+    mutating func receive(_ snapshot: CodexQuotaSnapshot, at now: Date) -> Bool {
+        guard now.timeIntervalSince1970.isFinite else { clear(); return false }
+        if let lastClock, now < lastClock { clear() }
+        lastClock = now
+        baselines = baselines.filter { now.timeIntervalSince($0.value.reset) <= 600 }
+        if [.disconnected, .disconnecting, .needsLogin, .authorizing].contains(snapshot.connection) {
+            baselines.removeAll(); return false
+        }
+        guard snapshot.isFresh(at: now), let fetched = snapshot.fetchedAt,
+              snapshot.windows.count <= 2,
+              Set(snapshot.windows.map(\.slot)).count == snapshot.windows.count else { return false }
+        let slots = Set(snapshot.windows.map(\.slot))
+        baselines = baselines.filter { slots.contains($0.key) }
+        var resetConfirmed = false
+        for window in snapshot.windows {
+            guard (0...1).contains(window.slot), window.usedPercent.isFinite,
+                  (0...100).contains(window.usedPercent),
+                  window.durationMinutes.map({ (1...527_040).contains($0) }) ?? true,
+                  let reset = window.resetsAt, reset.timeIntervalSince1970.isFinite else { continue }
+            // An expired response cannot establish a startup baseline or prove reset.
+            guard reset > now else { continue }
+            if let old = baselines[window.slot] {
+                guard fetched >= old.fetched, reset >= old.reset else { continue }
+                if !snapshot.blocked, old.duration == window.durationMinutes,
+                   reset > old.reset, old.reset <= now, old.reset <= fetched,
+                   old.fetched < old.reset, now.timeIntervalSince(old.reset) <= 600 {
+                    resetConfirmed = true
+                }
+            }
+            baselines[window.slot] = Baseline(reset: reset, duration: window.durationMinutes, fetched: fetched)
+        }
+        return resetConfirmed
+    }
+}

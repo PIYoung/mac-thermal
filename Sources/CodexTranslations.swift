@@ -3,6 +3,17 @@ import Foundation
 // Original Mac Thermal translations: English, Japanese, Simplified Chinese.
 extension L10n {
     static let codexTranslations: [String: [String]] = [
+        "한도 리셋 알림": ["Quota reset alerts", "上限リセット通知", "额度重置通知"],
+        "Codex 한도가 갱신됐어요": ["Codex quota has refreshed", "Codexの上限が更新されました", "Codex额度已更新"],
+        "알림 권한 확인 중": ["Checking notification permission", "通知権限を確認中", "正在检查通知权限"],
+        "켜짐 · 서버 갱신 확인 후 알림": ["On · notify after server confirmation", "オン · サーバー確認後に通知", "已开启 · 服务器确认后通知"],
+        "스위치를 켜서 알림을 허용하세요": ["Switch on to allow notifications", "スイッチをオンにして通知を許可", "打开开关以允许通知"],
+        "macOS 설정에서 알림을 허용하세요": ["Allow notifications in macOS Settings", "macOS設定で通知を許可してください", "请在macOS设置中允许通知"],
+        "알림 기능을 사용할 수 없습니다": ["Notifications are unavailable", "通知を利用できません", "通知功能不可用"],
+        "리셋 알림을 전달하지 못했습니다": ["Could not deliver the reset alert", "リセット通知を配信できませんでした", "未能发送重置通知"],
+        "계정 한도 연결 후 사용 · 잠금화면에 표시될 수 있음": ["Requires account quota sign-in · may appear on lock screen", "上限のアカウント連携が必要 · ロック画面に表示される場合があります", "需连接账号额度 · 可能显示在锁屏上"],
+        "앱 실행 중 한도 갱신을 확인하면 알립니다. 끄면 이 앱의 리셋 알림을 중지하고 지웁니다. 추가 조회·외부 전송은 없습니다.": ["Notify when quota refresh is confirmed while the app runs. Switching off stops and clears this app’s reset alerts. No extra polling or external upload.", "アプリ実行中に上限の更新を確認すると通知します。オフでこのアプリのリセット通知を停止・消去します。追加照会や外部送信はありません。", "应用运行时确认额度更新后通知。关闭会停止并清除此应用的重置通知。没有额外查询或外部上传。"],
+
         "계정 통계 연결": ["Account statistics", "アカウント統計に接続", "连接账号统计"],
         "동의 후 계정 통계를 표시합니다": ["Enable account statistics to view the summary", "同意後にアカウント統計を表示します", "同意后显示账号统计"],
         "최근 7일": ["Last 7 days", "直近7日", "最近7天"],
