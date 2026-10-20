@@ -118,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.refresh = { [weak self] in self?.requestSample() }
         codexPanel.refresh = { [weak self] in self?.codexMonitor.refresh(); self?.quotaClient.refresh() }
         codexPanel.accountAction = { [weak self] in self?.accountPresenter.showAccount() }
+        codexPanel.usageAction = { [weak self] in self?.accountPresenter.showUsageReview() }
         codexPanel.recordsEnabledChanged = { [weak self] enabled in self?.codexMonitor.setRecordsEnabled(enabled) }
         codexMonitor.onUpdate = { [weak self] snapshot in
             guard let self else { return }

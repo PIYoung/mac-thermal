@@ -24,3 +24,5 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 공식 지침: https://developer.apple.com/design/human-interface-guidelines/sf-symbols
 
 이 문서는 코드·자산의 출처와 사용 범위를 기록합니다. Mac Thermal 자체 코드는 루트 LICENSE의 MIT 라이선스로 공개합니다. Stats 참고 부분의 기존 저작권 및 MIT 고지는 THIRD_PARTY_NOTICES.txt에 그대로 보존합니다. SF Symbols와 macOS 시스템 글꼴은 Apple의 이용 조건이 적용되며 MIT로 재허가하지 않습니다. 공개 배포에는 현재 검토된 소스와 새로 빌드한 앱만 포함하고, 과거의 로컬 복구용 보관본은 포함하지 않습니다.
+
+- 계정 일별 사용량 그래프: 이 프로젝트에서 직접 작성한 NSBezierPath 곡선·NSGradient 면 채움과 실제 날짜별 점입니다. 외부 차트 코드·이미지·라이브러리를 추가하지 않습니다.

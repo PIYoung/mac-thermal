@@ -22,6 +22,22 @@ final class CodexAccountPresenter: NSObject, NSWindowDelegate {
         if answer == .alertThirdButtonReturn { closeLogin(); client.disconnect() }
     }
 
+    func showUsageReview() {
+        guard client.latest.connection == .connected else { showAccount(); return }
+        let enabled = client.latest.usage.state != .disabled
+        let alert = NSAlert()
+        alert.messageText = L10n.text("사용량 그래프 연결")
+        alert.informativeText = L10n.text("기존 ChatGPT 로그인으로 OpenAI 계정의 날짜별 토큰 통계를 조회합니다. 한도 조회보다 통계 범위가 늘어나며, 날짜와 토큰 숫자만 메모리에 표시합니다. 대화 본문과 로컬 기록은 전송하지 않습니다.\n\n약 5분마다 갱신하고, 끄면 조회와 메모리 집계를 중지합니다. 기존 한도 조회는 유지됩니다. 연결하지 않아도 모델별 로컬 기록을 볼 수 있습니다.")
+        alert.addButton(withTitle: L10n.text("취소"))
+        alert.addButton(withTitle: L10n.text(enabled ? "지금 새로고침" : "동의하고 조회"))
+        if enabled { alert.addButton(withTitle: L10n.text("통계 연결 끄기")) }
+        let answer = alert.runModal()
+        if answer == .alertSecondButtonReturn {
+            if enabled { client.refresh() } else { client.setUsageApproved(true) }
+        }
+        if answer == .alertThirdButtonReturn { client.setUsageApproved(false) }
+    }
+
     func showDeviceLogin(url: URL, code: String) {
         closeLogin()
         loginURL = url

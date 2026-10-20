@@ -25,6 +25,7 @@ struct CodexQuotaSnapshot: Equatable {
     var windows: [CodexQuotaWindow] = []
     var fetchedAt: Date?
     var blocked = false
+    var usage = CodexUsageSnapshot()
 
     var isEnabled: Bool { connection != .disconnected }
     func isFresh(at now: Date) -> Bool {
@@ -71,6 +72,44 @@ struct CodexQuotaSnapshot: Equatable {
                                                      durationMinutes: minutes, resetsAt: reset))
         }
         return snapshot
+    }
+}
+
+enum CodexUsageState { case disabled, loading, ready, unavailable }
+struct CodexDailyUsage: Equatable {
+    let day: String
+    let tokens: Int64?
+}
+struct CodexUsageSnapshot: Equatable {
+    var state: CodexUsageState = .disabled
+    var days: [CodexDailyUsage] = []
+    var fetchedAt: Date?
+
+    func isFresh(at now: Date) -> Bool {
+        guard state == .ready, let fetchedAt else { return false }
+        return (-5...900).contains(now.timeIntervalSince(fetchedAt))
+    }
+    static func parse(_ result: [String: Any], now: Date) -> Self {
+        guard let rows = result["dailyUsageBuckets"] as? [[String: Any]], rows.count <= 4096 else { return Self(state: .unavailable) }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"; formatter.isLenient = false
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = formatter.timeZone
+        let today = calendar.startOfDay(for: now)
+        let keys = (0..<7).map { formatter.string(from: calendar.date(byAdding: .day, value: $0 - 6, to: today)!) }
+        var values: [String: Int64] = [:], conflicts = Set<String>()
+        for row in rows {
+            guard let day = row["startDate"] as? String, day.utf8.count == 10,
+                  let date = formatter.date(from: day), formatter.string(from: date) == day, keys.contains(day),
+                  let tokens = CodexQuotaSnapshot.number(row["tokens"]), tokens.rounded() == tokens,
+                  (0...9_007_199_254_740_991).contains(tokens) else { continue }
+            let count = Int64(tokens)
+            if let previous = values[day], previous != count { conflicts.insert(day) }
+            values[day] = count
+        }
+        return Self(state: .ready, days: keys.map { CodexDailyUsage(day: $0, tokens: conflicts.contains($0) ? nil : values[$0]) }, fetchedAt: now)
     }
 }
 

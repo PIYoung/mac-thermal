@@ -143,13 +143,14 @@ final class CodexInstalledQuotaWire: CodexQuotaWire {
 /// never start the real helper, use a user's account or contact a service.
 final class CodexQuotaClient {
     private enum Request: Equatable {
-        case initialize, account, login, limits, cancel, logout
+        case initialize, account, login, limits, usage, cancel, logout
         var method: String {
             switch self {
             case .initialize: return "initialize"
             case .account: return "account/read"
             case .login: return "account/login/start"
             case .limits: return "account/rateLimits/read"
+            case .usage: return "account/usage/read"
             case .cancel: return "account/login/cancel"
             case .logout: return "account/logout"
             }
@@ -157,6 +158,9 @@ final class CodexQuotaClient {
     }
     static let enabledKey = "codexAccountQuotaEnabledV1"
     static let removalKey = "codexAccountRemovalPendingV1"
+    static let usageKey = "codexDailyUsageApprovedV1"
+    private var usage = CodexUsageSnapshot()
+    private var lastUsageAttempt: Date?
     private let defaults: UserDefaults
     private let factory: () -> CodexQuotaWire
     private let erase: () -> Bool
@@ -219,22 +223,37 @@ final class CodexQuotaClient {
                                              "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"]])
     }
 
-    func refresh() {
+    func setUsageApproved(_ enabled: Bool) {
+        defaults.set(enabled, forKey: Self.usageKey)
+        usage = CodexUsageSnapshot(state: enabled ? .loading : .disabled)
+        if !enabled {
+            for id in pending.filter({ $0.value == .usage }).map(\.key) {
+                pending.removeValue(forKey: id); deadlines.removeValue(forKey: id)?.cancel()
+            }
+        }
+        publish(latest)
+        if enabled { requestUsage(manual: true) }
+    }
+
+    func refresh(manual: Bool = true) {
         guard defaults.bool(forKey: Self.enabledKey), initialized, authenticated,
               lastAttempt.map({ now().timeIntervalSince($0) >= 15 }) ?? true else { return }
         requestLimits()
+        requestUsage(manual: manual)
     }
 
     func tick() {
         guard latest.connection == .connected,
               !latest.isFresh(at: now()) || latest.windows.contains(where: { $0.resetsAt.map { $0 <= now() } == true }) else { return }
-        refresh()
+        refresh(manual: false)
     }
 
     func disconnect() {
         guard !disconnecting else { return }
         disconnecting = true
         defaults.set(false, forKey: Self.enabledKey)
+        defaults.set(false, forKey: Self.usageKey)
+        usage = CodexUsageSnapshot()
         defaults.set(true, forKey: Self.removalKey)
         wantsLogin = false
         loginDeadline?.cancel(); loginDeadline = nil
@@ -257,13 +276,16 @@ final class CodexQuotaClient {
         poll?.invalidate(); poll = nil
         loginDeadline?.cancel(); loginDeadline = nil; loginID = nil
         deadlines.values.forEach { $0.cancel() }; deadlines.removeAll(); pending.removeAll()
-        initialized = false; authenticated = false; lastAttempt = nil
+        initialized = false; authenticated = false; lastAttempt = nil; lastUsageAttempt = nil
+        usage = CodexUsageSnapshot(state: defaults.bool(forKey: Self.usageKey) ? .unavailable : .disabled)
         let old = wire; wire = nil
         if let old { old.close(completion: afterClose ?? {}) } else { afterClose?() }
     }
 
     private func publish(_ snapshot: CodexQuotaSnapshot) {
-        latest = snapshot; onUpdate?(snapshot)
+        var value = snapshot
+        value.usage = defaults.bool(forKey: Self.usageKey) ? usage : CodexUsageSnapshot()
+        latest = value; onUpdate?(value)
     }
 
     private func fail() {
@@ -289,7 +311,10 @@ final class CodexQuotaClient {
         pending[id] = kind
         let deadline = DispatchWorkItem { [weak self] in
             guard let self, self.pending[id] != nil else { return }
-            if kind == .logout { self.finishDisconnect() } else { self.fail() }
+            if kind == .usage {
+                self.pending.removeValue(forKey: id); self.deadlines.removeValue(forKey: id)
+                self.usage = CodexUsageSnapshot(state: .unavailable); self.publish(self.latest)
+            } else if kind == .logout { self.finishDisconnect() } else { self.fail() }
         }
         deadlines[id] = deadline
         DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: deadline)
@@ -302,9 +327,17 @@ final class CodexQuotaClient {
         request(.limits)
     }
 
+    private func requestUsage(manual: Bool = false) {
+        guard authenticated, defaults.bool(forKey: Self.usageKey), !pending.values.contains(.usage),
+              lastUsageAttempt.map({ now().timeIntervalSince($0) >= (manual ? 15 : 300) }) ?? true else { return }
+        lastUsageAttempt = now()
+        if usage.state != .ready { usage = CodexUsageSnapshot(state: .loading); publish(latest) }
+        request(.usage)
+    }
+
     private func armPoll() {
         guard poll == nil else { return }
-        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in self?.refresh() }
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in self?.refresh(manual: false) }
         timer.tolerance = 10
         RunLoop.main.add(timer, forMode: .common); poll = timer
     }
@@ -333,7 +366,9 @@ final class CodexQuotaClient {
             } else if method == "account/rateLimits/updated", authenticated {
                 publish(CodexQuotaSnapshot.parse(params, now: now()))
             } else if method == "account/updated", params["authMode"] is NSNull {
-                authenticated = false; publish(CodexQuotaSnapshot(connection: .needsLogin))
+                authenticated = false
+                usage = CodexUsageSnapshot(state: defaults.bool(forKey: Self.usageKey) ? .unavailable : .disabled)
+                publish(CodexQuotaSnapshot(connection: .needsLogin))
             }
             return
         }
@@ -342,11 +377,15 @@ final class CodexQuotaClient {
         deadlines.removeValue(forKey: Int(number))?.cancel()
         guard kind == .logout || kind == .cancel || defaults.bool(forKey: Self.enabledKey) else { return }
         if value["error"] != nil {
-            if kind == .logout { finishDisconnect() }
+            if kind == .usage { usage = CodexUsageSnapshot(state: .unavailable); publish(latest) }
+            else if kind == .logout { finishDisconnect() }
             else { fail() }
             return
         }
-        guard let result = value["result"] as? [String: Any] else { fail(); return }
+        guard let result = value["result"] as? [String: Any] else {
+            if kind == .usage { usage = CodexUsageSnapshot(state: .unavailable); publish(latest) } else { fail() }
+            return
+        }
         switch kind {
         case .initialize:
             initialized = true
@@ -354,7 +393,7 @@ final class CodexQuotaClient {
             request(.account, ["refreshToken": false])
         case .account:
             if let account = result["account"] as? [String: Any], account["type"] as? String == "chatgpt" {
-                authenticated = true; armPoll(); requestLimits()
+                authenticated = true; armPoll(); requestLimits(); requestUsage()
             } else { authenticated = false; beginLogin() }
         case .login:
             guard result["type"] as? String == "chatgptDeviceCode",
@@ -373,6 +412,9 @@ final class CodexQuotaClient {
             onDeviceLogin?(url, code)
         case .limits:
             publish(CodexQuotaSnapshot.parse(result, now: now()))
+        case .usage:
+            guard defaults.bool(forKey: Self.usageKey) else { return }
+            usage = CodexUsageSnapshot.parse(result, now: now()); publish(latest)
         case .cancel: break
         case .logout: finishDisconnect()
         }

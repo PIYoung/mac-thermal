@@ -163,6 +163,20 @@ enum LoginItemManager {
             runtime.connection = .notRunning
             panel.apply(runtime)
             precondition(panel.probeStrings["elapsed"] == "—", "A stopped app must not show a continuing runtime")
+            var graph = sample
+            let usageNow = Date()
+            let template = CodexUsageSnapshot.parse(["dailyUsageBuckets": []], now: usageNow)
+            graph.quota.usage = CodexUsageSnapshot(state: .ready, days: template.days.enumerated().map {
+                CodexDailyUsage(day: $0.element.day, tokens: $0.offset == 3 ? nil : Int64([0, 4000, 1200, 0, 6000, 2800, 4200][$0.offset]))
+            }, fetchedAt: usageNow)
+            panel.probeShowUsage(true); panel.apply(graph)
+            precondition(panel.probeUsageReady && panel.probeUsageTitle == L10n.text("최근 7일"))
+            bounds(canvas(panel))
+            graph.quota.usage.fetchedAt = usageNow.addingTimeInterval(-901)
+            panel.apply(graph)
+            precondition(!panel.probeUsageReady && panel.probeUsageStatus == L10n.text("사용량 통계 갱신 대기 중"))
+            panel.probeShowUsage(false); bounds(canvas(panel))
+            panel.probeShowUsage(true)
             var account = sample
             let fresh = Date()
             account.quota = CodexQuotaSnapshot(connection: .connected, windows: [
@@ -204,6 +218,11 @@ enum LoginItemManager {
                 CodexQuotaWindow(slot: 0, usedPercent: 32, durationMinutes: 300, resetsAt: Date().addingTimeInterval(7200)),
                 CodexQuotaWindow(slot: 1, usedPercent: 75, durationMinutes: 10080, resetsAt: Date().addingTimeInterval(4 * 86400))
             ], fetchedAt: Date())
+            let usageNow = Date()
+            let template = CodexUsageSnapshot.parse(["dailyUsageBuckets": []], now: usageNow)
+            documentation.quota.usage = CodexUsageSnapshot(state: .ready, days: template.days.enumerated().map {
+                CodexDailyUsage(day: $0.element.day, tokens: Int64([18000, 64000, 32000, 91000, 47000, 76000, 56000][$0.offset]))
+            }, fetchedAt: usageNow)
             documentation.models = [CodexModelUsage(model: "model-alpha", totalTokens: 182_000),
                                     CodexModelUsage(model: "model-beta", totalTokens: 64_000),
                                     CodexModelUsage(model: "model-gamma", totalTokens: 21_000)]

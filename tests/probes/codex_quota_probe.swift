@@ -133,6 +133,49 @@ private final class FakeWire: CodexQuotaWire {
         let cleanup = CodexQuotaClient(defaults: defaults, factory: { cleanupStarts += 1; return FakeWire() }, erase: { cleanups += 1; return true }, now: { now })
         cleanup.startSavedConnection()
         precondition(cleanups == 1 && cleanupStarts == 0 && !defaults.bool(forKey: CodexQuotaClient.removalKey), "Interrupted disconnect must finish cleanup without starting a helper")
+        let emptyDaily = CodexUsageSnapshot.parse(["dailyUsageBuckets": []], now: now)
+        precondition(emptyDaily.state == .ready && emptyDaily.days.count == 7 && emptyDaily.days.allSatisfy { $0.tokens == nil })
+        let day = emptyDaily.days[3].day
+        let dailyPayload: [String: Any] = ["summary": ["lifetimeTokens": 123, "private": "never retain"], "dailyUsageBuckets": [
+            ["startDate": day, "tokens": 1200], ["startDate": emptyDaily.days[6].day, "tokens": 0]
+        ]]
+        let daily = CodexUsageSnapshot.parse(dailyPayload, now: now)
+        precondition(daily.days[3].tokens == 1200 && daily.days[6].tokens == 0 && daily.days[0].tokens == nil)
+        precondition(!daily.isFresh(at: now.addingTimeInterval(901)))
+        precondition(!String(describing: daily).contains("never retain"))
+        for bad: Any in [true, -1, 1.5, "123", NSNumber(value: Double.nan)] {
+            let rejected = CodexUsageSnapshot.parse(["dailyUsageBuckets": [["startDate": day, "tokens": bad]]], now: now)
+            precondition(rejected.days.allSatisfy { $0.tokens == nil })
+        }
+        let conflict = CodexUsageSnapshot.parse(["dailyUsageBuckets": [["startDate": day, "tokens": 1], ["startDate": day, "tokens": 2], ["startDate": "2026-02-30", "tokens": 99]]], now: now)
+        precondition(conflict.days.allSatisfy { $0.tokens == nil })
+        precondition(CodexUsageSnapshot.parse(["dailyUsageBuckets": NSNull()], now: now).state == .unavailable)
+        let statsWire = FakeWire()
+        var usageClock = now
+        defaults.set(true, forKey: CodexQuotaClient.enabledKey)
+        let stats = CodexQuotaClient(defaults: defaults, factory: { statsWire }, erase: { true }, now: { usageClock })
+        stats.startSavedConnection(); statsWire.reply("initialize", [:]); statsWire.reply("account/read", ["account": ["type": "chatgpt"]]); statsWire.reply("account/rateLimits/read", valid)
+        precondition(!statsWire.methods.contains("account/usage/read"), "Quota consent must not silently enable usage statistics")
+        stats.setUsageApproved(true)
+        precondition(statsWire.methods.last == "account/usage/read")
+        precondition((statsWire.messages.last?["params"] as? [String: Any])?.isEmpty == true, "Daily graph must not request a thread")
+        statsWire.reply("account/usage/read", dailyPayload)
+        precondition(stats.latest.usage.days[3].tokens == 1200 && stats.latest.connection == .connected)
+        usageClock = now.addingTimeInterval(60); stats.refresh(manual: false); statsWire.reply("account/rateLimits/read", valid)
+        precondition(statsWire.methods.filter { $0 == "account/usage/read" }.count == 1, "Statistics must not poll every quota tick")
+        usageClock = now.addingTimeInterval(301); stats.refresh(manual: false); statsWire.reply("account/rateLimits/read", valid)
+        let failedUsage = statsWire.messages.last { $0["method"] as? String == "account/usage/read" }!
+        statsWire.receive(["id": failedUsage["id"]!, "error": ["code": -32601, "message": "do not expose raw private error"]])
+        precondition(stats.latest.connection == .connected && stats.latest.usage.state == .unavailable, "Unsupported statistics must not break quota")
+        usageClock = now.addingTimeInterval(320); stats.refresh(); statsWire.reply("account/rateLimits/read", valid)
+        let lateUsage = statsWire.messages.last { $0["method"] as? String == "account/usage/read" }!
+        stats.setUsageApproved(false)
+        statsWire.receive(["id": lateUsage["id"]!, "result": dailyPayload])
+        precondition(stats.latest.usage.state == .disabled && stats.latest.usage.days.isEmpty, "Disabled statistics must clear data and ignore late replies")
+        let statsCount = statsWire.methods.filter { $0 == "account/usage/read" }.count
+        usageClock = now.addingTimeInterval(900); stats.refresh(manual: false)
+        precondition(statsWire.methods.filter { $0 == "account/usage/read" }.count == statsCount)
+        stats.stop()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("quota-store-probe-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: root) }

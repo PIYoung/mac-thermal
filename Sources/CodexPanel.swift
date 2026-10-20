@@ -67,6 +67,94 @@ private final class CodexBar: FlippedView {
     }
 }
 
+/// Original bounded area chart. Cubic handles stay within each pair's value
+/// range, so smoothing cannot invent a peak or connect missing dates.
+private final class CodexUsageChart: FlippedView {
+    private var days: [CodexDailyUsage] = []
+    private var tracking: NSTrackingArea?
+    private var hovered: Int?
+    private var language = ""
+    func update(_ values: [CodexDailyUsage]) {
+        let next = Array(values.prefix(7)), locale = L10n.language.rawValue
+        guard next != days || locale != language else { return }
+        days = next; language = locale; hovered = nil
+        let labels = days.map { "\($0.day): " + ($0.tokens.map(Self.compact) ?? L10n.text("정보 없음")) }
+        setAccessibilityElement(true)
+        setAccessibilityLabel(L10n.text("최근 7일 계정 토큰 사용량") + ", " + labels.joined(separator: ", "))
+        toolTip = L10n.text("서버가 반환한 날짜별 토큰입니다. 빈 날짜는 정보 없음이며 0이 아닙니다.")
+        needsDisplay = true
+    }
+    private static func compact(_ count: Int64) -> String {
+        if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
+        if count >= 1_000 { return String(format: "%.1fK", Double(count) / 1_000) }
+        return String(count)
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area); tracking = area
+    }
+    override func mouseMoved(with event: NSEvent) {
+        guard days.count > 1 else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let index = max(0, min(days.count - 1, Int(((point.x - 4) / max(1, bounds.width - 8) * CGFloat(days.count - 1)).rounded())))
+        guard hovered != index else { return }
+        hovered = index
+        toolTip = days[index].day + " · " + (days[index].tokens.map { L10n.format("%lld 토큰", $0) } ?? L10n.text("정보 없음"))
+        needsDisplay = true
+    }
+    override func mouseExited(with event: NSEvent) { hovered = nil; needsDisplay = true }
+    override func draw(_ dirtyRect: NSRect) {
+        guard !days.isEmpty else { return }
+        let plot = NSRect(x: 4, y: 5, width: max(1, bounds.width - 8), height: max(1, bounds.height - 22))
+        let maximum = max(1, Double(days.compactMap(\.tokens).max() ?? 0))
+        let color = PanelColor.blue
+        let grid = NSBezierPath()
+        for fraction in [0.0, 0.5, 1.0] {
+            let y = plot.minY + plot.height * fraction
+            grid.move(to: NSPoint(x: plot.minX, y: y)); grid.line(to: NSPoint(x: plot.maxX, y: y))
+        }
+        PanelColor.divider.withAlphaComponent(0.10).setStroke(); grid.lineWidth = 0.5; grid.stroke()
+        func point(_ index: Int, _ tokens: Int64) -> NSPoint {
+            NSPoint(x: plot.minX + plot.width * CGFloat(index) / CGFloat(max(1, days.count - 1)),
+                    y: plot.maxY - plot.height * CGFloat(Double(max(0, tokens)) / maximum))
+        }
+        var segments: [[NSPoint]] = [], current: [NSPoint] = []
+        for (index, day) in days.enumerated() {
+            if let tokens = day.tokens { current.append(point(index, tokens)) }
+            else if !current.isEmpty { segments.append(current); current = [] }
+        }
+        if !current.isEmpty { segments.append(current) }
+        for segment in segments {
+            guard let first = segment.first, let last = segment.last else { continue }
+            let line = NSBezierPath(); line.move(to: first)
+            for (left, right) in zip(segment, segment.dropFirst()) {
+                let offset = (right.x - left.x) / 3
+                line.curve(to: right, controlPoint1: NSPoint(x: left.x + offset, y: left.y), controlPoint2: NSPoint(x: right.x - offset, y: right.y))
+            }
+            if segment.count > 1 {
+                let fill = line.copy() as! NSBezierPath
+                fill.line(to: NSPoint(x: last.x, y: plot.maxY)); fill.line(to: NSPoint(x: first.x, y: plot.maxY)); fill.close()
+                NSGradient(starting: color.withAlphaComponent(0.02), ending: color.withAlphaComponent(0.20))?.draw(in: fill, angle: 90)
+                color.setStroke(); line.lineWidth = 1.6; line.lineCapStyle = .round; line.stroke()
+            }
+            for item in segment { color.withAlphaComponent(0.8).setFill(); NSBezierPath(ovalIn: NSRect(x: item.x - 1.7, y: item.y - 1.7, width: 3.4, height: 3.4)).fill() }
+        }
+        if let hovered, days.indices.contains(hovered), let tokens = days[hovered].tokens {
+            let selected = point(hovered, tokens)
+            color.withAlphaComponent(0.12).setFill(); NSBezierPath(ovalIn: NSRect(x: selected.x - 5, y: selected.y - 5, width: 10, height: 10)).fill()
+            color.setFill(); NSBezierPath(ovalIn: NSRect(x: selected.x - 2.5, y: selected.y - 2.5, width: 5, height: 5)).fill()
+        }
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor]
+        for index in [0, days.count - 1] {
+            let label = String(days[index].day.suffix(5)).replacingOccurrences(of: "-", with: "/") as NSString
+            let width = label.size(withAttributes: attributes).width
+            label.draw(at: NSPoint(x: index == 0 ? 1 : bounds.width - width - 1, y: bounds.height - 12), withAttributes: attributes)
+        }
+    }
+}
+
 /// Numeric account quota and local-record metadata only. No authentication data.
 final class CodexPanelController: NSViewController {
     static let surfaceSize = NSSize(width: 300, height: 420)
@@ -87,6 +175,14 @@ final class CodexPanelController: NSViewController {
     private lazy var accountButton = NSButton(image: NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(accountClicked))
     private let totalsCard = GlassCard()
     private let modelsCard = GlassCard()
+    private let usageCard = GlassCard()
+    private let usageTitle = codexText(size: 11, weight: .semibold)
+    private lazy var usageScope = NSButton(title: "", target: self, action: #selector(usageClicked))
+    private let usageStatus = codexText(size: 10, secondary: true, lines: 2)
+    private let usageChart = CodexUsageChart()
+    private var showingUsage = true
+    private lazy var usageModeButton = NSButton(title: "", target: self, action: #selector(toggleUsageMode))
+    private lazy var usageConnectButton = NSButton(title: "", target: self, action: #selector(usageClicked))
     private let recordsCard = GlassCard()
     private let activity = codexText(size: 12, weight: .semibold)
     private let elapsed = codexText(size: 11, weight: .medium, digits: true)
@@ -118,6 +214,7 @@ final class CodexPanelController: NSViewController {
     var refresh: (() -> Void)?
     var recordsEnabledChanged: ((Bool) -> Void)?
     var accountAction: (() -> Void)?
+    var usageAction: (() -> Void)?
     #if PANEL_UPDATES_PROBE
     private var probeVisible = false
     #endif
@@ -205,6 +302,20 @@ final class CodexPanelController: NSViewController {
             codexPlace(modelBars[index], in: modelsCard, 12, y + 16, 252, 3)
         }
         codexPlace(modelsEmpty, in: modelsCard, 12, 40, 252, 36)
+        codexPlace(usageCard, in: canvas, 12, 200, 276, 100)
+        codexPlace(usageTitle, in: usageCard, 12, 9, 104, 17)
+        usageScope.isBordered = false; usageScope.contentTintColor = .secondaryLabelColor
+        usageScope.font = .systemFont(ofSize: 9); usageScope.alignment = .left
+        codexPlace(usageScope, in: usageCard, 113, 7, 88, 20)
+        codexPlace(usageChart, in: usageCard, 12, 32, 252, 57)
+        usageStatus.alignment = .center
+        codexPlace(usageStatus, in: usageCard, 12, 33, 252, 28)
+        usageConnectButton.isBordered = false; usageConnectButton.contentTintColor = PanelColor.blue
+        usageConnectButton.font = .systemFont(ofSize: 10, weight: .medium)
+        codexPlace(usageConnectButton, in: usageCard, 66, 64, 144, 23)
+        usageModeButton.isBordered = false; usageModeButton.contentTintColor = PanelColor.blue
+        usageModeButton.font = .systemFont(ofSize: 10, weight: .medium)
+        codexPlace(usageModeButton, in: canvas, 220, 206, 56, 22)
         codexPlace(recordsCard, in: canvas, 12, 308, 276, 78)
         codexPlace(recordsTitle, in: recordsCard, 12, 8, 198, 17)
         codexPlace(recordsSwitch, in: recordsCard, 224, 7, 40, 23)
@@ -230,6 +341,8 @@ final class CodexPanelController: NSViewController {
     func prepareForPresentation() { _ = view; renderNow = Date(); render() }
     @objc private func refreshNow() { refresh?() }
     @objc private func accountClicked() { accountAction?() }
+    @objc private func usageClicked() { usageAction?() }
+    @objc private func toggleUsageMode() { showingUsage.toggle(); render() }
     @objc private func recordsChanged() {
         let enabled = recordsSwitch.state == .on
         guard latest.recordsEnabled != enabled else { return }
@@ -363,9 +476,38 @@ final class CodexPanelController: NSViewController {
             L10n.format(stale ? "이전 값 · %@" : "갱신 %@", dateText($0))
         } ?? notice ?? L10n.text("업데이트 정보 없음")
         updated.toolTip = enabled && latest.incomplete ? recordsStatus.toolTip : notice ?? L10n.text("이 Mac의 로컬 기록만 집계합니다")
+        renderUsage()
         refreshButton.isEnabled = enabled || latest.quota.isEnabled
         refreshButton.toolTip = L10n.text("Codex 지금 새로고침")
         refreshButton.setAccessibilityLabel(L10n.text("Codex 지금 새로고침"))
+    }
+
+    private func renderUsage() {
+        let usage = latest.quota.usage
+        usageCard.isHidden = !showingUsage; modelsCard.isHidden = showingUsage
+        modelsUnit.isHidden = true
+        usageModeButton.toolTip = L10n.text("계정 통계를 누르면 그래프 연결을 관리할 수 있습니다")
+        usageModeButton.title = L10n.text(showingUsage ? "모델 보기" : "그래프")
+        usageModeButton.setAccessibilityLabel(L10n.text(showingUsage ? "모델 보기" : "그래프"))
+        usageTitle.stringValue = L10n.text("최근 7일")
+        usageScope.title = L10n.text("계정 통계")
+        usageScope.toolTip = L10n.text("사용량 그래프 연결 관리")
+        usageScope.setAccessibilityLabel(usageScope.toolTip)
+        let ready = usage.isFresh(at: renderNow) && usage.days.contains { $0.tokens != nil }
+        usageChart.isHidden = !ready; usageStatus.isHidden = ready
+        usageChart.update(ready ? usage.days : [])
+        let key: String
+        switch usage.state {
+        case .disabled: key = "날짜별 사용량을 그래프로 확인하세요"
+        case .loading: key = "사용량 통계 확인 중"
+        case .unavailable: key = "사용량 통계가 제공되지 않았습니다"
+        case .ready: key = usage.isFresh(at: renderNow) ? "표시할 날짜별 통계가 없습니다" : "사용량 통계 갱신 대기 중"
+        }
+        usageStatus.stringValue = L10n.text(key)
+        usageConnectButton.isHidden = ready
+        usageConnectButton.title = L10n.text(usage.state == .disabled ? "사용량 그래프 연결" : "통계 연결 끄기")
+        usageConnectButton.setAccessibilityLabel(usageConnectButton.title)
+        usageCard.toolTip = L10n.text("서버가 반환한 날짜별 토큰입니다. 빈 날짜는 정보 없음이며 0이 아닙니다.")
     }
 
     private func renderQuota() {
@@ -444,6 +586,10 @@ extension CodexPanelController {
         recordsSwitch.state = enabled ? .on : .off
         recordsSwitch.sendAction(recordsSwitch.action, to: recordsSwitch.target)
     }
+    func probeShowUsage(_ visible: Bool) { showingUsage = visible; render() }
+    var probeUsageReady: Bool { !usageChart.isHidden }
+    var probeUsageStatus: String { usageStatus.stringValue }
+    var probeUsageTitle: String { usageTitle.stringValue }
     var probeRecordsEnabled: Bool { recordsSwitch.state == .on }
     var probeStrings: [String: String] {
         ["activity": activity.stringValue, "elapsed": elapsed.stringValue, "model": model.stringValue,

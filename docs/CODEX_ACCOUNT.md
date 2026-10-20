@@ -13,9 +13,19 @@ This uses managed app-server authentication for a local open-source application.
 - Quota normally refreshes once a minute. Manual/reset-triggered refresh is throttled to 15 seconds. The existing two-second UI tick updates countdowns, with no new high-frequency timer. Old data becomes unknown after 180 seconds. An expired reset awaits server confirmation and never automatically restores the percentage or account access.
 - Some plans or CLI versions may not return both windows or a reset time. Missing fields stay unknown. Billing, spending limits, exact account-wide token totals, NPU usage and verified active-work duration are not inferred from quota.
 
+## Daily usage graph
+
+The existing 300×420 companion has a compact graph/model switch in its middle card. The default graph uses an original smooth line, a restrained gradient area and actual daily point markers. Hovering a point shows its date and token count. The Models button shows the existing local TOP 3 without changing panel size.
+
+Daily account statistics require a separate in-app review because the data scope expands beyond quota. This optional setting is off by default, including for previously connected quota accounts. Once approved, `account/usage/read` is requested with empty parameters, never a thread ID. Only returned date/token buckets are retained in memory. Summary fields, thread usage, raw errors and conversation contents are not retained. No local record is uploaded. The account-statistics button manages refresh/disconnection independently of the quota connection.
+
+The existing quota timer checks for a graph refresh about every five minutes; explicit refresh is limited to once per 15 seconds. The graph is hidden when its data is more than 15 minutes old. Disabling statistics clears its data and ignores pending replies; account disconnect clears both approvals. Sleep/logout/helper failure clears graph values, and an approved saved connection can resume after wake/relaunch. An unsupported/error/empty daily-statistics response does not break quota or generate sample values.
+
+The graph selects a seven-date window ending on the current UTC date, preserving the service's date-only labels. This does not establish the service's accounting time zone. Missing/invalid/conflicting duplicate dates remain gaps, never zero or interpolated values. Returned zero is a real baseline point. Curves use control points between adjacent values to avoid overshoot, and separate segments at gaps. Dates, integer counts, response size and retained rows are bounded. There is no repeating graph animation or additional high-frequency timer, no external chart dependency and no disk history cache.
+
 ## Authentication and removal
 
-Authentication can authorize more than statistics-only access. The app’s RPC allowlist limits its own requests, not the credential’s provider-side scope. Only initialization and account read/login/cancel/logout/quota methods are sent. No threads, tools or model calls are requested.
+Authentication can authorize more than statistics-only access. The app’s RPC allowlist limits its own requests, not the credential’s provider-side scope. Only initialization, account read/login/cancel/logout/quota and separately approved daily-usage methods are sent. No threads, tools or model calls are requested.
 
 Codex stores this connection separately under `~/Library/Application Support/Mac Thermal/Codex Account`, with a private 0700 directory and its file credential store. The app never parses stored authentication. It does not access `~/.codex/auth.json` or import existing Codex configuration. The helper runs as the current user, communicates over private stdio, and is not a privileged service or public listener. Analytics are disabled for this helper. No helper binary is bundled; the app verifies the installed executable against OpenAI’s Apple signing team before launching it.
 
