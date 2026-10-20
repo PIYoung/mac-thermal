@@ -173,9 +173,42 @@ enum LoginItemManager {
             runtime.connection = .notRunning
             panel.apply(runtime)
             precondition(panel.probeStrings["elapsed"] == "—", "A stopped app must not show a continuing runtime")
+            var accountPrompts = 0, statsPrompts = 0
+            panel.accountAction = { accountPrompts += 1 }
+            panel.usageAction = { statsPrompts += 1 }
+            for state: CodexQuotaConnection in [.disconnected, .needsLogin] {
+                var loggedOut = sample
+                loggedOut.quota.connection = state
+                // Even an unexpected cached payload must never render after sign-out.
+                let now = Date()
+                loggedOut.quota.usage = CodexUsageSnapshot(state: .ready, days: [CodexDailyUsage(day: "2026-10-20", tokens: 999)], fetchedAt: now)
+                panel.apply(loggedOut)
+                precondition(panel.probeUsageStatus == L10n.text("로그인 후 계정 토큰을 볼 수 있습니다"))
+                precondition(!panel.probeUsageReady && panel.probeUsageButtonVisible)
+                precondition(panel.probeUsageButtonTitle == L10n.text("ChatGPT 로그인"))
+                precondition(panel.probeModelNames.count == 3, "Local models must remain independent of account sign-in")
+                panel.probeClickUsageAction()
+            }
+            precondition(accountPrompts == 2 && statsPrompts == 0, "Logged-out graph action must open sign-in review, never enable queries")
+            var consent = sample
+            consent.quota.connection = .connected
+            panel.apply(consent)
+            precondition(panel.probeUsageStatus == L10n.text("동의 후 계정 토큰 그래프를 표시합니다"))
+            panel.probeClickUsageAction()
+            precondition(statsPrompts == 1 && accountPrompts == 2, "Connected users must still explicitly review daily-statistics opt-in")
+            for state: CodexQuotaConnection in [.connecting, .authorizing, .disconnecting] {
+                consent.quota.connection = state; panel.apply(consent)
+                precondition(!panel.probeUsageReady && !panel.probeUsageButtonVisible)
+            }
+            for state: CodexQuotaConnection in [.helperMissing, .unavailable] {
+                consent.quota.connection = state; panel.apply(consent)
+                precondition(!panel.probeUsageReady && panel.probeUsageButtonVisible)
+                precondition(panel.probeUsageButtonTitle == L10n.text("ChatGPT 한도 관리"))
+            }
             var graph = sample
             let usageNow = Date()
             let template = CodexUsageSnapshot.parse(["dailyUsageBuckets": []], now: usageNow)
+            graph.quota.connection = .connected
             graph.quota.usage = CodexUsageSnapshot(state: .ready, days: template.days.enumerated().map {
                 CodexDailyUsage(day: $0.element.day, tokens: $0.offset == 3 ? nil : Int64([0, 4000, 1200, 0, 6000, 2800, 4200][$0.offset]))
             }, fetchedAt: usageNow)
@@ -301,6 +334,6 @@ enum LoginItemManager {
                 try render(missing, appearance: appearance, output: output.appendingPathComponent("codex-unavailable-\(name).png"))
             }
         }
-        print("Codex panel passed: 4-language immediate hover values/zero/missing/edge bounds/exit/stale reset, fixed bounds, simultaneous separate graph/models cards without toggle, removed recent-record and settings items, local UTC-today scope, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
+        print("Codex panel passed: 4-language sign-in-required/independent local data/consent routing/no signed-out cache, immediate hover values/zero/missing/edge bounds/exit/stale reset, fixed bounds, simultaneous separate graph/models cards without toggle, removed recent-record and settings items, local UTC-today scope, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
     }
 }

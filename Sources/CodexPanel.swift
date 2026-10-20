@@ -371,7 +371,10 @@ final class CodexPanelController: NSViewController {
     func prepareForPresentation() { _ = view; renderNow = Date(); render() }
     @objc private func refreshNow() { refresh?() }
     @objc private func accountClicked() { accountAction?() }
-    @objc private func usageClicked() { usageAction?() }
+    @objc private func usageClicked() {
+        if latest.quota.connection == .connected { usageAction?() }
+        else { accountAction?() }
+    }
     private func modelName(_ value: String?) -> String {
         guard let value, value.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", options: .regularExpression) != nil else { return L10n.text("정보 없음") }
         return value
@@ -480,19 +483,44 @@ final class CodexPanelController: NSViewController {
         usageScope.title = L10n.text("계정 토큰")
         usageScope.toolTip = L10n.text("로그인한 계정의 서버 집계 일별 토큰 · 최근 7일 · 약 5분마다 갱신. 이 Mac의 로컬 집계·잔여 한도와 다릅니다. 입력·출력·캐시 구성과 집계 시간대는 제공되지 않습니다. 누르면 연결을 관리합니다.")
         usageScope.setAccessibilityLabel(usageScope.toolTip)
-        let ready = usage.isFresh(at: renderNow) && usage.days.contains { $0.tokens != nil }
+        let accountConnected = latest.quota.connection == .connected
+        let ready = accountConnected && usage.isFresh(at: renderNow) && usage.days.contains { $0.tokens != nil }
         usageChart.isHidden = !ready; usageStatus.isHidden = ready
         usageChart.update(ready ? usage.days : [])
         let key: String
-        switch usage.state {
-        case .disabled: key = "날짜별 사용량을 그래프로 확인하세요"
-        case .loading: key = "사용량 통계 확인 중"
-        case .unavailable: key = "사용량 통계가 제공되지 않았습니다"
-        case .ready: key = usage.isFresh(at: renderNow) ? "표시할 날짜별 통계가 없습니다" : "사용량 통계 갱신 대기 중"
+        let actionKey: String
+        var connecting = false
+        switch latest.quota.connection {
+        case .disconnected, .needsLogin:
+            key = "로그인 후 계정 토큰을 볼 수 있습니다"
+            actionKey = "ChatGPT 로그인"
+        case .authorizing:
+            key = "브라우저에서 로그인을 완료하세요"
+            actionKey = "ChatGPT 로그인"; connecting = true
+        case .connecting:
+            key = "계정 연결 확인 중"
+            actionKey = "ChatGPT 로그인"; connecting = true
+        case .disconnecting:
+            key = "계정 연결 해제 중"
+            actionKey = "ChatGPT 로그인"; connecting = true
+        case .helperMissing:
+            key = "지원되는 Codex 앱이 필요합니다"
+            actionKey = "ChatGPT 한도 관리"
+        case .unavailable:
+            key = "계정 연결을 확인해 주세요"
+            actionKey = "ChatGPT 한도 관리"
+        case .connected:
+            switch usage.state {
+            case .disabled: key = "동의 후 계정 토큰 그래프를 표시합니다"
+            case .loading: key = "사용량 통계 확인 중"
+            case .unavailable: key = "사용량 통계가 제공되지 않았습니다"
+            case .ready: key = usage.isFresh(at: renderNow) ? "표시할 날짜별 통계가 없습니다" : "사용량 통계 갱신 대기 중"
+            }
+            actionKey = usage.state == .disabled ? "사용량 그래프 연결" : "통계 연결 끄기"
         }
         usageStatus.stringValue = L10n.text(key)
-        usageConnectButton.isHidden = ready
-        usageConnectButton.title = L10n.text(usage.state == .disabled ? "사용량 그래프 연결" : "통계 연결 끄기")
+        usageConnectButton.isHidden = ready || connecting
+        usageConnectButton.title = L10n.text(actionKey)
         usageConnectButton.setAccessibilityLabel(usageConnectButton.title)
         usageCard.toolTip = L10n.text("서버가 반환한 날짜별 토큰입니다. 빈 날짜는 정보 없음이며 0이 아닙니다.")
     }
@@ -578,6 +606,9 @@ extension CodexPanelController {
     var probeUsageHoverValue: String { usageChart.probeHoverValue }
     var probeUsageHoverDay: String? { usageChart.probeHoverDay }
     var probeUsageSource: String { usageScope.title }
+    var probeUsageButtonTitle: String { usageConnectButton.title }
+    var probeUsageButtonVisible: Bool { !usageConnectButton.isHidden }
+    func probeClickUsageAction() { usageConnectButton.performClick(nil) }
     var probeChartFrame: NSRect { usageChart.frame }
     var probeSeparateCardsVisible: Bool { !usageCard.isHidden && !modelsCard.isHidden && !usageCard.frame.intersects(modelsCard.frame) }
     var probeStrings: [String: String] {
