@@ -516,6 +516,63 @@ enum PanelUpdatesProbe {
     }
     #endif
 
+    private static func componentTemperatureChecks(defaults: UserDefaults) {
+        let panel = PanelController(defaults: defaults)
+        let window = DashboardWindow(controller: panel)
+        let frame = window.frame
+        let surfaces = panel.probeSurfaceFrames
+        panel.probeSetVisible(true)
+        var fixture = sample(20)
+        fixture.gpuTemperature = 100; fixture.memoryProximityTemperature = 85
+        fixture.gpuSensors = 8; fixture.memoryProximitySensors = 2
+        panel.probeSelectTab(0)
+        panel.apply(fixture)
+        let cpuBefore = panel.probeStrings["cpu"]
+        panel.probeSelectTab(1)
+        precondition(panel.probeStrings["gpuTemperature"] == "100 °C")
+        precondition(panel.probeTemperatureColors[1] == NSColor.systemRed)
+        precondition(panel.probeStrings["cpu"] == cpuBefore)
+        panel.probeSelectTab(2)
+        precondition(panel.probeStrings["memoryTemperature"] == "85 °C")
+        precondition(panel.probeTemperatureColors[2] == NSColor.systemRed)
+        precondition(panel.probeTemperatureTooltips[1].contains(L10n.text("메모리 주변 센서 %d개 중 최댓값 · 메모리 칩 내부 온도가 아닙니다").components(separatedBy: " · ").last!))
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults)
+            panel.probeSelectTab(1); checkContentBounds(panel.view)
+            precondition(panel.probeThermalLabelsFit, "GPU thermal labels must fit in all languages")
+            panel.probeSelectTab(2); checkContentBounds(panel.view)
+            precondition(panel.probeThermalLabelsFit, "Memory nearby temperature and total capacity must fit in all languages")
+            precondition(panel.probeStrings["memoryTemperatureTitle"] == L10n.text("메모리 주변 온도"))
+        }
+        for invalid: Double? in [nil, .nan, .infinity, 0, -1, 131] {
+            fixture.gpuTemperature = invalid; fixture.memoryProximityTemperature = invalid
+            panel.apply(fixture)
+            precondition(panel.probeStrings["memoryTemperature"] == "— °C" && panel.probeTemperatureColors[2] == NSColor.labelColor)
+            panel.probeSelectTab(1)
+            precondition(panel.probeStrings["gpuTemperature"] == "— °C" && panel.probeTemperatureColors[1] == NSColor.labelColor)
+            panel.probeSelectTab(2)
+        }
+        fixture.gpuTemperature = 70; fixture.memoryProximityTemperature = 65
+        panel.apply(fixture)
+        precondition(panel.probeTemperatureColors[2] == NSColor.labelColor)
+        let memoryBefore = panel.probeStrings["memoryTemperature"]
+        panel.probeSelectTab(1)
+        precondition(panel.probeTemperatureColors[1] == NSColor.labelColor)
+        fixture.memoryProximityTemperature = 80; fixture.gpuTemperature = 95
+        panel.apply(fixture)
+        precondition(panel.probeTemperatureColors[1] == NSColor.systemOrange)
+        precondition(panel.probeStrings["memoryTemperature"] == memoryBefore, "Inactive memory tab must not format values")
+        panel.probeSelectTab(2)
+        precondition(panel.probeTemperatureColors[2] == NSColor.systemOrange)
+        precondition(window.frame == frame && panel.probeSurfaceFrames == surfaces)
+        panel.probeSetVisible(false)
+        let hidden = panel.probeStrings
+        fixture.gpuTemperature = 110; panel.apply(fixture)
+        precondition(panel.probeStrings == hidden, "Hidden panels must not format temperature fields")
+        L10n.setLanguage(.korean, defaults: defaults)
+        print("Component temperature panels passed: independent warm/hot/recovery, invalid/missing values, memory proximity label and explanation, four-language fit, selected-tab/hidden updates, fixed frames")
+    }
+
     private static func fanChecks(defaults: UserDefaults) {
         let panel = PanelController(defaults: defaults)
         panel.prepareForPresentation()
@@ -559,6 +616,7 @@ enum PanelUpdatesProbe {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         #if PANEL_UPDATES_PROBE
+        withDefaults { defaults in componentTemperatureChecks(defaults: defaults) }
         withDefaults { defaults in fanChecks(defaults: defaults) }
         selectionChecks()
         surfaceHitChecks()

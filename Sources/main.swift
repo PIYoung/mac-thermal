@@ -57,6 +57,11 @@ enum TemperatureWarning: Int {
         }
     }
     static func cpu(_ value: Double?) -> Self { classify(value, warm: 90, hot: 100) }
+    static func gpu(_ value: Double?) -> Self { classify(value, warm: 90, hot: 100) }
+    static func memoryProximity(_ value: Double?) -> Self { classify(value, warm: 75, hot: 85) }
+    static func valid(_ value: Double?) -> Double? {
+        value.flatMap { $0.isFinite && (1...130).contains($0) ? $0 : nil }
+    }
     static func ssd(_ value: Double?) -> Self { classify(value, warm: 60, hot: 70) }
     private static func classify(_ value: Double?, warm: Double, hot: Double) -> Self {
         guard let value, value.isFinite, (1...130).contains(value) else { return .normal }
@@ -109,6 +114,12 @@ struct Snapshot {
     let uptime: TimeInterval?
     let resources: ResourceSnapshot
     var fans: FanSnapshot = .unavailable
+    var gpuTemperature: Double? = nil
+    var memoryProximityTemperature: Double? = nil
+    var gpuSensors: Int = 0
+    var memoryProximitySensors: Int = 0
+    var gpuWarning: TemperatureWarning { .gpu(gpuTemperature) }
+    var memoryProximityWarning: TemperatureWarning { .memoryProximity(memoryProximityTemperature) }
     var cpuWarning: TemperatureWarning { .cpu(cpuTemperature) }
     var ssdWarning: TemperatureWarning { .ssd(ssdTemperature) }
 
@@ -246,7 +257,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             upload: metrics.network_valid != 0 ? metrics.upload_bytes_per_second : nil,
             download: metrics.network_valid != 0 ? metrics.download_bytes_per_second : nil,
             interfaces: Int(metrics.interface_count), cpuSensors: Int(sensors.cpu_sensor_count), ssdSensors: Int(sensors.ssd_sensor_count),
-            thermal: ThermalStatus(ProcessInfo.processInfo.thermalState), time: Date(), uptime: SystemUptime.seconds(), resources: ResourceSampler.sample(), fans: readFans())
+            thermal: ThermalStatus(ProcessInfo.processInfo.thermalState), time: Date(), uptime: SystemUptime.seconds(), resources: ResourceSampler.sample(), fans: readFans(),
+            gpuTemperature: sensors.gpu_sensor_count > 0 ? sensors.gpu_celsius : nil,
+            memoryProximityTemperature: sensors.memory_proximity_sensor_count > 0 ? sensors.memory_proximity_celsius : nil,
+            gpuSensors: Int(sensors.gpu_sensor_count), memoryProximitySensors: Int(sensors.memory_proximity_sensor_count))
         DispatchQueue.main.async { [weak self] in self?.render(snapshot) }
     }
 
@@ -363,6 +377,10 @@ if CommandLine.arguments.contains("--diagnostics") {
         "cpu_sensor_count": sensors.cpu_sensor_count,
         "cpu_usage_percent": metrics.cpu_valid != 0 ? metrics.cpu_usage_percent as Any : NSNull(),
         "gpu_usage_percent": resources.gpu.utilizationPercent as Any? ?? NSNull(),
+        "gpu_celsius": sensors.gpu_sensor_count > 0 ? sensors.gpu_celsius as Any : NSNull(),
+        "gpu_temperature_sensor_count": sensors.gpu_sensor_count,
+        "memory_proximity_celsius": sensors.memory_proximity_sensor_count > 0 ? sensors.memory_proximity_celsius as Any : NSNull(),
+        "memory_proximity_sensor_count": sensors.memory_proximity_sensor_count,
         "gpu_model": resources.gpu.model as Any? ?? NSNull(),
         "gpu_core_count": resources.gpu.coreCount as Any? ?? NSNull(),
         "upload_bytes_per_second": metrics.network_valid != 0 ? metrics.upload_bytes_per_second as Any : NSNull(),

@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/sysctl.h>
 
 typedef struct { uint8_t major, minor, build, reserved; uint16_t release; } SMCVersion;
 typedef struct { uint16_t version, length; uint32_t cpu_limit, gpu_limit, memory_limit; } SMCPowerLimit;
@@ -165,6 +166,35 @@ static void add_reading(double value, double *max, int *count) {
     ++*count;
 }
 
+// M4-only SMC mappings verified against Stats v3.0.21. Do not apply
+// generation-specific keys to another SoC or relabel PMU sensors as GPU/RAM.
+static int m4_kind = -1; // -1 unchecked, 0 other/unknown, 1 M4, 2 Pro/Max
+static int sensor_platform(void) {
+    if (m4_kind >= 0) return m4_kind;
+    char brand[128] = {0}; size_t size = sizeof(brand);
+    m4_kind = 0;
+    if (sysctlbyname("machdep.cpu.brand_string", brand, &size, NULL, 0) != 0) return 0;
+    brand[sizeof(brand) - 1] = 0;
+    if (strcmp(brand, "Apple M4") == 0) m4_kind = 1;
+    else if (strcmp(brand, "Apple M4 Pro") == 0 || strcmp(brand, "Apple M4 Max") == 0) m4_kind = 2;
+    return m4_kind;
+}
+static void read_component_temperatures(MTThermalReading *reading) {
+    const int platform = sensor_platform();
+    if (!platform) return;
+    const char *gpu[] = {platform == 1 ? "Tg0G" : "Tg1U", platform == 1 ? "Tg0H" : "Tg1k",
+                        "Tg0K", "Tg0L", "Tg0d", "Tg0e", "Tg0j", "Tg0k"};
+    const char *memory[] = {"Tm0p", "Tm1p", "Tm2p"};
+    for (size_t i = 0; i < sizeof(gpu) / sizeof(*gpu); ++i) {
+        double value;
+        if (smc_read(gpu[i], &value)) add_reading(value, &reading->gpu_celsius, &reading->gpu_sensor_count);
+    }
+    for (size_t i = 0; i < sizeof(memory) / sizeof(*memory); ++i) {
+        double value;
+        if (smc_read(memory[i], &value)) add_reading(value, &reading->memory_proximity_celsius, &reading->memory_proximity_sensor_count);
+    }
+}
+
 MTThermalReading mt_thermal_read(void) {
     MTThermalReading reading = {0};
     for (size_t i = 0; i < sizeof(cpu_keys) / sizeof(cpu_keys[0]); ++i) {
@@ -173,6 +203,8 @@ MTThermalReading mt_thermal_read(void) {
     }
     if (reading.cpu_sensor_count) snprintf(reading.cpu_source, sizeof(reading.cpu_source), "SMC CPU sensors (max)");
     const bool smc_cpu_available = reading.cpu_sensor_count > 0;
+    read_component_temperatures(&reading);
+    const bool smc_gpu_available = reading.gpu_sensor_count > 0;
     hid_open();
     if (hid_client) {
         CFArrayRef services = copy_services(hid_client);
@@ -185,10 +217,11 @@ MTThermalReading mt_thermal_read(void) {
                 bool valid = CFGetTypeID(product) == CFStringGetTypeID() && CFStringGetCString(product, name, sizeof(name), kCFStringEncodingUTF8);
                 CFRelease(product);
                 bool is_cpu = valid && (strncmp(name, "pACC MTR Temp Sensor", 19) == 0 || strncmp(name, "eACC MTR Temp Sensor", 19) == 0);
+                bool is_gpu = valid && strncmp(name, "GPU MTR Temp Sensor", 19) == 0;
                 bool is_ssd = valid && strncmp(name, "NAND CH", 7) == 0 && strstr(name, "temp");
                 /* SMC is preferred, so these CPU events would be discarded.
                  * Continue reading every HID CPU sensor when SMC is absent. */
-                if ((!is_cpu || smc_cpu_available) && !is_ssd) continue;
+                if ((!is_cpu || smc_cpu_available) && (!is_gpu || smc_gpu_available) && !is_ssd) continue;
                 CFTypeRef event = copy_event(service, 15, 0, 0);
                 if (!event) continue;
                 double value = event_float(event, 15 << 16);
@@ -199,6 +232,7 @@ MTThermalReading mt_thermal_read(void) {
                 } else if (is_cpu && strncmp(reading.cpu_source, "HID", 3) == 0) {
                     add_reading(value, &reading.cpu_celsius, &reading.cpu_sensor_count);
                 }
+                if (is_gpu && !smc_gpu_available) add_reading(value, &reading.gpu_celsius, &reading.gpu_sensor_count);
                 if (is_ssd) {
                     add_reading(value, &reading.ssd_celsius, &reading.ssd_sensor_count);
                     snprintf(reading.ssd_source, sizeof(reading.ssd_source), "NAND temperature sensors (max)");
@@ -221,6 +255,7 @@ void mt_thermal_close(void) {
     if (connection) IOServiceClose(connection);
     connection = IO_OBJECT_NULL;
     smc_attempted = false;
+    m4_kind = -1;
     if (hid_client) CFRelease(hid_client);
     hid_client = NULL;
     hid_attempted = false;

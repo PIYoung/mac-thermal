@@ -3,6 +3,14 @@ import Foundation
 // Original translations for Mac Thermal. Entries are English, Japanese, Simplified Chinese.
 extension L10n {
     static let panelTranslations: [String: [String]] = [
+        "GPU 온도": ["GPU temperature", "GPU温度", "GPU温度"],
+        "GPU 온도 %@": ["GPU temperature %@", "GPU温度 %@", "GPU温度 %@"],
+        "메모리 주변 온도": ["Memory proximity temp.", "メモリ周辺温度", "内存周边温度"],
+        "메모리 주변": ["Memory proximity", "メモリ周辺", "内存周边"],
+        "GPU 온도 센서 %d개 중 최댓값 · PMU 제외": ["Maximum of %d GPU temperature sensors · excludes PMU", "GPU温度センサー%d個の最大値 · PMUを除外", "%d个GPU温度传感器的最高值 · 排除PMU"],
+        "메모리 주변 센서 %d개 중 최댓값 · 메모리 칩 내부 온도가 아닙니다": ["Maximum of %d memory proximity sensors · not the temperature inside the memory chips", "メモリ周辺センサー%d個の最大値 · メモリチップ内部の温度ではありません", "%d个内存周边传感器的最高值 · 并非内存芯片内部温度"],
+        "앱 표시 기준: GPU 90°C 주의 · 100°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.": ["App thresholds: GPU warning at 90°C, high at 100°C. Not manufacturer limits or an overheating diagnosis.", "アプリの表示基準：GPU 90°Cで注意、100°Cで高温。メーカーの限界温度や過熱の確定診断ではありません。", "应用显示阈值：GPU 90°C警告，100°C高温。并非厂商温度上限或过热确诊。"],
+        "앱 표시 기준: 메모리 주변 75°C 주의 · 85°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.": ["App thresholds: memory proximity warning at 75°C, high at 85°C. Not manufacturer limits or an overheating diagnosis.", "アプリの表示基準：メモリ周辺75°Cで注意、85°Cで高温。メーカーの限界温度や過熱の確定診断ではありません。", "应用显示阈值：内存周边75°C警告，85°C高温。并非厂商温度上限或过热确诊。"],
         "팬 정보 없음": ["Fan data unavailable", "ファン情報なし", "无风扇数据"],
         "팬 없음": ["No fans", "ファンなし", "无风扇"],
         "회전 중": ["Running", "回転中", "运转中"],

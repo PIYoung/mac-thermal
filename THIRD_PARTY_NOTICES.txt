@@ -18,7 +18,7 @@ License file revision: 81af45661c05278f2c2495f5a07d6f8ee0db7443
 Additional copyright notices preserved from the referenced source files:
 SMC/smc.swift:
 Copyright © 2021 Serhiy Mytrovtsiy. All rights reserved.
-Modules/Sensors/values.swift:
+Modules/Sensors/values.swift (M4 GPU and memory-proximity mapping verified 2026-10-20):
 Copyright © 2020 Serhiy Mytrovtsiy. All rights reserved.
 Modules/Sensors/readers.swift (fan key mapping, verified 2026-10-20):
 Copyright © 2020 Serhiy Mytrovtsiy. All rights reserved.

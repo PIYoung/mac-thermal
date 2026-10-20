@@ -8,6 +8,10 @@ typedef struct {
     int ssd_sensor_count;
     char cpu_source[128];
     char ssd_source[128];
+    double gpu_celsius;
+    double memory_proximity_celsius;
+    int gpu_sensor_count;
+    int memory_proximity_sensor_count;
 } MTThermalReading;
 
 #define MT_MAX_FANS 8

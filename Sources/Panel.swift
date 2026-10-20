@@ -478,6 +478,10 @@ final class PanelController: NSViewController {
     private let ssdTemp = text("—", size: 18, weight: .medium, digits: true)
     private let cpuPercent = text("측정 중", size: 30, weight: .medium, digits: true)
     private let cpuGraph = UsageHistoryGraph(frame: .zero, accessibilityKey: "CPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트")
+    private let gpuTemp = text("—", size: 18, weight: .medium, digits: true)
+    private let gpuThermalTitle = text("GPU 온도", size: 10, weight: .medium, color: PanelColor.secondary)
+    private let memoryTemp = text("—", size: 15, weight: .medium, digits: true)
+    private let memoryThermalTitle = text("메모리 주변 온도", size: 8.5, weight: .medium, color: PanelColor.secondary)
     private let gpuPercent = text("정보 없음", size: 30, weight: .medium, digits: true)
     private let gpuGraph = UsageHistoryGraph(frame: .zero, accessibilityKey: "GPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트")
     private let gpuModel = text("정보 없음", size: 19, weight: .medium)
@@ -966,15 +970,21 @@ final class PanelController: NSViewController {
 
     private func buildGPU(in content: NSView) {
         let usage = GlassCard()
-        place(usage, in: content, 0, 0, 308, 158)
+        place(usage, in: content, 0, 0, 308, 122)
         place(symbol("square.grid.3x3.fill", color: PanelColor.violet), in: usage, 13, 12, 13, 13)
         place(text("GPU 사용률", size: 11, weight: .semibold), in: usage, 33, 9, 140, 17)
         place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 14, 29, 160, 14)
         gpuPercent.alignment = .right
         place(gpuPercent, in: usage, 177, 5, 115, 38)
         gpuGraph.color = PanelColor.violet
-        place(gpuGraph, in: usage, 14, 52, 280, 70)
-        place(gpuDetail, in: usage, 14, 136, 280, 14)
+        place(gpuGraph, in: usage, 14, 50, 280, 44)
+        place(gpuDetail, in: usage, 14, 100, 280, 14)
+        let thermal = GlassCard()
+        place(thermal, in: content, 0, 129, 308, 29)
+        place(symbol("thermometer.medium", color: PanelColor.violet), in: thermal, 13, 8, 13, 13)
+        place(gpuThermalTitle, in: thermal, 33, 8, 156, 15)
+        gpuTemp.alignment = .right
+        place(gpuTemp, in: thermal, 200, 1, 94, 26)
 
         let hardware = GlassCard()
         place(hardware, in: content, 0, 165, 308, 112)
@@ -997,7 +1007,10 @@ final class PanelController: NSViewController {
         place(memoryUsed, in: capacity, 12, 31, 218, 40)
         memoryPercent.alignment = .right
         place(memoryPercent, in: capacity, 236, 43, 58, 18)
-        place(memoryTotal, in: capacity, 15, 77, 278, 16)
+        place(memoryTotal, in: capacity, 15, 77, 94, 16)
+        place(memoryThermalTitle, in: capacity, 114, 78, 116, 14)
+        memoryTemp.alignment = .right
+        place(memoryTemp, in: capacity, 231, 72, 63, 24)
         place(memoryBar, in: capacity, 14, 94, 280, 5)
         localizedToolTip(memoryUsed, "활성·비활성·고정 메모리와 압축 메모리에서 파일 캐시·회수 가능한 페이지를 제외한 추정 사용량입니다.")
 
@@ -1176,9 +1189,12 @@ final class PanelController: NSViewController {
         guard !showingMenuBarSettings else { return }
         switch tabs.selectedSegment {
         case 0: applyCPU(sample)
-        case 1: applyGPU(sample.resources.gpu)
+        case 1:
+            applyGPU(sample.resources.gpu)
+            applyGPUTemperature(sample)
         case 2:
             applyMemory(sample.resources.memory)
+            applyMemoryTemperature(sample)
             applyMemoryProcesses(sample.resources.processes)
         case 3: applyDisk(sample)
         case 4: applyNetwork(sample)
@@ -1222,6 +1238,43 @@ final class PanelController: NSViewController {
         gpuModel.stringValue = gpu.model.flatMap { $0.isEmpty ? nil : $0 } ?? L10n.text("정보 없음")
         gpuModel.toolTip = gpuModel.stringValue
         gpuCores.stringValue = gpu.coreCount.flatMap { $0 > 0 ? L10n.format("%d코어", $0) : nil } ?? L10n.text("정보 없음")
+    }
+
+    private func applyGPUTemperature(_ sample: Snapshot) {
+        let value = TemperatureWarning.valid(sample.gpuTemperature)
+        let warning = sample.gpuWarning
+        let title = L10n.text("GPU 온도")
+        let tooltip = [warning.title(for: "GPU"),
+            L10n.format("GPU 온도 센서 %d개 중 최댓값 · PMU 제외", sample.gpuSensors),
+            L10n.text("앱 표시 기준: GPU 90°C 주의 · 100°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.")].filter { !$0.isEmpty }.joined(separator: "\n")
+        applyTemperature(value, warning: warning, field: gpuTemp, title: title, tooltip: tooltip)
+        gpuThermalTitle.stringValue = warning == .normal ? title : warning.title(for: "GPU")
+        gpuThermalTitle.textColor = warning == .normal ? PanelColor.secondary : warning.color
+        gpuThermalTitle.toolTip = tooltip
+    }
+
+    private func applyMemoryTemperature(_ sample: Snapshot) {
+        let value = TemperatureWarning.valid(sample.memoryProximityTemperature)
+        let warning = sample.memoryProximityWarning
+        let title = L10n.text("메모리 주변 온도")
+        let tooltip = [warning.title(for: L10n.text("메모리 주변")),
+            L10n.format("메모리 주변 센서 %d개 중 최댓값 · 메모리 칩 내부 온도가 아닙니다", sample.memoryProximitySensors),
+            L10n.text("앱 표시 기준: 메모리 주변 75°C 주의 · 85°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.")].filter { !$0.isEmpty }.joined(separator: "\n")
+        applyTemperature(value, warning: warning, field: memoryTemp, title: title, tooltip: tooltip, size: 15)
+        memoryThermalTitle.textColor = warning == .normal ? PanelColor.secondary : warning.color
+        memoryThermalTitle.toolTip = tooltip
+    }
+
+    private func applyTemperature(_ value: Double?, warning: TemperatureWarning, field: NSTextField,
+                                  title: String, tooltip: String, size: CGFloat = 18) {
+        let number = value.map { String(format: "%.0f", $0) } ?? "—"
+        let attributed = NSMutableAttributedString(string: number, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium), .foregroundColor: warning.color])
+        attributed.append(NSAttributedString(string: " °C", attributes: [
+            .font: NSFont.systemFont(ofSize: 10, weight: .regular), .foregroundColor: PanelColor.secondary]))
+        field.attributedStringValue = attributed
+        field.toolTip = tooltip
+        field.setAccessibilityLabel(title + " " + (value.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")) + " · " + tooltip)
     }
 
     private func applyMemory(_ memory: MemorySnapshot) {
@@ -1407,6 +1460,8 @@ extension PanelController {
     var probeStrings: [String: String] {
         ["cpu": cpuTemp.stringValue, "cpuPercent": cpuPercent.stringValue,
          "gpuPercent": gpuPercent.stringValue, "gpuModel": gpuModel.stringValue,
+         "gpuTemperature": gpuTemp.stringValue, "gpuWarning": gpuThermalTitle.stringValue,
+         "memoryTemperature": memoryTemp.stringValue, "memoryTemperatureTitle": memoryThermalTitle.stringValue,
          "gpuCores": gpuCores.stringValue, "gpuDetail": gpuDetail.stringValue,
          "memory": memoryUsed.stringValue, "memoryTotal": memoryTotal.stringValue,
          "processes": tabs.selectedSegment == 2 ? memoryRanking.probeCount : cpuRanking.probeCount,
@@ -1415,6 +1470,17 @@ extension PanelController {
          "upload": upValue.stringValue, "diskRead": diskRead.stringValue,
          "ssdWarning": ssdThermalTitle.stringValue, "fans": fanDetail.stringValue, "thermal": thermalDetail.stringValue, "uptime": uptimeLabel.stringValue,
          "updated": updated.stringValue]
+    }
+    var probeTemperatureColors: [NSColor] {
+        [cpuTemp, gpuTemp, memoryTemp, ssdTemp].map {
+            $0.attributedStringValue.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor ?? .labelColor
+        }
+    }
+    var probeTemperatureTooltips: [String] { [gpuTemp.toolTip ?? "", memoryTemp.toolTip ?? ""] }
+    var probeThermalLabelsFit: Bool {
+        [gpuThermalTitle, memoryThermalTitle, memoryTotal].allSatisfy {
+            ($0.stringValue as NSString).size(withAttributes: [.font: $0.font!]).width <= $0.bounds.width
+        }
     }
     var probeSelectedTab: Int { tabs.selectedSegment }
     var probeTabLabels: [String] { Self.tabLabels.map(L10n.text) }

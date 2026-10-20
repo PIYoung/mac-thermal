@@ -137,7 +137,7 @@ final class MenuBarContent: NSObject {
         frameRenderings.removeAll()
         self.sample = sample
         let lines = labels
-        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.cpuWarning.rawValue)|\(sample.ssdWarning.rawValue)"
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.cpuWarning.rawValue)|\(sample.gpuWarning.rawValue)|\(sample.ssdWarning.rawValue)"
         if signature != textSignature || baseImage == nil {
             textSignature = signature
             rebuildBase(labels: lines)
@@ -286,7 +286,7 @@ final class MenuBarContent: NSObject {
                 return [L10n.format("CPU %@ · 사용률 %@", temperature(sample.cpuTemperature), percent)] + (sample.cpuWarning == .normal ? [] : [sample.cpuWarning.title(for: "CPU")])
             case .gpu:
                 let percent = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
-                return [L10n.format("GPU 사용률 %@", percent)]
+                return [L10n.format("GPU 사용률 %@", percent), L10n.format("GPU 온도 %@", temperature(TemperatureWarning.valid(sample.gpuTemperature)))] + (sample.gpuWarning == .normal ? [] : [sample.gpuWarning.title(for: "GPU")])
             case .ssd:
                 let used = ssdUsedPercent.map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
                 return [L10n.format("SSD 읽기 %@ · 쓰기 %@", rateLabel(sample.resources.disk.readBytesPerSecond), rateLabel(sample.resources.disk.writeBytesPerSecond)),
@@ -324,6 +324,7 @@ final class MenuBarContent: NSObject {
     private func metricColor(_ metric: MenuBarMetric) -> NSColor {
         switch metric {
         case .cpu: return sample.cpuWarning.color
+        case .gpu: return sample.gpuWarning.color
         case .ssd: return sample.ssdWarning.color
         default: return .labelColor
         }
@@ -331,7 +332,7 @@ final class MenuBarContent: NSObject {
 
     private func rebuildBase(labels preparedLabels: [String]? = nil) {
         let lines = preparedLabels ?? labels
-        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.cpuWarning.rawValue)|\(sample.ssdWarning.rawValue)"
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.cpuWarning.rawValue)|\(sample.gpuWarning.rawValue)|\(sample.ssdWarning.rawValue)"
         if signature != layoutSignature || layoutSignature.isEmpty {
             layoutSignature = signature
             baseRenderings.removeAll()
