@@ -1,28 +1,17 @@
 # Releases
 
-## Unreleased — v2.13.1, GPU·메모리 주변 온도
+## v2.13.1 — 2026-10-20
 
-- GPU 패널에 GPU 최고 온도, 메모리 패널에 메모리 주변 최고 온도를 추가합니다. 고정된 패널 크기와 기존 2초 수집 주기를 유지합니다.
-- 확인된 M4 계열 SMC 키와 명시적인 GPU HID 센서만 사용하며, PMU 값을 GPU/RAM으로 추정하지 않습니다. 미지원·유효하지 않은 값은 읽기 불가로 표시합니다.
-- GPU·메모리 주변 온도 경고는 각각 따로 적용합니다. GPU 메뉴바도 GPU 온도만 판단하며, 메모리 압박과 주변 온도는 독립적으로 표시합니다.
-- 표시 기준은 GPU 90°C/100°C, 메모리 주변 75°C/85°C입니다. 제조사 기준이나 과열 확정 진단이 아니며 툴팁에 설명합니다.
+Independent temperature warnings, fan RPM and home-directory disk cleanup. Build 47.
 
-## Unreleased — v2.13.0, 항목별 온도 경고와 팬 상태
+- Add GPU temperature and explicitly labeled memory proximity temperature to the fixed-size resource panels. Use verified M4-family SMC mappings or explicitly named GPU HID sensors, exclude PMU substitutions, and show unknown for unsupported or invalid readings. Live M4 Pro readings were verified; compatibility on other models is not guaranteed.
+- Color only the affected CPU, GPU or SSD menu group. Show each panel temperature warning independently; memory pressure remains separate from memory proximity temperature. Keep usage graphs, network and Codex colors independent. App display thresholds are CPU/GPU 90°C/100°C, SSD 60°C/70°C and memory proximity 75°C/85°C; they are explained in tooltips and are not manufacturer limits or an overheating diagnosis.
+- Add read-only fan running/stopped status and actual RPM to the CPU panel. Distinguish an unavailable sensor from stopped fans and an explicitly reported fanless device. No fan control, administrator helper, extra timer or external package.
+- Start disk cleanup from an explicit home Auto scan button without requiring a folder picker. Read local metadata only, exclude protected/development/known-cloud locations and links, keep every home candidate unchecked, and require exact final review before moving selected files to Trash. Retain optional remembered one-folder scanning, bounded cancellation and partial-result warnings. No permanent deletion, Full Disk Access request or automatic scan on app launch.
+- Preserve 340×420pt resource and 300×420pt Codex surfaces, fixed positioning, two-second resource sampling, four languages, opt-in Codex account features and the existing privacy boundaries. Refresh documentation with synthetic screenshots only.
+- Validate the full native suite, per-metric warning pixels/recovery, missing sensors, four-language layouts, sensor read-only commands and synthetic cleanup safety; check the installed GPU/memory/fan panels on an M4 Pro.
 
-- 메뉴바 경고 색은 해당 CPU 또는 SSD 항목에만 적용합니다. macOS 전체 열 상태는 별도 정보로 표시합니다.
-- CPU 패널에 팬 회전 상태와 SMC 실측 RPM을 추가합니다. 센서 미지원·팬 없음·정지 상태를 구분하며 팬을 제어하지 않습니다.
-- 앱 표시 기준은 CPU 90°C/100°C, SSD 60°C/70°C이며 제조사 한계 온도나 과열 확정 진단이 아닙니다. 기준은 온도 툴팁에서 확인할 수 있습니다.
-- 기존 2초 수집 주기와 패널 크기를 유지하며 추가 반복 애니메이션·관리자 권한·외부 전송은 없습니다.
-
-## Unreleased — v2.12.0
-
-Home-directory cleanup without a required folder picker. Build 45.
-
-- Start from a home-scope explanation and an explicit Auto scan button. Opening or reopening the app/panel does not scan the home directory.
-- Inspect local file metadata only, excluding system/Library/application, hidden/package, known development/cloud and other-device locations. Skip inaccessible items and never follow symbolic links. Arbitrarily named sync folders may be undetected; disclose this before scanning.
-- Keep every home candidate unchecked, including old installers. Require direct selection and exact final confirmation before any Trash move. Preserve optional remembered one-folder mode under folder management.
-- Bound home inspection to 50,000 entries, 1,000 candidates, depth 20 and a 20-second cooperative budget (OS access waits can take longer); show a system-access hint if the initial call stalls, and support cancellation and show partial-result warnings. Revalidate reviewed files and ancestors before moving them.
-- Add four-language guidance and synthetic home/scope/UI regression checks. No file-content reads, external transmission, Full Disk Access request, new packages, permanent deletion or automatic Trash emptying.
+Apple Silicon · macOS 14+. DMG, ZIP and SHA256SUMS are provided. Community builds are ad-hoc signed, without Developer ID signing or Apple notarization. MIT licensed; bundled notices are preserved. Made with OpenAI Codex and user feedback.
 
 ## v2.11.1 — 2026-10-20
 

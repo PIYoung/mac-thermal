@@ -44,7 +44,8 @@ enum RenderDocPreview {
             panel.apply(Snapshot(cpuTemperature: 64, ssdTemperature: 42, cpuUsage: cpu[index],
                 upload: upload[index] * 1_000_000, download: download[index] * 1_000_000,
                 interfaces: 1, cpuSensors: 8, ssdSensors: 2, thermal: ThermalStatus(.nominal),
-                time: time.addingTimeInterval(seconds), uptime: 8_280 + seconds, resources: resources))
+                time: time.addingTimeInterval(seconds), uptime: 8_280 + seconds, resources: resources, fans: FanSnapshot(rpms: [1800]),
+                gpuTemperature: 68, memoryProximityTemperature: 50, gpuSensors: 8, memoryProximitySensors: 2))
         }
     }
 
