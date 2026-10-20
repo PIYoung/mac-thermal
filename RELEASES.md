@@ -1,5 +1,12 @@
 # Releases
 
+## Unreleased — v2.13.0, 항목별 온도 경고와 팬 상태
+
+- 메뉴바 경고 색은 해당 CPU 또는 SSD 항목에만 적용합니다. macOS 전체 열 상태는 별도 정보로 표시합니다.
+- CPU 패널에 팬 회전 상태와 SMC 실측 RPM을 추가합니다. 센서 미지원·팬 없음·정지 상태를 구분하며 팬을 제어하지 않습니다.
+- 앱 표시 기준은 CPU 90°C/100°C, SSD 60°C/70°C이며 제조사 한계 온도나 과열 확정 진단이 아닙니다. 기준은 온도 툴팁에서 확인할 수 있습니다.
+- 기존 2초 수집 주기와 패널 크기를 유지하며 추가 반복 애니메이션·관리자 권한·외부 전송은 없습니다.
+
 ## Unreleased — v2.12.0
 
 Home-directory cleanup without a required folder picker. Build 45.

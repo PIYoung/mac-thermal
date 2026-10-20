@@ -474,6 +474,7 @@ final class PanelController: NSViewController {
     static let cornerRadius: CGFloat = 22
 
     private let cpuTemp = text("—", size: 18, weight: .medium, digits: true)
+    private let ssdThermalTitle = text("SSD 온도", size: 10, weight: .medium, color: PanelColor.secondary)
     private let ssdTemp = text("—", size: 18, weight: .medium, digits: true)
     private let cpuPercent = text("측정 중", size: 30, weight: .medium, digits: true)
     private let cpuGraph = UsageHistoryGraph(frame: .zero, accessibilityKey: "CPU 사용률 최근 1분 그래프, 세로 눈금 0에서 100퍼센트")
@@ -487,6 +488,8 @@ final class PanelController: NSViewController {
     private let downValue = text("—", size: 20, weight: .medium, digits: true)
     private let upGraph = Sparkline(color: PanelColor.blue)
     private let downGraph = Sparkline(color: PanelColor.teal)
+    private let fanDetail = text("팬 정보 없음", size: 10, color: PanelColor.secondary, digits: true)
+    private let fanIcon = symbol("fanblades.fill", color: PanelColor.secondary)
     private let thermalDetail = text("macOS 열 상태 확인 중", size: 10, color: PanelColor.secondary)
     private let updated = text("측정 준비 중", size: 10, color: .tertiaryLabelColor)
     private let loginLabel = text("", size: 10, color: PanelColor.secondary)
@@ -942,20 +945,22 @@ final class PanelController: NSViewController {
 
     private func buildCPU(in content: NSView) {
         let usage = GlassCard()
-        place(usage, in: content, 0, 0, 308, 106)
+        place(usage, in: content, 0, 0, 308, 90)
         place(symbol("cpu", color: PanelColor.blue), in: usage, 13, 12, 13, 13)
         place(text("CPU 사용률", size: 11, weight: .semibold), in: usage, 33, 9, 140, 17)
         place(text("최근 1분 · 0–100%", size: 9, color: PanelColor.secondary), in: usage, 14, 29, 160, 14)
         cpuPercent.alignment = .right
         place(cpuPercent, in: usage, 177, 5, 115, 38)
-        place(cpuGraph, in: usage, 14, 53, 280, 43)
+        place(cpuGraph, in: usage, 14, 50, 280, 30)
 
         let thermal = GlassCard()
-        place(thermal, in: content, 0, 113, 308, 36)
+        place(thermal, in: content, 0, 97, 308, 53)
         place(text("온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 13, 10, 43, 16)
         place(cpuTemp, in: thermal, 57, 4, 72, 26)
         thermalDetail.alignment = .right
         place(thermalDetail, in: thermal, 133, 10, 161, 16)
+        place(fanIcon, in: thermal, 13, 32, 12, 12)
+        place(fanDetail, in: thermal, 33, 29, 261, 17)
         place(cpuRanking, in: content, 0, 157, 308, 120)
     }
 
@@ -1046,7 +1051,7 @@ final class PanelController: NSViewController {
         let thermal = GlassCard()
         place(thermal, in: content, 0, 248, 308, 29)
         place(symbol("thermometer.medium", color: PanelColor.violet), in: thermal, 13, 8, 13, 13)
-        place(text("SSD 온도", size: 10, weight: .medium, color: PanelColor.secondary), in: thermal, 33, 8, 156, 15)
+        place(ssdThermalTitle, in: thermal, 33, 8, 156, 15)
         ssdTemp.alignment = .right
         place(ssdTemp, in: thermal, 200, 1, 94, 26)
     }
@@ -1182,20 +1187,25 @@ final class PanelController: NSViewController {
     }
 
     private func applyCPU(_ sample: Snapshot) {
-        let temperatureColor = sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor
+        let temperatureColor = sample.cpuWarning.color
         let attributed = NSMutableAttributedString(attributedString: temperatureText(sample.cpuTemperature))
         attributed.addAttribute(.foregroundColor, value: temperatureColor, range: NSRange(location: 0, length: attributed.length - 3))
         cpuTemp.attributedStringValue = attributed
-        cpuTemp.toolTip = L10n.format("CPU 코어 센서 %d개 중 최댓값 · PMU 제외", sample.cpuSensors)
+        cpuTemp.toolTip = L10n.format("CPU 코어 센서 %d개 중 최댓값 · PMU 제외", sample.cpuSensors) + "\n" + L10n.text("앱 표시 기준: CPU 90°C 주의 · 100°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.")
         cpuTemp.setAccessibilityLabel(L10n.format("CPU 온도 %@", sample.cpuTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
         cpuPercent.stringValue = sample.cpuUsage.map { String(format: "%.0f%%", $0) } ?? L10n.text("측정 중")
         cpuPercent.font = .monospacedDigitSystemFont(ofSize: sample.cpuUsage == nil ? 12 : 30, weight: .medium)
         cpuGraph.update(cpuHistory, percent: sample.cpuUsage)
-        cpuGraph.color = sample.thermal.level > 0 ? sample.thermal.color : PanelColor.blue
-        thermalDetail.stringValue = L10n.format("macOS 열 상태 · %@", sample.thermal.title)
-        thermalDetail.toolTip = sample.thermal.detail
-        thermalDetail.setAccessibilityLabel(sample.thermal.detail)
-        thermalDetail.textColor = sample.thermal.level > 0 ? sample.thermal.color : PanelColor.secondary
+        cpuGraph.color = PanelColor.blue
+        thermalDetail.stringValue = sample.cpuWarning == .normal
+            ? L10n.format("macOS 열 상태 · %@", sample.thermal.title) : sample.cpuWarning.title(for: "CPU")
+        thermalDetail.toolTip = thermalDetail.stringValue + "\n" + sample.thermal.detail + "\n" + (cpuTemp.toolTip ?? "")
+        thermalDetail.setAccessibilityLabel(thermalDetail.toolTip)
+        thermalDetail.textColor = sample.cpuWarning == .normal ? PanelColor.secondary : sample.cpuWarning.color
+        fanDetail.stringValue = sample.fans.compact
+        fanDetail.toolTip = sample.fans.detail + "\n" + L10n.text("SMC가 보고한 실제 팬 회전수 · 읽기 전용 · 미지원 값은 추정하지 않습니다")
+        fanDetail.setAccessibilityLabel(fanDetail.toolTip)
+        fanIcon.contentTintColor = sample.fans.isRunning ? PanelColor.blue : PanelColor.secondary
         applyCPUProcesses(sample.resources.processes)
     }
 
@@ -1287,9 +1297,11 @@ final class PanelController: NSViewController {
         presentHistory(diskReadHistory, in: diskReadGraph)
         presentHistory(diskWriteHistory, in: diskWriteGraph)
         let temperature = NSMutableAttributedString(attributedString: temperatureText(sample.ssdTemperature))
-        temperature.addAttribute(.foregroundColor, value: sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor, range: NSRange(location: 0, length: temperature.length - 3))
+        temperature.addAttribute(.foregroundColor, value: sample.ssdWarning.color, range: NSRange(location: 0, length: temperature.length - 3))
         ssdTemp.attributedStringValue = temperature
-        ssdTemp.toolTip = L10n.format("내장 SSD NAND 센서 %d개 중 최댓값", sample.ssdSensors)
+        ssdThermalTitle.stringValue = sample.ssdWarning == .normal ? L10n.text("SSD 온도") : sample.ssdWarning.title(for: "SSD")
+        ssdThermalTitle.textColor = sample.ssdWarning == .normal ? PanelColor.secondary : sample.ssdWarning.color
+        ssdTemp.toolTip = [sample.ssdWarning.title(for: "SSD"), L10n.format("내장 SSD NAND 센서 %d개 중 최댓값", sample.ssdSensors), L10n.text("앱 표시 기준: SSD 60°C 주의 · 70°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.")].filter { !$0.isEmpty }.joined(separator: "\n")
         ssdTemp.setAccessibilityLabel(L10n.format("SSD 온도 %@", sample.ssdTemperature.map { L10n.format("%.0f도", $0) } ?? L10n.text("읽기 불가")))
     }
 
@@ -1401,7 +1413,7 @@ extension PanelController {
          "cpuProcesses": cpuRanking.probeCount, "memoryProcesses": memoryRanking.probeCount,
          "disk": diskFree.stringValue, "ssdTemperature": ssdTemp.stringValue,
          "upload": upValue.stringValue, "diskRead": diskRead.stringValue,
-         "thermal": thermalDetail.stringValue, "uptime": uptimeLabel.stringValue,
+         "ssdWarning": ssdThermalTitle.stringValue, "fans": fanDetail.stringValue, "thermal": thermalDetail.stringValue, "uptime": uptimeLabel.stringValue,
          "updated": updated.stringValue]
     }
     var probeSelectedTab: Int { tabs.selectedSegment }

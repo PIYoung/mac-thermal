@@ -18,9 +18,9 @@ struct MenuRenderProbe {
     }
     static func sample(cpu: Double? = 37, gpu: Double? = 50, read: Double? = 4_600_000,
                        write: Double? = 19_500, upload: Double? = 7_000, download: Double? = 26_000,
-                       temperature: Double? = 74, cores: Int? = 20,
+                       temperature: Double? = 74, ssdTemperature: Double? = 54, cores: Int? = 20,
                        thermal: ProcessInfo.ThermalState = .nominal) -> Snapshot {
-        Snapshot(cpuTemperature: temperature, ssdTemperature: 54, cpuUsage: cpu,
+        Snapshot(cpuTemperature: temperature, ssdTemperature: ssdTemperature, cpuUsage: cpu,
             upload: upload, download: download, interfaces: 1, cpuSensors: 1, ssdSensors: 1,
             thermal: ThermalStatus(thermal), time: Date(timeIntervalSince1970: 0), uptime: 7_200,
             resources: ResourceSnapshot(memory: .pending, processes: .pending,
@@ -375,12 +375,41 @@ struct MenuRenderProbe {
             try check(next === (dark ? second : first) && count == nominalCount,
                       "nominal snapshot repeatedly rasterized its frame")
         }
-        let (warning, _) = nominal(false, sample(thermal: .serious), false)
+        let (warning, _) = nominal(false, sample(temperature: 100), false)
         try check(warning?.isTemplate == false, "warning was tinted as a monochrome template")
         try check((try pixels(warning!)) != pixels(first!), "warning transition reused nominal frame")
         let (recovered, _) = nominal(false, sample(), false)
         try check(try pixels(recovered!) == pixels(first!), "warning recovery left a stale colored frame")
         print("PASS appearance cache: 200 alternating snapshots reuse identical pixels and frame objects; light/dark contrast, data, warnings, recovery and forced appearance updates invalidate correctly")
+    }
+
+    static func isolatedWarningChecks() throws {
+        for dark in [false, true] {
+            for motion in [false, true] {
+                let prefs = MenuBarPreferences(motionEnabled: motion)
+                let baseline = sample(temperature: 88)
+                let base = MenuBarContent.preview(sample: baseline, preferences: prefs, dark: dark, phase: 0.3)!
+                let baseFrames = MenuBarContent.previewLayout(sample: baseline, preferences: prefs)
+                let system = MenuBarContent.preview(sample: sample(temperature: 88, thermal: .critical), preferences: prefs, dark: dark, phase: 0.3)!
+                try check(try pixels(system) == pixels(base), "System thermal pressure must not color unrelated metrics")
+                for (changed, metric) in [(sample(temperature: 98), MenuBarMetric.cpu),
+                                          (sample(temperature: 88, ssdTemperature: 74), .ssd)] {
+                    let image = MenuBarContent.preview(sample: changed, preferences: prefs, dark: dark, phase: 0.3)!
+                    let frames = MenuBarContent.previewLayout(sample: changed, preferences: prefs)
+                    for sibling in MenuBarMetric.allCases {
+                        guard let frame = frames[sibling], let baseFrame = baseFrames[sibling] else { continue }
+                        let equal = try pixels(image, region: frame) == pixels(base, region: baseFrame)
+                        try check(equal == (sibling != metric), "Warning leaked or missing: \(metric), sibling \(sibling), dark \(dark), motion \(motion)")
+                    }
+                    let tooltip = MenuBarContent.previewAccessibility(sample: changed, preferences: prefs)
+                    try check(tooltip.contains(metric == .cpu ? "CPU" : "SSD"), "Warning source absent from tooltip")
+                }
+            }
+        }
+        try check(TemperatureWarning.cpu(nil) == .normal && TemperatureWarning.cpu(.nan) == .normal, "Unknown is not overheating")
+        try check(TemperatureWarning.cpu(89.9) == .normal && TemperatureWarning.cpu(90) == .warm && TemperatureWarning.cpu(100) == .hot, "CPU warning boundaries")
+        try check(TemperatureWarning.ssd(59.9) == .normal && TemperatureWarning.ssd(60) == .warm && TemperatureWarning.ssd(70) == .hot, "SSD warning boundaries")
+        print("PASS isolated warnings: only affected CPU/SSD text and shapes change; GPU/network/Codex remain byte identical in light/dark and motion on/off")
     }
 
     static func benchmark() throws {
@@ -431,6 +460,7 @@ struct MenuRenderProbe {
             try codexChecks(in: directory)
             try quotaChecks(in: directory)
             try appearanceCacheChecks()
+            try isolatedWarningChecks()
             if CommandLine.arguments.contains("--benchmark") { try benchmark() }
             try contactSheet(in: directory)
             print("OUTPUT \(directory.path)")

@@ -44,6 +44,57 @@ struct ThermalStatus {
     }
 }
 
+/// Display thresholds, not manufacturer limits or proof of throttling.
+/// macOS system thermal pressure is reported separately and never colors siblings.
+enum TemperatureWarning: Int {
+    case normal, warm, hot
+    var color: NSColor { self == .hot ? .systemRed : self == .warm ? .systemOrange : .labelColor }
+    func title(for component: String) -> String {
+        switch self {
+        case .normal: return ""
+        case .warm: return L10n.format("%@ 온도 주의", component)
+        case .hot: return L10n.format("%@ 온도 높음", component)
+        }
+    }
+    static func cpu(_ value: Double?) -> Self { classify(value, warm: 90, hot: 100) }
+    static func ssd(_ value: Double?) -> Self { classify(value, warm: 60, hot: 70) }
+    private static func classify(_ value: Double?, warm: Double, hot: Double) -> Self {
+        guard let value, value.isFinite, (1...130).contains(value) else { return .normal }
+        return value >= hot ? .hot : value >= warm ? .warm : .normal
+    }
+}
+
+struct FanSnapshot {
+    let rpms: [Double?]?
+    init(rpms: [Double?]?) {
+        self.rpms = rpms.flatMap { values in
+            guard values.count <= 8 else { return nil }
+            return values.map { value in value.flatMap { $0.isFinite && (0...30000).contains($0) ? $0 : nil } }
+        }
+    }
+    static let unavailable = FanSnapshot(rpms: nil)
+    var isRunning: Bool { rpms?.contains { ($0 ?? 0) > 0 } == true }
+    var state: String {
+        guard let rpms else { return L10n.text("팬 정보 없음") }
+        if rpms.isEmpty { return L10n.text("팬 없음") }
+        if isRunning { return L10n.text("회전 중") }
+        if rpms.contains(where: { $0 == nil }) { return L10n.text("팬 읽기 불가") }
+        return L10n.text("정지")
+    }
+    var detail: String {
+        guard let rpms, !rpms.isEmpty else { return state }
+        return rpms.enumerated().map { index, rpm in
+            L10n.format("팬 %d: %@", index + 1, rpm.map { String(format: "%.0f RPM", $0) } ?? L10n.text("정보 없음"))
+        }.joined(separator: " · ")
+    }
+    var compact: String {
+        guard let rpms, !rpms.isEmpty else { return state }
+        let values = rpms.prefix(2).map { $0.map { String(format: "%.0f", $0) } ?? "—" }.joined(separator: " / ")
+        let extra = rpms.count > 2 ? String(format: " +%d", rpms.count - 2) : ""
+        return state + " · " + values + " RPM" + extra
+    }
+}
+
 struct Snapshot {
     let cpuTemperature: Double?
     let ssdTemperature: Double?
@@ -57,6 +108,9 @@ struct Snapshot {
     let time: Date
     let uptime: TimeInterval?
     let resources: ResourceSnapshot
+    var fans: FanSnapshot = .unavailable
+    var cpuWarning: TemperatureWarning { .cpu(cpuTemperature) }
+    var ssdWarning: TemperatureWarning { .ssd(ssdTemperature) }
 
     static var pending: Snapshot {
         Snapshot(cpuTemperature: nil, ssdTemperature: nil, cpuUsage: nil, upload: nil, download: nil, interfaces: 0, cpuSensors: 0, ssdSensors: 0, thermal: ThermalStatus(ProcessInfo.processInfo.thermalState), time: Date(), uptime: nil, resources: .pending)
@@ -192,7 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             upload: metrics.network_valid != 0 ? metrics.upload_bytes_per_second : nil,
             download: metrics.network_valid != 0 ? metrics.download_bytes_per_second : nil,
             interfaces: Int(metrics.interface_count), cpuSensors: Int(sensors.cpu_sensor_count), ssdSensors: Int(sensors.ssd_sensor_count),
-            thermal: ThermalStatus(ProcessInfo.processInfo.thermalState), time: Date(), uptime: SystemUptime.seconds(), resources: ResourceSampler.sample())
+            thermal: ThermalStatus(ProcessInfo.processInfo.thermalState), time: Date(), uptime: SystemUptime.seconds(), resources: ResourceSampler.sample(), fans: readFans())
         DispatchQueue.main.async { [weak self] in self?.render(snapshot) }
     }
 
@@ -281,6 +335,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mt_gpu_metrics_close()
         }
     }
+}
+
+private func readFans() -> FanSnapshot {
+    let reading = mt_fan_read()
+    guard (0...Int32(MT_MAX_FANS)).contains(reading.count) else { return .unavailable }
+    let values: [Double?] = withUnsafeBytes(of: reading.rpm) { bytes in
+        let rpms = bytes.bindMemory(to: Double.self)
+        return (0..<Int(reading.count)).map { index in
+            reading.valid_mask & (1 << index) != 0 ? rpms[index] : nil
+        }
+    }
+    return FanSnapshot(rpms: values)
 }
 
 if CommandLine.arguments.contains("--diagnostics") {

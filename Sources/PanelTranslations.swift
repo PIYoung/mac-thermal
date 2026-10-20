@@ -3,6 +3,17 @@ import Foundation
 // Original translations for Mac Thermal. Entries are English, Japanese, Simplified Chinese.
 extension L10n {
     static let panelTranslations: [String: [String]] = [
+        "팬 정보 없음": ["Fan data unavailable", "ファン情報なし", "无风扇数据"],
+        "팬 없음": ["No fans", "ファンなし", "无风扇"],
+        "회전 중": ["Running", "回転中", "运转中"],
+        "팬 읽기 불가": ["Fan unreadable", "ファン取得不可", "无法读取风扇"],
+        "정지": ["Stopped", "停止", "停止"],
+        "팬 %d: %@": ["Fan %d: %@", "ファン%d: %@", "风扇%d：%@"],
+        "%@ 온도 주의": ["%@ temperature warning", "%@温度注意", "%@温度警告"],
+        "%@ 온도 높음": ["%@ temperature high", "%@高温", "%@温度过高"],
+        "앱 표시 기준: CPU 90°C 주의 · 100°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.": ["App thresholds: CPU warning at 90°C, high at 100°C. Not manufacturer limits or an overheating diagnosis.", "アプリの表示基準：CPU 90°Cで注意、100°Cで高温。メーカーの限界温度や過熱の確定診断ではありません。", "应用显示阈值：CPU 90°C警告，100°C高温。并非厂商温度上限或过热确诊。"],
+        "앱 표시 기준: SSD 60°C 주의 · 70°C 높음. 제조사 한계 온도나 과열 확정 진단이 아닙니다.": ["App thresholds: SSD warning at 60°C, high at 70°C. Not manufacturer limits or an overheating diagnosis.", "アプリの表示基準：SSD 60°Cで注意、70°Cで高温。メーカーの限界温度や過熱の確定診断ではありません。", "应用显示阈值：SSD 60°C警告，70°C高温。并非厂商温度上限或过热确诊。"],
+        "SMC가 보고한 실제 팬 회전수 · 읽기 전용 · 미지원 값은 추정하지 않습니다": ["Actual fan RPM reported by SMC · read only · unavailable values are not estimated", "SMCが報告する実際のファン回転数 · 読み取り専用 · 未対応値は推定しません", "SMC报告的实际风扇转速 · 只读 · 不推测不可用值"],
         "메뉴바에 표시할 항목을 선택합니다": ["Choose the items to show in the menu bar", "メニューバーに表示する項目を選びます", "选择要在菜单栏显示的项目"],
         "메뉴바에서 CPU, GPU 또는 둘 다 표시합니다": ["Show CPU, GPU, or both in the menu bar", "メニューバーにCPU、GPU、または両方を表示します", "在菜单栏显示CPU、GPU或两者"],
         "GPU 사용률": ["GPU usage", "GPU使用率", "GPU使用率"],

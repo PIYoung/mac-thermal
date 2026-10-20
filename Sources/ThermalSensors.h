@@ -10,6 +10,16 @@ typedef struct {
     char ssd_source[128];
 } MTThermalReading;
 
+#define MT_MAX_FANS 8
+/* count == -1: unavailable. count == 0: SMC explicitly reports no fans.
+ * A clear bit in valid_mask is unknown, never a stopped fan. */
+typedef struct {
+    int count;
+    unsigned int valid_mask;
+    double rpm[MT_MAX_FANS];
+} MTFanReading;
+
+MTFanReading mt_fan_read(void);
 MTThermalReading mt_thermal_read(void);
 void mt_thermal_close(void);
 

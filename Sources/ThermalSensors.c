@@ -58,7 +58,7 @@ static bool smc_call(SMCData *input, SMCData *output) {
     return result == KERN_SUCCESS && size == sizeof(*output) && output->result == 0;
 }
 
-static bool smc_read(const char *key, double *temperature) {
+static bool smc_read_number(const char *key, double *number) {
     if (!smc_open()) return false;
     SMCData input = {0}, output = {0};
     input.key = fourcc(key);
@@ -79,10 +79,35 @@ static bool smc_read(const char *key, double *temperature) {
     } else if (type == fourcc("fpe2") && input.key_info.size == 2) {
         uint16_t raw = ((uint16_t)output.bytes[0] << 8) | output.bytes[1];
         value = (double)raw / 4.0;
+    } else if (type == fourcc("ui8 ") && input.key_info.size == 1) {
+        value = output.bytes[0];
     } else return false;
-    if (!isfinite(value) || value < 1.0 || value > 130.0) return false;
+    if (!isfinite(value)) return false;
+    *number = value;
+    return true;
+}
+
+static bool smc_read(const char *key, double *temperature) {
+    double value;
+    if (!smc_read_number(key, &value) || value < 1.0 || value > 130.0) return false;
     *temperature = value;
     return true;
+}
+
+MTFanReading mt_fan_read(void) {
+    MTFanReading reading = {.count = -1};
+    double count;
+    if (!smc_read_number("FNum", &count) || count < 0 || count > MT_MAX_FANS || floor(count) != count) return reading;
+    reading.count = (int)count;
+    for (int index = 0; index < reading.count; ++index) {
+        char key[5] = {'F', (char)('0' + index), 'A', 'c', 0};
+        double rpm;
+        if (smc_read_number(key, &rpm) && rpm >= 0 && rpm <= 30000) {
+            reading.rpm[index] = rpm;
+            reading.valid_mask |= 1u << index;
+        }
+    }
+    return reading;
 }
 
 // Only CPU-labelled keys are used. PMU tdie/tdev are not CPU sensors.

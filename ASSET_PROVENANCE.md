@@ -35,3 +35,5 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 - 선택형 한도 리셋 알림: 이 프로젝트에서 작성한 상태 비교·설정 코드와 macOS UserNotifications API를 사용합니다. 설정의 bell.badge는 앱 내부 알림 기능을 설명하는 시스템 SF Symbol이며, 외부 코드·아이콘 파일·패키지는 추가하지 않습니다.
 
 - 홈 자동 검사: 이 프로젝트에서 작성한 Foundation·POSIX 메타데이터 검사와 AppKit 선택·확인 UI입니다. 새 외부 코드·파일 판별 데이터베이스·아이콘·패키지는 추가하지 않습니다.
+
+- CPU 팬 상태·회전수 행과 항목별 온도 경고는 자체 AppKit UI입니다. fanblades.fill은 앱 내부 팬 기능용 시스템 SF Symbol입니다. 팬은 기존 SMC 연결에서 FNum/FnAc만 읽고, 제어·속도 변경·관리자 helper·추가 라이브러리를 포함하지 않습니다. 키 매핑 참고 출처와 MIT 고지는 THIRD_PARTY_NOTICES.txt에 보존합니다.

@@ -137,7 +137,7 @@ final class MenuBarContent: NSObject {
         frameRenderings.removeAll()
         self.sample = sample
         let lines = labels
-        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)"
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.cpuWarning.rawValue)|\(sample.ssdWarning.rawValue)"
         if signature != textSignature || baseImage == nil {
             textSignature = signature
             rebuildBase(labels: lines)
@@ -283,14 +283,14 @@ final class MenuBarContent: NSObject {
             switch metric {
             case .cpu:
                 let percent = validPercentage(sample.cpuUsage).map { String(format: "%.0f%%", $0) } ?? L10n.text("측정 중")
-                return [L10n.format("CPU %@ · 사용률 %@", temperature(sample.cpuTemperature), percent)]
+                return [L10n.format("CPU %@ · 사용률 %@", temperature(sample.cpuTemperature), percent)] + (sample.cpuWarning == .normal ? [] : [sample.cpuWarning.title(for: "CPU")])
             case .gpu:
                 let percent = validPercentage(sample.resources.gpu.utilizationPercent).map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
                 return [L10n.format("GPU 사용률 %@", percent)]
             case .ssd:
                 let used = ssdUsedPercent.map { String(format: "%.0f%%", $0) } ?? L10n.text("확인 불가")
                 return [L10n.format("SSD 읽기 %@ · 쓰기 %@", rateLabel(sample.resources.disk.readBytesPerSecond), rateLabel(sample.resources.disk.writeBytesPerSecond)),
-                        L10n.format("SSD 사용 용량 %@ · 온도 %@", used, temperature(sample.ssdTemperature))]
+                        L10n.format("SSD 사용 용량 %@ · 온도 %@", used, temperature(sample.ssdTemperature))] + (sample.ssdWarning == .normal ? [] : [sample.ssdWarning.title(for: "SSD")])
             case .network:
                 return [L10n.format("업로드 %@ · 다운로드 %@", rateLabel(sample.upload), rateLabel(sample.download))]
             case .codex:
@@ -308,8 +308,8 @@ final class MenuBarContent: NSObject {
     private func updateAccessibility() {
         guard let button else { return }
         let lines = accessibilityLines
-        button.toolTip = L10n.format("Mac Thermal · %@\n%@\n클릭하면 패널과 메뉴바 설정", sample.thermal.title, lines.joined(separator: "\n"))
-        button.setAccessibilityLabel(L10n.format("Mac Thermal, 열 상태 %@, %@, 클릭하면 패널과 메뉴바 설정", sample.thermal.title, lines.joined(separator: ", ")))
+        button.toolTip = L10n.format("Mac Thermal · macOS 열 상태 %@\n%@\n클릭하면 패널과 메뉴바 설정", sample.thermal.title, lines.joined(separator: "\n"))
+        button.setAccessibilityLabel(L10n.format("Mac Thermal, macOS 열 상태 %@, %@, 클릭하면 패널과 메뉴바 설정", sample.thermal.title, lines.joined(separator: ", ")))
     }
 
     private func context() -> CGContext? {
@@ -321,9 +321,17 @@ final class MenuBarContent: NSObject {
         return context
     }
 
+    private func metricColor(_ metric: MenuBarMetric) -> NSColor {
+        switch metric {
+        case .cpu: return sample.cpuWarning.color
+        case .ssd: return sample.ssdWarning.color
+        default: return .labelColor
+        }
+    }
+
     private func rebuildBase(labels preparedLabels: [String]? = nil) {
         let lines = preparedLabels ?? labels
-        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)"
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.cpuWarning.rawValue)|\(sample.ssdWarning.rawValue)"
         if signature != layoutSignature || layoutSignature.isEmpty {
             layoutSignature = signature
             baseRenderings.removeAll()
@@ -356,7 +364,7 @@ final class MenuBarContent: NSObject {
             return
         }
         drawingAppearance.performAsCurrentDrawingAppearance {
-            let color = sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor
+            let color = NSColor.labelColor
             ink = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
             guard let context = context() else { baseImage = nil; return }
             NSGraphicsContext.saveGraphicsState()
@@ -364,6 +372,7 @@ final class MenuBarContent: NSObject {
             if layout.isEmpty { drawText("MT", at: NSPoint(x: 3, y: 5.5), width: 12, size: 9.3, color: color) }
             for (index, group) in layout.enumerated() where group.metric != .codex {
                 let x = group.origin + group.textOffset
+                let color = metricColor(group.metric)
                 drawText(lines[index * 2], at: NSPoint(x: x, y: 10.4), width: group.textWidth, size: 9.3, color: color)
                 drawText(lines[index * 2 + 1], at: NSPoint(x: x, y: 0.2), width: group.textWidth, size: 8.6, color: color)
             }
@@ -415,6 +424,10 @@ final class MenuBarContent: NSObject {
         for group in layout {
             context.saveGState()
             context.translateBy(x: group.origin, y: 0)
+            drawingAppearance.performAsCurrentDrawingAppearance {
+                let color = metricColor(group.metric)
+                ink = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
+            }
             switch group.metric {
             case .cpu: drawCPU(in: context, phase: animated ? cpuPhase : 0)
             case .gpu: drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)

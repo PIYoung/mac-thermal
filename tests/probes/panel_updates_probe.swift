@@ -15,11 +15,11 @@ enum LoginItemManager {
 enum PanelUpdatesProbe {
     private static let origin = Date(timeIntervalSince1970: 1_792_065_600)
 
-    private static func sample(_ index: Int, seconds: Double? = nil, gpu: GPUSnapshot? = nil) -> Snapshot {
+    private static func sample(_ index: Int, seconds: Double? = nil, gpu: GPUSnapshot? = nil, cpuTemperature: Double? = nil, ssdTemperature: Double = 42) -> Snapshot {
         let elapsed = seconds ?? Double(index * 2)
         let process = ResourceProcess(name: "Fixture \(index)", pid: 1_000 + index,
             cpuPercent: Double(index % 100), memoryBytes: Double(index + 1) * 1_024 * 1_024)
-        return Snapshot(cpuTemperature: Double(40 + index % 50), ssdTemperature: 42,
+        return Snapshot(cpuTemperature: cpuTemperature ?? Double(40 + index % 50), ssdTemperature: ssdTemperature,
             cpuUsage: Double(index % 100), upload: Double(index) * 1_000,
             download: Double(index) * 2_000, interfaces: 1, cpuSensors: 8, ssdSensors: 2,
             thermal: ThermalStatus(.nominal), time: origin.addingTimeInterval(elapsed),
@@ -516,10 +516,50 @@ enum PanelUpdatesProbe {
     }
     #endif
 
+    private static func fanChecks(defaults: UserDefaults) {
+        let panel = PanelController(defaults: defaults)
+        panel.prepareForPresentation()
+        panel.probeSetVisible(true)
+        panel.probeSelectTab(0)
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults)
+            let scenarios: [([Double?]?, String)] = [
+                (nil, "팬 정보 없음"), ([], "팬 없음"), ([0, 0], "정지"),
+                ([nil, 0], "팬 읽기 불가"), ([1800, 2100], "회전 중"), ([nil, 2000], "회전 중")]
+            for (rpms, state) in scenarios {
+                var fixture = sample(20); fixture.fans = FanSnapshot(rpms: rpms)
+                panel.apply(fixture)
+                precondition(panel.probeStrings["fans"] == fixture.fans.compact)
+                precondition(fixture.fans.state == L10n.text(state))
+                checkContentBounds(panel.view)
+            }
+        }
+        L10n.setLanguage(.korean, defaults: defaults)
+        panel.apply(sample(20, cpuTemperature: 100))
+        precondition(panel.probeStrings["thermal"] == "CPU 온도 높음")
+        panel.probeSelectTab(3)
+        panel.apply(sample(20, ssdTemperature: 70))
+        precondition(panel.probeStrings["ssdWarning"] == "SSD 온도 높음")
+        panel.apply(sample(20))
+        precondition(panel.probeStrings["ssdWarning"] == "SSD 온도")
+        panel.probeSelectTab(0)
+        precondition(FanSnapshot(rpms: [.nan, -1, 30001]).rpms!.allSatisfy { $0 == nil })
+        precondition(FanSnapshot(rpms: Array(repeating: 0, count: 9)).rpms == nil)
+        let before = panel.probeStrings["fans"]
+        panel.probeSelectTab(1)
+        var fixture = sample(22); fixture.fans = FanSnapshot(rpms: [1234])
+        panel.apply(fixture)
+        precondition(panel.probeStrings["fans"] == before, "Hidden CPU tab must not format fan fields")
+        panel.probeSelectTab(0)
+        precondition(panel.probeStrings["fans"] == fixture.fans.compact)
+        print("Fan UI passed: unavailable/absent/stopped/partial/running, four languages, fixed bounds, selected-tab updates")
+    }
+
     static func main() {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         #if PANEL_UPDATES_PROBE
+        withDefaults { defaults in fanChecks(defaults: defaults) }
         selectionChecks()
         surfaceHitChecks()
         withDefaults { defaults in groupedWindowChecks(defaults: defaults) }
