@@ -75,9 +75,11 @@ enum LoginItemManager {
                 "Hidden sampling must not format AppKit fields")
             panel.prepareForPresentation()
             panel.view.layoutSubtreeIfNeeded()
+            precondition(panel.probeSeparateCardsVisible)
             bounds(canvas(panel))
             precondition(panel.preferredContentSize == NSSize(width: 348, height: 468))
-            precondition(panel.probeChartFrame.height == 138, "Freed space must enlarge the graph without changing the surface")
+            precondition(panel.probeSeparateCardsVisible, "Graph and model cards must stay visible together without overlap")
+            precondition(panel.probeChartFrame.height == 67, "Graph must fit above the separate models card")
             func visibleText(_ node: NSView) -> [String] {
                 node.subviews.flatMap { child -> [String] in
                     guard !child.isHidden else { return [] }
@@ -85,15 +87,26 @@ enum LoginItemManager {
                 }
             }
             precondition(!visibleText(canvas(panel)).contains(L10n.text("최근 기록")))
+            func hasToggle(_ node: NSView) -> Bool {
+                node.subviews.contains { child in
+                    if let button = child as? NSButton,
+                       [L10n.text("모델 보기"), L10n.text("그래프")].contains(button.title) { return true }
+                    return hasToggle(child)
+                }
+            }
+            precondition(!hasToggle(canvas(panel)), "No graph/model toggle should remain")
             precondition(!visibleText(canvas(panel)).contains(L10n.text("로컬 기록 읽기")))
             precondition(panel.probeStrings["daily"] == "2.5K")
             precondition(panel.probeStrings["dailyTitle"] == L10n.text("오늘 토큰 (UTC)"))
             let dailyHeading = L10n.text("오늘 토큰 (UTC)") as NSString
-            precondition(dailyHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium)]).width <= 252,
+            precondition(dailyHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium)]).width <= 126,
                 "UTC daily heading must fit its fixed width in every language")
             let modelHeading = L10n.text("모델별 · 오늘 TOP 3") as NSString
             precondition(modelHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]).width <= 174)
             precondition(panel.probeStrings["scope"] == L10n.text("이 Mac 기록"))
+            let partialScope = L10n.text("이 Mac 기록 · 일부") as NSString
+            precondition(partialScope.size(withAttributes: [.font: NSFont.systemFont(ofSize: 9)]).width <= 126,
+                "The local-source scope must fit beside the today heading")
             precondition(panel.probeStrings["counts"] == L10n.format("오늘 %lld개 기록", Int64(123)))
             precondition(panel.probeStrings["elapsed"]?.hasPrefix(L10n.format("앱 %@", "")) == true)
             precondition(panel.probeModelNames == ["gpt-alpha", "gpt-beta", "gpt-delta"])
@@ -165,14 +178,14 @@ enum LoginItemManager {
             graph.quota.usage = CodexUsageSnapshot(state: .ready, days: template.days.enumerated().map {
                 CodexDailyUsage(day: $0.element.day, tokens: $0.offset == 3 ? nil : Int64([0, 4000, 1200, 0, 6000, 2800, 4200][$0.offset]))
             }, fetchedAt: usageNow)
-            panel.probeShowUsage(true); panel.apply(graph)
+            panel.apply(graph)
             precondition(panel.probeUsageReady && panel.probeUsageTitle == L10n.text("최근 7일"))
+            precondition(panel.probeSeparateCardsVisible)
             bounds(canvas(panel))
             graph.quota.usage.fetchedAt = usageNow.addingTimeInterval(-901)
             panel.apply(graph)
             precondition(!panel.probeUsageReady && panel.probeUsageStatus == L10n.text("사용량 통계 갱신 대기 중"))
-            panel.probeShowUsage(false); bounds(canvas(panel))
-            panel.probeShowUsage(true)
+            precondition(panel.probeSeparateCardsVisible, "Unavailable graph data must not hide the local models")
             var account = sample
             let fresh = Date()
             account.quota = CodexQuotaSnapshot(connection: .connected, windows: [
@@ -186,6 +199,7 @@ enum LoginItemManager {
             account.recordsEnabled = false
             panel.apply(account); panel.probeRefresh()
             precondition(refreshes == 2 && panel.probeQuotaIsVisible, "Quota refresh is independent of local records")
+            precondition(panel.probeSeparateCardsVisible)
             bounds(canvas(panel))
             account.quota.windows[0] = CodexQuotaWindow(slot: 0, usedPercent: 32, durationMinutes: 300, resetsAt: fresh.addingTimeInterval(-1))
             panel.apply(account)
@@ -197,10 +211,12 @@ enum LoginItemManager {
             account.quota.windows = [account.quota.windows[1]]
             panel.apply(account)
             precondition(panel.probeQuotaVisibleRows == 1 && panel.probeQuotaStrings[0] == "7d", "A sole secondary window must occupy the first visible row")
+            precondition(panel.probeSeparateCardsVisible)
             bounds(canvas(panel))
             account.quota = CodexQuotaSnapshot()
             panel.apply(account)
             precondition(!panel.probeQuotaIsVisible)
+            precondition(panel.probeSeparateCardsVisible)
             bounds(canvas(panel))
         }
         if let index = CommandLine.arguments.firstIndex(of: "--render"), CommandLine.arguments.indices.contains(index + 1) {
@@ -250,6 +266,6 @@ enum LoginItemManager {
                 try render(missing, appearance: appearance, output: output.appendingPathComponent("codex-unavailable-\(name).png"))
             }
         }
-        print("Codex panel passed: 4-language fixed bounds, expanded chart, removed recent-record and settings items, local UTC-today scope, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
+        print("Codex panel passed: 4-language fixed bounds, simultaneous separate graph/models cards without toggle, removed recent-record and settings items, local UTC-today scope, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
     }
 }

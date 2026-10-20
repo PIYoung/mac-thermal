@@ -180,8 +180,6 @@ final class CodexPanelController: NSViewController {
     private lazy var usageScope = NSButton(title: "", target: self, action: #selector(usageClicked))
     private let usageStatus = codexText(size: 10, secondary: true, lines: 2)
     private let usageChart = CodexUsageChart()
-    private var showingUsage = true
-    private lazy var usageModeButton = NSButton(title: "", target: self, action: #selector(toggleUsageMode))
     private lazy var usageConnectButton = NSButton(title: "", target: self, action: #selector(usageClicked))
     private let activity = codexText(size: 12, weight: .semibold)
     private let elapsed = codexText(size: 11, weight: .medium, digits: true)
@@ -265,37 +263,35 @@ final class CodexPanelController: NSViewController {
         }
         quotaStatus.alignment = .center
         codexPlace(quotaStatus, in: quotaCard, 12, 16, 252, 34)
-        codexPlace(totalsCard, in: canvas, 12, 120, 276, 72)
-        codexPlace(dailyTitle, in: totalsCard, 12, 9, 252, 16)
-        codexPlace(dailyValue, in: totalsCard, 10, 27, 254, 29)
-        codexPlace(dailyScope, in: totalsCard, 12, 55, 252, 13)
-        codexPlace(modelsCard, in: canvas, 12, 200, 276, 186)
-        codexPlace(modelsTitle, in: modelsCard, 12, 9, 174, 17)
+        codexPlace(totalsCard, in: canvas, 12, 120, 276, 60)
+        codexPlace(dailyTitle, in: totalsCard, 12, 9, 126, 16)
+        codexPlace(dailyValue, in: totalsCard, 10, 27, 254, 27)
+        dailyScope.alignment = .right
+        codexPlace(dailyScope, in: totalsCard, 138, 11, 126, 13)
+        codexPlace(modelsCard, in: canvas, 12, 304, 276, 82)
+        codexPlace(modelsTitle, in: modelsCard, 12, 5, 174, 17)
         modelsUnit.alignment = .right
-        codexPlace(modelsUnit, in: modelsCard, 188, 11, 76, 14)
+        codexPlace(modelsUnit, in: modelsCard, 188, 7, 76, 14)
         for index in 0..<3 {
-            let y = CGFloat(42 + index * 43)
-            codexPlace(modelNames[index], in: modelsCard, 12, y, 167, 14)
+            let y = CGFloat(25 + index * 17)
+            codexPlace(modelNames[index], in: modelsCard, 12, y, 167, 13)
             modelValues[index].alignment = .right
-            codexPlace(modelValues[index], in: modelsCard, 184, y, 80, 14)
+            codexPlace(modelValues[index], in: modelsCard, 184, y, 80, 13)
             modelBars[index].color = [PanelColor.blue, PanelColor.violet, PanelColor.teal][index]
-            codexPlace(modelBars[index], in: modelsCard, 12, y + 23, 252, 4)
+            codexPlace(modelBars[index], in: modelsCard, 12, y + 13, 252, 2)
         }
-        codexPlace(modelsEmpty, in: modelsCard, 12, 76, 252, 36)
-        codexPlace(usageCard, in: canvas, 12, 200, 276, 186)
+        codexPlace(modelsEmpty, in: modelsCard, 12, 29, 252, 36)
+        codexPlace(usageCard, in: canvas, 12, 188, 276, 108)
         codexPlace(usageTitle, in: usageCard, 12, 9, 104, 17)
         usageScope.isBordered = false; usageScope.contentTintColor = .secondaryLabelColor
-        usageScope.font = .systemFont(ofSize: 9); usageScope.alignment = .left
-        codexPlace(usageScope, in: usageCard, 113, 7, 88, 20)
-        codexPlace(usageChart, in: usageCard, 12, 36, 252, 138)
+        usageScope.font = .systemFont(ofSize: 9); usageScope.alignment = .right
+        codexPlace(usageScope, in: usageCard, 168, 7, 96, 20)
+        codexPlace(usageChart, in: usageCard, 12, 30, 252, 67)
         usageStatus.alignment = .center
-        codexPlace(usageStatus, in: usageCard, 12, 68, 252, 28)
+        codexPlace(usageStatus, in: usageCard, 12, 31, 252, 28)
         usageConnectButton.isBordered = false; usageConnectButton.contentTintColor = PanelColor.blue
         usageConnectButton.font = .systemFont(ofSize: 10, weight: .medium)
-        codexPlace(usageConnectButton, in: usageCard, 66, 108, 144, 23)
-        usageModeButton.isBordered = false; usageModeButton.contentTintColor = PanelColor.blue
-        usageModeButton.font = .systemFont(ofSize: 10, weight: .medium)
-        codexPlace(usageModeButton, in: canvas, 220, 206, 56, 22)
+        codexPlace(usageConnectButton, in: usageCard, 66, 65, 144, 23)
         let line = NSBox()
         line.boxType = .separator
         codexPlace(line, in: canvas, 14, 394, 272, 1)
@@ -317,7 +313,6 @@ final class CodexPanelController: NSViewController {
     @objc private func refreshNow() { refresh?() }
     @objc private func accountClicked() { accountAction?() }
     @objc private func usageClicked() { usageAction?() }
-    @objc private func toggleUsageMode() { showingUsage.toggle(); render() }
     private func modelName(_ value: String?) -> String {
         guard let value, value.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", options: .regularExpression) != nil else { return L10n.text("정보 없음") }
         return value
@@ -422,11 +417,6 @@ final class CodexPanelController: NSViewController {
 
     private func renderUsage() {
         let usage = latest.quota.usage
-        usageCard.isHidden = !showingUsage; modelsCard.isHidden = showingUsage
-        modelsUnit.isHidden = true
-        usageModeButton.toolTip = L10n.text("계정 통계를 누르면 그래프 연결을 관리할 수 있습니다")
-        usageModeButton.title = L10n.text(showingUsage ? "모델 보기" : "그래프")
-        usageModeButton.setAccessibilityLabel(L10n.text(showingUsage ? "모델 보기" : "그래프"))
         usageTitle.stringValue = L10n.text("최근 7일")
         usageScope.title = L10n.text("계정 통계")
         usageScope.toolTip = L10n.text("사용량 그래프 연결 관리")
@@ -520,11 +510,11 @@ extension CodexPanelController {
     var probeQuotaVisibleRows: Int { quotaTitles.filter { !$0.isHidden }.count }
     func probeSetVisible(_ visible: Bool) { probeVisible = visible }
     func probeRefresh() { refreshButton.performClick(nil) }
-    func probeShowUsage(_ visible: Bool) { showingUsage = visible; render() }
     var probeUsageReady: Bool { !usageChart.isHidden }
     var probeUsageStatus: String { usageStatus.stringValue }
     var probeUsageTitle: String { usageTitle.stringValue }
     var probeChartFrame: NSRect { usageChart.frame }
+    var probeSeparateCardsVisible: Bool { !usageCard.isHidden && !modelsCard.isHidden && !usageCard.frame.intersects(modelsCard.frame) }
     var probeStrings: [String: String] {
         ["activity": activity.stringValue, "elapsed": elapsed.stringValue, "model": model.stringValue,
          "counts": counts.stringValue, "dailyTitle": dailyTitle.stringValue, "daily": dailyValue.stringValue,
