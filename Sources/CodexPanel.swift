@@ -183,7 +183,6 @@ final class CodexPanelController: NSViewController {
     private var showingUsage = true
     private lazy var usageModeButton = NSButton(title: "", target: self, action: #selector(toggleUsageMode))
     private lazy var usageConnectButton = NSButton(title: "", target: self, action: #selector(usageClicked))
-    private let recordsCard = GlassCard()
     private let activity = codexText(size: 12, weight: .semibold)
     private let elapsed = codexText(size: 11, weight: .medium, digits: true)
     private let model = codexText(size: 10, secondary: true)
@@ -191,28 +190,15 @@ final class CodexPanelController: NSViewController {
     private let dailyTitle = codexText(size: 10, weight: .medium)
     private let dailyValue = codexText(size: 23, weight: .medium, digits: true)
     private let dailyScope = codexText(size: 9, secondary: true)
-    private let timeTitle = codexText(size: 10, weight: .medium)
-    private let timeValue = codexText(size: 20, weight: .medium, digits: true)
-    private let timeScope = codexText(size: 9, secondary: true)
     private let modelsTitle = codexText(size: 11, weight: .semibold)
     private let modelsUnit = codexText(size: 9, secondary: true)
     private let modelNames = (0..<3).map { _ in codexText(size: 10, weight: .medium) }
     private let modelValues = (0..<3).map { _ in codexText(size: 10, weight: .medium, digits: true) }
     private let modelBars = (0..<3).map { _ in CodexBar() }
     private let modelsEmpty = codexText(size: 10, secondary: true, lines: 2)
-    private let recordsTitle = codexText(size: 11, weight: .semibold)
-    private let recordsPrivacy = codexText(size: 9, secondary: true, lines: 2)
-    private let recordsStatus = codexText(size: 9, secondary: true)
-    private lazy var recordsSwitch: NSSwitch = {
-        let control = NSSwitch()
-        control.target = self
-        control.action = #selector(recordsChanged)
-        return control
-    }()
     private let updated = codexText(size: 9, secondary: true, digits: true)
     private lazy var refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(refreshNow))
     var refresh: (() -> Void)?
-    var recordsEnabledChanged: ((Bool) -> Void)?
     var accountAction: (() -> Void)?
     var usageAction: (() -> Void)?
     #if PANEL_UPDATES_PROBE
@@ -280,47 +266,36 @@ final class CodexPanelController: NSViewController {
         quotaStatus.alignment = .center
         codexPlace(quotaStatus, in: quotaCard, 12, 16, 252, 34)
         codexPlace(totalsCard, in: canvas, 12, 120, 276, 72)
-        codexPlace(dailyTitle, in: totalsCard, 12, 9, 118, 16)
-        codexPlace(dailyValue, in: totalsCard, 10, 27, 120, 29)
-        codexPlace(dailyScope, in: totalsCard, 12, 55, 118, 13)
-        codexPlace(timeTitle, in: totalsCard, 150, 9, 114, 16)
-        codexPlace(timeValue, in: totalsCard, 148, 29, 116, 27)
-        codexPlace(timeScope, in: totalsCard, 150, 55, 114, 13)
-        let divider = NSBox()
-        divider.boxType = .separator
-        codexPlace(divider, in: totalsCard, 138, 14, 1, 44)
-        codexPlace(modelsCard, in: canvas, 12, 200, 276, 100)
+        codexPlace(dailyTitle, in: totalsCard, 12, 9, 252, 16)
+        codexPlace(dailyValue, in: totalsCard, 10, 27, 254, 29)
+        codexPlace(dailyScope, in: totalsCard, 12, 55, 252, 13)
+        codexPlace(modelsCard, in: canvas, 12, 200, 276, 186)
         codexPlace(modelsTitle, in: modelsCard, 12, 9, 174, 17)
         modelsUnit.alignment = .right
         codexPlace(modelsUnit, in: modelsCard, 188, 11, 76, 14)
         for index in 0..<3 {
-            let y = CGFloat(32 + index * 22)
+            let y = CGFloat(42 + index * 43)
             codexPlace(modelNames[index], in: modelsCard, 12, y, 167, 14)
             modelValues[index].alignment = .right
             codexPlace(modelValues[index], in: modelsCard, 184, y, 80, 14)
             modelBars[index].color = [PanelColor.blue, PanelColor.violet, PanelColor.teal][index]
-            codexPlace(modelBars[index], in: modelsCard, 12, y + 16, 252, 3)
+            codexPlace(modelBars[index], in: modelsCard, 12, y + 23, 252, 4)
         }
-        codexPlace(modelsEmpty, in: modelsCard, 12, 40, 252, 36)
-        codexPlace(usageCard, in: canvas, 12, 200, 276, 100)
+        codexPlace(modelsEmpty, in: modelsCard, 12, 76, 252, 36)
+        codexPlace(usageCard, in: canvas, 12, 200, 276, 186)
         codexPlace(usageTitle, in: usageCard, 12, 9, 104, 17)
         usageScope.isBordered = false; usageScope.contentTintColor = .secondaryLabelColor
         usageScope.font = .systemFont(ofSize: 9); usageScope.alignment = .left
         codexPlace(usageScope, in: usageCard, 113, 7, 88, 20)
-        codexPlace(usageChart, in: usageCard, 12, 32, 252, 57)
+        codexPlace(usageChart, in: usageCard, 12, 36, 252, 138)
         usageStatus.alignment = .center
-        codexPlace(usageStatus, in: usageCard, 12, 33, 252, 28)
+        codexPlace(usageStatus, in: usageCard, 12, 68, 252, 28)
         usageConnectButton.isBordered = false; usageConnectButton.contentTintColor = PanelColor.blue
         usageConnectButton.font = .systemFont(ofSize: 10, weight: .medium)
-        codexPlace(usageConnectButton, in: usageCard, 66, 64, 144, 23)
+        codexPlace(usageConnectButton, in: usageCard, 66, 108, 144, 23)
         usageModeButton.isBordered = false; usageModeButton.contentTintColor = PanelColor.blue
         usageModeButton.font = .systemFont(ofSize: 10, weight: .medium)
         codexPlace(usageModeButton, in: canvas, 220, 206, 56, 22)
-        codexPlace(recordsCard, in: canvas, 12, 308, 276, 78)
-        codexPlace(recordsTitle, in: recordsCard, 12, 8, 198, 17)
-        codexPlace(recordsSwitch, in: recordsCard, 224, 7, 40, 23)
-        codexPlace(recordsPrivacy, in: recordsCard, 12, 31, 252, 27)
-        codexPlace(recordsStatus, in: recordsCard, 12, 60, 252, 14)
         let line = NSBox()
         line.boxType = .separator
         codexPlace(line, in: canvas, 14, 394, 272, 1)
@@ -343,23 +318,6 @@ final class CodexPanelController: NSViewController {
     @objc private func accountClicked() { accountAction?() }
     @objc private func usageClicked() { usageAction?() }
     @objc private func toggleUsageMode() { showingUsage.toggle(); render() }
-    @objc private func recordsChanged() {
-        let enabled = recordsSwitch.state == .on
-        guard latest.recordsEnabled != enabled else { return }
-        latest.recordsEnabled = enabled
-        latest.dailyTokens = nil
-        latest.models = []
-        latest.currentModel = nil
-        latest.recordsCount = nil
-        latest.lastRecordAt = nil
-        latest.updatedAt = nil
-        latest.incomplete = false
-        latest.noticeKey = nil
-        if enabled { latest.connection = .connecting }
-        render()
-        recordsEnabledChanged?(enabled)
-    }
-
     private func modelName(_ value: String?) -> String {
         guard let value, value.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", options: .regularExpression) != nil else { return L10n.text("정보 없음") }
         return value
@@ -426,12 +384,6 @@ final class CodexPanelController: NSViewController {
         dailyValue.font = .monospacedDigitSystemFont(ofSize: daily == nil ? 13 : 23, weight: .medium)
         dailyScope.stringValue = L10n.text(enabled && latest.incomplete ? "이 Mac 기록 · 일부" : "이 Mac 기록")
         dailyValue.toolTip = L10n.text("이 Mac의 로컬 기록에 남은 UTC 오늘 토큰입니다. 계정 전체 사용량이 아닙니다.")
-        timeTitle.stringValue = L10n.text("최근 기록")
-        let recordedAt = enabled ? latest.lastRecordAt.flatMap { $0.timeIntervalSince1970.isFinite ? $0 : nil } : nil
-        timeValue.stringValue = dateText(recordedAt, short: true)
-        timeValue.font = .monospacedDigitSystemFont(ofSize: recordedAt == nil ? 13 : 20, weight: .medium)
-        timeScope.stringValue = L10n.text("현지 시각")
-        timeValue.toolTip = L10n.text("마지막 유효한 로컬 토큰 기록의 시각입니다. 이 Mac의 시간대로 표시합니다.")
         modelsTitle.stringValue = L10n.text("모델별 · 오늘 TOP 3")
         modelsUnit.stringValue = L10n.text("토큰")
         modelsCard.toolTip = L10n.text("이 Mac의 UTC 오늘 기록에서 모델별 토큰 상위 3개입니다. 막대는 확인된 모든 모델 합계의 비중이며 모델 미상 토큰과 계정 전체 사용량을 포함하지 않습니다.")
@@ -455,27 +407,13 @@ final class CodexPanelController: NSViewController {
                 modelBars[index].setAccessibilityLabel(L10n.format("모델 %@, %lld 토큰", modelNames[index].stringValue, row.totalTokens))
             }
         }
-        recordsTitle.stringValue = L10n.text("로컬 기록 읽기")
-        recordsSwitch.state = enabled ? .on : .off
-        recordsSwitch.toolTip = L10n.text("켜면 이 Mac의 Codex 대화 기록 파일에서 모델명·토큰 숫자·시각을 추출해 집계합니다. 끄면 읽기를 중단하며 본문은 보관·표시·전송하지 않습니다.")
-        recordsSwitch.setAccessibilityLabel(L10n.text("로컬 기록 읽기"))
-        recordsPrivacy.stringValue = L10n.text("대화 기록 파일에서 추출 · 본문 저장·표시·전송 없음")
-        recordsPrivacy.toolTip = L10n.text("이 Mac의 Codex 대화 기록 파일에서 모델명·토큰 숫자·시각만 추출해 집계합니다. 본문은 보관·표시·전송하지 않습니다.")
         let notice = latest.noticeKey.flatMap { L10n.codexTranslations[$0] != nil ? L10n.text($0) : nil }
-        if !enabled { recordsStatus.stringValue = L10n.text("꺼짐 · 기본값") }
-        else if latest.incomplete { recordsStatus.stringValue = L10n.text("일부 기록만 집계") }
-        else if latest.connection == .connecting { recordsStatus.stringValue = L10n.text("로컬 기록 확인 중") }
-        else if connected { recordsStatus.stringValue = L10n.text("읽기 전용 · 외부 전송 없음") }
-        else { recordsStatus.stringValue = notice ?? L10n.text("로컬 기록을 읽을 수 없습니다") }
-        recordsStatus.textColor = enabled && (latest.incomplete || latest.connection == .unavailable) ? .systemOrange : .secondaryLabelColor
-        recordsStatus.toolTip = enabled && latest.incomplete ? L10n.text("검사 범위나 읽기 제한 때문에 일부 기록만 집계했습니다. 표시값은 전체 사용량이 아닙니다.") : recordsStatus.stringValue
-        recordsStatus.setAccessibilityLabel(recordsStatus.toolTip)
         let stale = enabled && !connected && latest.updatedAt != nil
         for card in [totalsCard, modelsCard] { card.alphaValue = stale ? 0.62 : 1 }
         updated.stringValue = !enabled ? L10n.text("기록 읽기 꺼짐") : latest.updatedAt.map {
             L10n.format(stale ? "이전 값 · %@" : "갱신 %@", dateText($0))
         } ?? notice ?? L10n.text("업데이트 정보 없음")
-        updated.toolTip = enabled && latest.incomplete ? recordsStatus.toolTip : notice ?? L10n.text("이 Mac의 로컬 기록만 집계합니다")
+        updated.toolTip = enabled && latest.incomplete ? L10n.text("검사 범위나 읽기 제한 때문에 일부 기록만 집계했습니다. 표시값은 전체 사용량이 아닙니다.") : notice ?? L10n.text("이 Mac의 로컬 기록만 집계합니다")
         renderUsage()
         refreshButton.isEnabled = enabled || latest.quota.isEnabled
         refreshButton.toolTip = L10n.text("Codex 지금 새로고침")
@@ -582,22 +520,17 @@ extension CodexPanelController {
     var probeQuotaVisibleRows: Int { quotaTitles.filter { !$0.isHidden }.count }
     func probeSetVisible(_ visible: Bool) { probeVisible = visible }
     func probeRefresh() { refreshButton.performClick(nil) }
-    func probeSetRecordsEnabled(_ enabled: Bool) {
-        recordsSwitch.state = enabled ? .on : .off
-        recordsSwitch.sendAction(recordsSwitch.action, to: recordsSwitch.target)
-    }
     func probeShowUsage(_ visible: Bool) { showingUsage = visible; render() }
     var probeUsageReady: Bool { !usageChart.isHidden }
     var probeUsageStatus: String { usageStatus.stringValue }
     var probeUsageTitle: String { usageTitle.stringValue }
-    var probeRecordsEnabled: Bool { recordsSwitch.state == .on }
+    var probeChartFrame: NSRect { usageChart.frame }
     var probeStrings: [String: String] {
         ["activity": activity.stringValue, "elapsed": elapsed.stringValue, "model": model.stringValue,
          "counts": counts.stringValue, "dailyTitle": dailyTitle.stringValue, "daily": dailyValue.stringValue,
-         "scope": dailyScope.stringValue, "time": timeValue.stringValue, "timeScope": timeScope.stringValue,
+         "scope": dailyScope.stringValue,
          "modelsTitle": modelsTitle.stringValue, "updated": updated.stringValue, "notice": updated.toolTip ?? "",
-         "elapsedNotice": elapsed.toolTip ?? "", "recordsTitle": recordsTitle.stringValue,
-         "recordsPrivacy": recordsPrivacy.stringValue, "recordsStatus": recordsStatus.stringValue]
+         "elapsedNotice": elapsed.toolTip ?? ""]
     }
     var probeModelNames: [String] { modelNames.filter { !$0.isHidden }.map(\.stringValue) }
     var probeModelFractions: [Double?] { modelBars.filter { !$0.isHidden }.map(\.fraction) }

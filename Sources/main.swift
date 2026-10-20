@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexPanel.refresh = { [weak self] in self?.codexMonitor.refresh(); self?.quotaClient.refresh() }
         codexPanel.accountAction = { [weak self] in self?.accountPresenter.showAccount() }
         codexPanel.usageAction = { [weak self] in self?.accountPresenter.showUsageReview() }
-        codexPanel.recordsEnabledChanged = { [weak self] enabled in self?.codexMonitor.setRecordsEnabled(enabled) }
+        panel.codexRecordsEnabledChanged = { [weak self] enabled in self?.codexMonitor.setRecordsEnabled(enabled) }
         codexMonitor.onUpdate = { [weak self] snapshot in
             guard let self else { return }
             self.codexSnapshot = snapshot
@@ -185,6 +185,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func renderCodex() {
+        let recordsState: CodexRecordsSettingsState = !codexSnapshot.recordsEnabled ? .disabled :
+            codexSnapshot.incomplete ? .partial : codexSnapshot.connection == .connecting ? .reading :
+            codexSnapshot.connection == .connected ? .ready : .unavailable
+        panel.updateCodexRecords(recordsState)
         codexPanel.apply(codexSnapshot)
         menuContent.update(codex: codexSnapshot)
         if abs(statusItem.length - menuContent.contentWidth) > 0.5 { statusItem.length = menuContent.contentWidth }

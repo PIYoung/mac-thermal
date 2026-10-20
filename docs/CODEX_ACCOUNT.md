@@ -15,7 +15,7 @@ This uses managed app-server authentication for a local open-source application.
 
 ## Daily usage graph
 
-The existing 300×420 companion has a compact graph/model switch in its middle card. The default graph uses an original smooth line, a restrained gradient area and actual daily point markers. Hovering a point shows its date and token count. The Models button shows the existing local TOP 3 without changing panel size.
+The existing 300×420 companion has a compact graph/model switch in its expanded lower card. The default graph uses an original smooth line, a restrained gradient area and actual daily point markers. Hovering a point shows its date and token count. The Models button shows the existing local TOP 3 without changing panel size.
 
 Daily account statistics require a separate in-app review because the data scope expands beyond quota. This optional setting is off by default, including for previously connected quota accounts. Once approved, `account/usage/read` is requested with empty parameters, never a thread ID. Only returned date/token buckets are retained in memory. Summary fields, thread usage, raw errors and conversation contents are not retained. No local record is uploaded. The account-statistics button manages refresh/disconnection independently of the quota connection.
 
@@ -38,3 +38,5 @@ Protocol/schema checked against installed **codex-cli 0.162.0-alpha.17.2** on 20
 Official references: [Codex app-server](https://learn.chatgpt.com/docs/app-server), [direct Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in), [SIWC Codex bridge](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server).
 
 Daily-statistics verification (2026-10-20): after the separate user approval, the installed app successfully read real service buckets and displayed the curve. A missing current-date bucket remained a gap, and quota stayed connected. Four-language fixed bounds, graph/model switching, null/invalid/conflicting dates, true zero, freshness, independent usage errors, five-minute cadence, late replies after disabling, and saved opt-in resumption were checked with synthetic fixtures. No live account values are included in documentation fixtures.
+
+Local record reading is controlled in Mac Thermal Settings, directly below Language. Its privacy explanation and collection status move with the switch; saved consent and collection scope stay unchanged. Settings scroll within the fixed panel. The Codex companion uses a full-width today-token card and a taller graph/model card; the last-record timestamp item is removed.

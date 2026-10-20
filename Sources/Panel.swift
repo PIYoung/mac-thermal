@@ -370,6 +370,21 @@ private final class ProcessRankingCard: GlassCard {
     #endif
 }
 
+// UI state only: the monitor owns consent persistence and record-reader lifetime.
+enum CodexRecordsSettingsState: Equatable {
+    case disabled, reading, partial, ready, unavailable
+    var enabled: Bool { self != .disabled }
+    var titleKey: String {
+        switch self {
+        case .disabled: return "꺼짐 · 기본값"
+        case .reading: return "로컬 기록 확인 중"
+        case .partial: return "일부 기록만 집계"
+        case .ready: return "읽기 전용 · 외부 전송 없음"
+        case .unavailable: return "로컬 기록을 읽을 수 없습니다"
+        }
+    }
+}
+
 final class PanelController: NSViewController {
     static let surfaceSize = NSSize(width: 340, height: 420)
     static let surfaceInset: CGFloat = 24
@@ -423,6 +438,40 @@ final class PanelController: NSViewController {
     private let diskWriteGraph = Sparkline(color: PanelColor.violet)
     private var tabViews: [NSView] = []
     private let menuBarSettingsView = FlippedView()
+    private let settingsScroll = NSScrollView()
+    private var codexRecordsState = CodexRecordsSettingsState.disabled
+    private let codexRecordsStatus = text("꺼짐 · 기본값", size: 9, color: PanelColor.secondary)
+    private lazy var codexRecordsSwitch: NSSwitch = {
+        let control = NSSwitch()
+        control.target = self
+        control.action = #selector(changeCodexRecords)
+        control.controlSize = .small
+        localizedAccessibilityLabel(control, "로컬 기록 읽기")
+        localizedToolTip(control, "켜면 이 Mac의 Codex 대화 기록 파일에서 모델명·토큰 숫자·시각을 추출해 집계합니다. 끄면 읽기를 중단하며 본문은 보관·표시·전송하지 않습니다.")
+        return control
+    }()
+    var codexRecordsEnabledChanged: ((Bool) -> Void)?
+
+    func updateCodexRecords(_ state: CodexRecordsSettingsState) {
+        guard codexRecordsState != state else { return }
+        codexRecordsState = state
+        if isViewLoaded { renderCodexRecordsSetting() }
+    }
+
+    private func renderCodexRecordsSetting() {
+        codexRecordsSwitch.state = codexRecordsState.enabled ? .on : .off
+        codexRecordsStatus.stringValue = L10n.text(codexRecordsState.titleKey)
+        codexRecordsStatus.textColor = [.partial, .unavailable].contains(codexRecordsState) ? .systemOrange : PanelColor.secondary
+        codexRecordsStatus.toolTip = codexRecordsState == .partial ? L10n.text("검사 범위나 읽기 제한 때문에 일부 기록만 집계했습니다. 표시값은 전체 사용량이 아닙니다.") : codexRecordsStatus.stringValue
+    }
+
+    @objc private func changeCodexRecords() {
+        let enabled = codexRecordsSwitch.state == .on
+        guard codexRecordsState.enabled != enabled else { return }
+        updateCodexRecords(enabled ? .reading : .disabled)
+        codexRecordsEnabledChanged?(enabled)
+    }
+
     private var showingMenuBarSettings = false
     private var languageObserver: NSObjectProtocol?
     private var latestSnapshot = Snapshot.pending
@@ -600,7 +649,13 @@ final class PanelController: NSViewController {
         place(diskMonitorView, in: tabViews[3], 0, 0, 308, 277)
         buildDisk(in: diskMonitorView)
         buildNetwork(in: tabViews[4])
-        place(menuBarSettingsView, in: canvas, 16, 55, 308, 310)
+        settingsScroll.drawsBackground = false
+        settingsScroll.hasVerticalScroller = true
+        settingsScroll.autohidesScrollers = true
+        settingsScroll.scrollerStyle = .overlay
+        place(settingsScroll, in: canvas, 16, 55, 308, 310)
+        menuBarSettingsView.frame = NSRect(x: 0, y: 0, width: 308, height: 388)
+        settingsScroll.documentView = menuBarSettingsView
         buildMenuBarSettings()
         showSelectedTab()
 
@@ -639,6 +694,7 @@ final class PanelController: NSViewController {
         diskCleanupView?.refreshLanguage()
         languageControl.selectItem(at: AppLanguage.allCases.firstIndex(of: L10n.language) ?? 0)
         updateMenuBarControls()
+        renderCodexRecordsSetting()
         showSelectedTab()
         updateLoginState()
     }
@@ -656,8 +712,21 @@ final class PanelController: NSViewController {
         place(text("언어", size: 11, weight: .semibold), in: language, 34, 11, 66, 18)
         place(languageControl, in: language, 107, 6, 188, 28)
 
+        let records = GlassCard()
+        place(records, in: menuBarSettingsView, 0, 46, 308, 78)
+        place(symbol("terminal", color: PanelColor.blue), in: records, 13, 10, 14, 14)
+        place(text("로컬 기록 읽기", size: 11, weight: .semibold), in: records, 34, 8, 218, 18)
+        place(codexRecordsSwitch, in: records, 260, 7, 36, 22)
+        let privacy = text("대화 기록 파일에서 추출 · 본문 저장·표시·전송 없음", size: 9, color: PanelColor.secondary)
+        privacy.maximumNumberOfLines = 2
+        privacy.lineBreakMode = .byWordWrapping
+        place(privacy, in: records, 14, 31, 280, 27)
+        localizedToolTip(records, "이 Mac의 Codex 대화 기록 파일에서 모델명·토큰 숫자·시각만 추출해 집계합니다. 본문은 보관·표시·전송하지 않습니다.")
+        place(codexRecordsStatus, in: records, 14, 60, 280, 14)
+        renderCodexRecordsSetting()
+
         let metrics = GlassCard()
-        place(metrics, in: menuBarSettingsView, 0, 46, 308, 50)
+        place(metrics, in: menuBarSettingsView, 0, 130, 308, 50)
         place(symbol("menubar.rectangle", color: PanelColor.blue), in: metrics, 13, 7, 14, 14)
         place(text("메뉴바 표시", size: 11, weight: .semibold), in: metrics, 34, 5, 260, 18)
         for (index, metric) in MenuBarMetric.allCases.enumerated() {
@@ -669,20 +738,20 @@ final class PanelController: NSViewController {
         }
 
         let style = GlassCard()
-        place(style, in: menuBarSettingsView, 0, 102, 308, 46)
+        place(style, in: menuBarSettingsView, 0, 186, 308, 46)
         place(symbol("waveform", color: PanelColor.blue), in: style, 13, 5, 14, 14)
         place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 34, 3, 260, 18)
         place(animationStyleControl, in: style, 11, 20, 286, 26)
 
         let motion = GlassCard()
-        place(motion, in: menuBarSettingsView, 0, 154, 308, 40)
+        place(motion, in: menuBarSettingsView, 0, 238, 308, 40)
         place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 14, 11, 238, 18)
         place(menuBarMotionSwitch, in: motion, 260, 9, 36, 22)
         localizedToolTip(motion, "CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기")
         localizedToolTip(menuBarMotionSwitch, "macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다")
 
         let intensity = GlassCard()
-        place(intensity, in: menuBarSettingsView, 0, 200, 308, 58)
+        place(intensity, in: menuBarSettingsView, 0, 284, 308, 58)
         place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 14, 3, 218, 18)
         motionIntensityValue.alignment = .right
         place(motionIntensityValue, in: intensity, 244, 4, 50, 17)
@@ -693,7 +762,7 @@ final class PanelController: NSViewController {
         place(energetic, in: intensity, 164, 41, 130, 13)
 
         let login = GlassCard()
-        place(login, in: menuBarSettingsView, 0, 264, 308, 40)
+        place(login, in: menuBarSettingsView, 0, 348, 308, 40)
         place(text("로그인 시 자동 실행", size: 11, weight: .semibold), in: login, 14, 11, 168, 18)
         loginLabel.alignment = .right
         loginLabel.font = .systemFont(ofSize: 9)
@@ -878,7 +947,7 @@ final class PanelController: NSViewController {
 
     private func showSelectedTab() {
         tabs.isHidden = showingMenuBarSettings
-        menuBarSettingsView.isHidden = !showingMenuBarSettings
+        settingsScroll.isHidden = !showingMenuBarSettings
         menuBarSettingsButton.contentTintColor = showingMenuBarSettings ? PanelColor.blue : PanelColor.secondary
         localizedAccessibilityLabel(menuBarSettingsButton, showingMenuBarSettings ? "Mac Thermal 설정 닫기" : "Mac Thermal 설정 열기")
         for (index, content) in tabViews.enumerated() {
@@ -1159,6 +1228,17 @@ extension PanelController {
         changeTab()
     }
     func probeToggleSettings() { toggleMenuBarSettings() }
+    var probeCodexRecordsEnabled: Bool { codexRecordsSwitch.state == .on }
+    var probeCodexRecordsStatus: String { codexRecordsStatus.stringValue }
+    var probeCodexPrivacyFits: Bool {
+        let privacy = L10n.text("대화 기록 파일에서 추출 · 본문 저장·표시·전송 없음") as NSString
+        return privacy.boundingRect(with: NSSize(width: 280, height: 100), options: .usesLineFragmentOrigin,
+            attributes: [.font: NSFont.systemFont(ofSize: 9)]).height <= 27
+    }
+    func probeSetCodexRecordsEnabled(_ enabled: Bool) {
+        codexRecordsSwitch.state = enabled ? .on : .off
+        codexRecordsSwitch.sendAction(codexRecordsSwitch.action, to: codexRecordsSwitch.target)
+    }
     func probeClickMetric(_ metric: MenuBarMetric) { metricControls[metric]?.performClick(nil) }
     var probeMenuBarPreferences: MenuBarPreferences { menuBarPreferences }
     var probeVisibleMetrics: Set<MenuBarMetric> {
@@ -1207,6 +1287,6 @@ extension PanelController {
     var probeGPUHistoryTimes: [TimeInterval] { gpuHistory.points.map(\.time) }
     var probePresentedCPUHistoryTimes: [TimeInterval] { cpuGraph.probeTimes }
     var probePresentedGPUHistoryTimes: [TimeInterval] { gpuGraph.probeTimes }
-    var probeSurfaceFrames: [NSRect] { tabViews.map(\.frame) + [menuBarSettingsView.frame] }
+    var probeSurfaceFrames: [NSRect] { tabViews.map(\.frame) + [settingsScroll.frame] }
 }
 #endif

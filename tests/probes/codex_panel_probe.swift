@@ -69,31 +69,31 @@ enum LoginItemManager {
             L10n.setLanguage(language, defaults: defaults)
             let panel = CodexPanelController()
             _ = panel.view
-            precondition(!panel.probeRecordsEnabled, "Record reading must default off")
-            var changes: [Bool] = []
-            panel.recordsEnabledChanged = { changes.append($0) }
             let initial = panel.probeStrings
             panel.apply(sample)
-            precondition(panel.probeStrings == initial && !panel.probeRecordsEnabled,
+            precondition(panel.probeStrings == initial,
                 "Hidden sampling must not format AppKit fields")
             panel.prepareForPresentation()
             panel.view.layoutSubtreeIfNeeded()
             bounds(canvas(panel))
             precondition(panel.preferredContentSize == NSSize(width: 348, height: 468))
-            precondition(panel.probeRecordsEnabled && changes.isEmpty, "Applying snapshots must never toggle the collector")
+            precondition(panel.probeChartFrame.height == 138, "Freed space must enlarge the graph without changing the surface")
+            func visibleText(_ node: NSView) -> [String] {
+                node.subviews.flatMap { child -> [String] in
+                    guard !child.isHidden else { return [] }
+                    return (child as? NSTextField).map { [$0.stringValue] } ?? visibleText(child)
+                }
+            }
+            precondition(!visibleText(canvas(panel)).contains(L10n.text("최근 기록")))
+            precondition(!visibleText(canvas(panel)).contains(L10n.text("로컬 기록 읽기")))
             precondition(panel.probeStrings["daily"] == "2.5K")
             precondition(panel.probeStrings["dailyTitle"] == L10n.text("오늘 토큰 (UTC)"))
             let dailyHeading = L10n.text("오늘 토큰 (UTC)") as NSString
-            precondition(dailyHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium)]).width <= 118,
+            precondition(dailyHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium)]).width <= 252,
                 "UTC daily heading must fit its fixed width in every language")
             let modelHeading = L10n.text("모델별 · 오늘 TOP 3") as NSString
             precondition(modelHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]).width <= 174)
-            let privacy = L10n.text("대화 기록 파일에서 추출 · 본문 저장·표시·전송 없음") as NSString
-            precondition(privacy.boundingRect(with: NSSize(width: 252, height: 100), options: [.usesLineFragmentOrigin],
-                attributes: [.font: NSFont.systemFont(ofSize: 9)]).height <= 27, "Privacy explanation must fit two lines")
             precondition(panel.probeStrings["scope"] == L10n.text("이 Mac 기록"))
-            precondition(panel.probeStrings["timeScope"] == L10n.text("현지 시각"))
-            precondition(panel.probeStrings["time"] != L10n.text("정보 없음"))
             precondition(panel.probeStrings["counts"] == L10n.format("오늘 %lld개 기록", Int64(123)))
             precondition(panel.probeStrings["elapsed"]?.hasPrefix(L10n.format("앱 %@", "")) == true)
             precondition(panel.probeModelNames == ["gpt-alpha", "gpt-beta", "gpt-delta"])
@@ -104,22 +104,19 @@ enum LoginItemManager {
             panel.probeRefresh()
             precondition(refreshes == 1, "Refresh must invoke only the supplied callback")
             panel.probeSetVisible(true)
-            panel.probeSetRecordsEnabled(false)
-            precondition(changes == [false] && !panel.probeRecordsEnabled)
+            var disabled = CodexMonitorSnapshot.pending
+            panel.apply(disabled)
             precondition(panel.probeModelNames.isEmpty && panel.probeStrings["daily"] == L10n.text("정보 없음"))
-            precondition(panel.probeStrings["time"] == L10n.text("정보 없음") && panel.probeStrings["counts"] == "—")
             panel.probeRefresh()
             precondition(refreshes == 1, "Off must not trigger a refresh read")
-            panel.probeSetRecordsEnabled(false)
-            precondition(changes == [false], "An unchanged switch must not duplicate callbacks")
-            panel.probeSetRecordsEnabled(true)
-            precondition(changes == [false, true] && panel.probeRecordsEnabled)
+            disabled.recordsEnabled = true
+            disabled.connection = .connecting
+            panel.apply(disabled)
             precondition(panel.probeStrings["activity"] == L10n.text("로컬 기록 확인 중"))
             precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"), "Re-enable must wait for a new scan")
             var unavailable = sample
             unavailable.connection = .unavailable
             panel.apply(unavailable)
-            precondition(changes == [false, true], "Programmatic snapshots must not send switch actions")
             precondition(panel.probeStrings["updated"]?.hasPrefix(L10n.format("이전 값 · %@", "")) == true)
             precondition(panel.probeCardsAreDimmed)
             var partial = sample
@@ -127,7 +124,6 @@ enum LoginItemManager {
             partial.dailyTokens = 0
             panel.apply(partial)
             precondition(panel.probeStrings["scope"] == L10n.text("이 Mac 기록 · 일부"))
-            precondition(panel.probeStrings["recordsStatus"] == L10n.text("일부 기록만 집계"))
             precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"), "A partial scan must not claim a complete zero")
             var unknown = CodexMonitorSnapshot.pending
             unknown.connection = .connected
@@ -140,14 +136,14 @@ enum LoginItemManager {
             panel.apply(unknown)
             precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"))
             precondition(panel.probeStrings["model"] == L10n.text("정보 없음"))
-            precondition(panel.probeStrings["time"] == L10n.text("정보 없음") && panel.probeStrings["counts"] == "—")
+            precondition(panel.probeStrings["counts"] == "—")
             precondition(panel.probeModelNames.isEmpty)
             precondition(!panel.probeStrings.values.contains(where: { $0.contains("Private raw") || $0.contains("/Users/private") }))
             var off = sample
             off.recordsEnabled = false
             panel.apply(off)
-            precondition(!panel.probeRecordsEnabled && panel.probeModelNames.isEmpty)
-            precondition(panel.probeStrings["daily"] == L10n.text("정보 없음") && panel.probeStrings["time"] == L10n.text("정보 없음"))
+            precondition(panel.probeModelNames.isEmpty)
+            precondition(panel.probeStrings["daily"] == L10n.text("정보 없음"))
             var runtime = CodexMonitorSnapshot.pending
             runtime.connection = .unavailable
             runtime.appStartedAt = Date().addingTimeInterval(-120)
@@ -254,6 +250,6 @@ enum LoginItemManager {
                 try render(missing, appearance: appearance, output: output.appendingPathComponent("codex-unavailable-\(name).png"))
             }
         }
-        print("Codex panel passed: 4-language fixed bounds/privacy text, local UTC-today scope, opt-in off, real switch callback, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
+        print("Codex panel passed: 4-language fixed bounds, expanded chart, removed recent-record and settings items, local UTC-today scope, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
     }
 }

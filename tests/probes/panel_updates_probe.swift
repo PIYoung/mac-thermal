@@ -148,6 +148,11 @@ enum PanelUpdatesProbe {
         // Inspect our fixed resource canvases, excluding AppKit's private material
         // and control subviews. This catches a card or label crossing its parent.
         func visit(_ node: NSView) {
+            if let scroll = node as? NSScrollView, let document = scroll.documentView {
+                precondition(document.frame.width <= scroll.contentSize.width + 0.5, "Settings must scroll vertically without horizontal clipping")
+                visit(document)
+                return
+            }
             for child in node.subviews where !child.isHidden {
                 let container = node.bounds.insetBy(dx: -0.5, dy: -0.5)
                 precondition(container.contains(child.frame), "Visible content outside its parent: \(type(of: child)) \(child.frame) in \(node.bounds)")
@@ -368,6 +373,36 @@ enum PanelUpdatesProbe {
         print("Resource tab migration/persistence, embedded rankings, selected-tab-only updates, hidden histories, settings/reopen, four-language bounds, and fixed frame checks passed")
     }
 
+    private static func codexRecordsSettingsChecks(defaults: UserDefaults) {
+        let panel = PanelController(defaults: defaults)
+        // Snapshot state received before view creation must populate the setting.
+        panel.updateCodexRecords(.partial)
+        _ = panel.view
+        var changes: [Bool] = []
+        panel.codexRecordsEnabledChanged = { changes.append($0) }
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults)
+            precondition(panel.probeCodexRecordsEnabled)
+            precondition(panel.probeCodexRecordsStatus == L10n.text("일부 기록만 집계"))
+            precondition(panel.probeCodexPrivacyFits)
+            panel.probeToggleSettings()
+            checkContentBounds(panel.view)
+            panel.probeToggleSettings()
+            precondition(changes.isEmpty, "Rendering, language changes and settings navigation must preserve consent")
+        }
+        panel.probeSetCodexRecordsEnabled(false)
+        precondition(changes == [false] && !panel.probeCodexRecordsEnabled)
+        panel.probeSetCodexRecordsEnabled(false)
+        precondition(changes == [false], "An unchanged switch must not duplicate callbacks")
+        panel.probeSetCodexRecordsEnabled(true)
+        precondition(changes == [false, true] && panel.probeCodexRecordsEnabled)
+        precondition(panel.probeCodexRecordsStatus == L10n.text("로컬 기록 확인 중"))
+        panel.updateCodexRecords(.ready)
+        precondition(changes == [false, true], "Collector snapshots must never send switch actions")
+        precondition(panel.probeCodexRecordsStatus == L10n.text("읽기 전용 · 외부 전송 없음"))
+        print("Moved Codex record setting passed: pre-load state, four-language privacy, native switch callbacks, no consent change on render/navigation")
+    }
+
     private static func menuMetricChecks(defaults: UserDefaults) {
         let all = Set(MenuBarMetric.allCases)
         precondition(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all,
@@ -476,7 +511,8 @@ enum PanelUpdatesProbe {
         }
         withDefaults { defaults in
             L10n.setLanguage(.korean, defaults: defaults)
-            menuMetricChecks(defaults: defaults)
+            codexRecordsSettingsChecks(defaults: defaults)
+        menuMetricChecks(defaults: defaults)
         }
         withDefaults { defaults in
             L10n.setLanguage(.korean, defaults: defaults)
