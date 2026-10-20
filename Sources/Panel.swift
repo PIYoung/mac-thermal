@@ -654,7 +654,8 @@ final class PanelController: NSViewController {
         settingsScroll.autohidesScrollers = true
         settingsScroll.scrollerStyle = .overlay
         place(settingsScroll, in: canvas, 16, 55, 308, 310)
-        menuBarSettingsView.frame = NSRect(x: 0, y: 0, width: 308, height: 388)
+        // Reserve the native scroller width even when macOS forces always-visible scrollbars.
+        menuBarSettingsView.frame = NSRect(x: 0, y: 0, width: 290, height: 388)
         settingsScroll.documentView = menuBarSettingsView
         buildMenuBarSettings()
         showSelectedTab()
@@ -707,67 +708,67 @@ final class PanelController: NSViewController {
 
     private func buildMenuBarSettings() {
         let language = GlassCard()
-        place(language, in: menuBarSettingsView, 0, 0, 308, 40)
+        place(language, in: menuBarSettingsView, 0, 0, 290, 40)
         place(symbol("globe", color: PanelColor.blue), in: language, 13, 13, 14, 14)
         place(text("언어", size: 11, weight: .semibold), in: language, 34, 11, 66, 18)
-        place(languageControl, in: language, 107, 6, 188, 28)
+        place(languageControl, in: language, 107, 6, 170, 28)
 
         let records = GlassCard()
-        place(records, in: menuBarSettingsView, 0, 46, 308, 78)
+        place(records, in: menuBarSettingsView, 0, 46, 290, 78)
         place(symbol("terminal", color: PanelColor.blue), in: records, 13, 10, 14, 14)
-        place(text("로컬 기록 읽기", size: 11, weight: .semibold), in: records, 34, 8, 218, 18)
-        place(codexRecordsSwitch, in: records, 260, 7, 36, 22)
+        place(text("로컬 기록 읽기", size: 11, weight: .semibold), in: records, 34, 8, 200, 18)
+        place(codexRecordsSwitch, in: records, 242, 7, 36, 22)
         let privacy = text("대화 기록 파일에서 추출 · 본문 저장·표시·전송 없음", size: 9, color: PanelColor.secondary)
         privacy.maximumNumberOfLines = 2
         privacy.lineBreakMode = .byWordWrapping
-        place(privacy, in: records, 14, 31, 280, 27)
+        place(privacy, in: records, 14, 31, 262, 27)
         localizedToolTip(records, "이 Mac의 Codex 대화 기록 파일에서 모델명·토큰 숫자·시각만 추출해 집계합니다. 본문은 보관·표시·전송하지 않습니다.")
-        place(codexRecordsStatus, in: records, 14, 60, 280, 14)
+        place(codexRecordsStatus, in: records, 14, 60, 262, 14)
         renderCodexRecordsSetting()
 
         let metrics = GlassCard()
-        place(metrics, in: menuBarSettingsView, 0, 130, 308, 50)
+        place(metrics, in: menuBarSettingsView, 0, 130, 290, 50)
         place(symbol("menubar.rectangle", color: PanelColor.blue), in: metrics, 13, 7, 14, 14)
-        place(text("메뉴바 표시", size: 11, weight: .semibold), in: metrics, 34, 5, 260, 18)
+        place(text("메뉴바 표시", size: 11, weight: .semibold), in: metrics, 34, 5, 242, 18)
         for (index, metric) in MenuBarMetric.allCases.enumerated() {
             guard let control = metricControls[metric] else { continue }
-            let origins: [CGFloat] = [13, 58, 103, 148, 238]
-            let widths: [CGFloat] = [45, 45, 45, 90, 57]
+            let origins: [CGFloat] = [11, 55, 99, 143, 224]
+            let widths: [CGFloat] = [44, 44, 44, 81, 57]
             place(control, in: metrics, origins[index], 26, widths[index], 20)
             if metric == .codex { localizedToolTip(control, "Codex 앱 실행 중에만 표시합니다. 새 토큰 기록이 들어오면 움직입니다.") }
         }
 
         let style = GlassCard()
-        place(style, in: menuBarSettingsView, 0, 186, 308, 46)
+        place(style, in: menuBarSettingsView, 0, 186, 290, 46)
         place(symbol("waveform", color: PanelColor.blue), in: style, 13, 5, 14, 14)
-        place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 34, 3, 260, 18)
-        place(animationStyleControl, in: style, 11, 20, 286, 26)
+        place(text("CPU 애니메이션 스타일", size: 11, weight: .semibold), in: style, 34, 3, 242, 18)
+        place(animationStyleControl, in: style, 11, 20, 268, 26)
 
         let motion = GlassCard()
-        place(motion, in: menuBarSettingsView, 0, 238, 308, 40)
-        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 14, 11, 238, 18)
-        place(menuBarMotionSwitch, in: motion, 260, 9, 36, 22)
+        place(motion, in: menuBarSettingsView, 0, 238, 290, 40)
+        place(text("메뉴바 움직임", size: 11, weight: .semibold), in: motion, 14, 11, 220, 18)
+        place(menuBarMotionSwitch, in: motion, 242, 9, 36, 22)
         localizedToolTip(motion, "CPU·GPU는 사용률 · 네트워크는 전송량 · SSD는 읽기/쓰기")
         localizedToolTip(menuBarMotionSwitch, "macOS ‘동작 줄이기’가 켜지면 움직임을 멈춥니다")
 
         let intensity = GlassCard()
-        place(intensity, in: menuBarSettingsView, 0, 284, 308, 58)
-        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 14, 3, 218, 18)
+        place(intensity, in: menuBarSettingsView, 0, 284, 290, 58)
+        place(text("움직임 강도", size: 11, weight: .semibold), in: intensity, 14, 3, 200, 18)
         motionIntensityValue.alignment = .right
-        place(motionIntensityValue, in: intensity, 244, 4, 50, 17)
-        place(motionIntensitySlider, in: intensity, 13, 22, 282, 18)
+        place(motionIntensityValue, in: intensity, 226, 4, 50, 17)
+        place(motionIntensitySlider, in: intensity, 13, 22, 264, 18)
         place(text("차분하게", size: 9, color: PanelColor.secondary), in: intensity, 15, 41, 130, 13)
         let energetic = text("활기차게", size: 9, color: PanelColor.secondary)
         energetic.alignment = .right
-        place(energetic, in: intensity, 164, 41, 130, 13)
+        place(energetic, in: intensity, 146, 41, 130, 13)
 
         let login = GlassCard()
-        place(login, in: menuBarSettingsView, 0, 348, 308, 40)
-        place(text("로그인 시 자동 실행", size: 11, weight: .semibold), in: login, 14, 11, 168, 18)
+        place(login, in: menuBarSettingsView, 0, 348, 290, 40)
+        place(text("로그인 시 자동 실행", size: 11, weight: .semibold), in: login, 14, 11, 150, 18)
         loginLabel.alignment = .right
         loginLabel.font = .systemFont(ofSize: 9)
-        place(loginLabel, in: login, 188, 12, 58, 16)
-        place(loginSwitch, in: login, 260, 9, 36, 22)
+        place(loginLabel, in: login, 170, 12, 58, 16)
+        place(loginSwitch, in: login, 242, 9, 36, 22)
         localizedToolTip(menuBarSettingsView, "설정은 바로 적용되고 다음 실행에도 유지돼요")
         updateMenuBarControls()
     }
@@ -1232,7 +1233,7 @@ extension PanelController {
     var probeCodexRecordsStatus: String { codexRecordsStatus.stringValue }
     var probeCodexPrivacyFits: Bool {
         let privacy = L10n.text("대화 기록 파일에서 추출 · 본문 저장·표시·전송 없음") as NSString
-        return privacy.boundingRect(with: NSSize(width: 280, height: 100), options: .usesLineFragmentOrigin,
+        return privacy.boundingRect(with: NSSize(width: 262, height: 100), options: .usesLineFragmentOrigin,
             attributes: [.font: NSFont.systemFont(ofSize: 9)]).height <= 27
     }
     func probeSetCodexRecordsEnabled(_ enabled: Bool) {
