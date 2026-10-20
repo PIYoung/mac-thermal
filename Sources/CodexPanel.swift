@@ -397,7 +397,7 @@ final class CodexPanelController: NSViewController {
         dailyValue.stringValue = tokenText(daily)
         dailyValue.font = .monospacedDigitSystemFont(ofSize: daily == nil ? 13 : 23, weight: .medium)
         dailyScope.stringValue = L10n.text(enabled && latest.incomplete ? "이 Mac 기록 · 일부" : "이 Mac 기록")
-        dailyValue.toolTip = L10n.text("자동 검토를 제외한 이 Mac의 오늘 사용량입니다. 계정 통계는 OpenAI가 제공한 전체 수치입니다.")
+        dailyValue.toolTip = L10n.text("이 Mac의 로컬 기록에 남은 UTC 오늘 토큰입니다. 계정 전체 사용량이 아닙니다.")
         modelsTitle.stringValue = L10n.text("모델별 · 오늘 TOP 3")
         modelsUnit.stringValue = L10n.text("토큰")
         modelsCard.toolTip = L10n.text("이 Mac의 UTC 오늘 기록에서 모델별 토큰 상위 3개입니다. 막대는 확인된 모든 모델 합계의 비중이며 모델 미상 토큰과 계정 전체 사용량을 포함하지 않습니다.")

@@ -5,7 +5,6 @@ extension L10n {
     static let codexTranslations: [String: [String]] = [
         "계정 통계 연결": ["Account statistics", "アカウント統計に接続", "连接账号统计"],
         "동의 후 계정 통계를 표시합니다": ["Enable account statistics to view the summary", "同意後にアカウント統計を表示します", "同意后显示账号统计"],
-        "자동 검토를 제외한 이 Mac의 오늘 사용량입니다. 계정 통계는 OpenAI가 제공한 전체 수치입니다.": ["Today's local usage excluding auto-review. Account statistics are the full values reported by OpenAI.", "自動レビューを除くこのMacの今日の使用量です。アカウント統計はOpenAIが提供する全体の数値です。", "此Mac今日用量不含自动审核。账号统计为OpenAI提供的完整数值。"],
         "최근 7일": ["Last 7 days", "直近7日", "最近7天"],
         "토큰 구성 · 이 Mac": ["Token mix · this Mac", "トークン構成 · このMac", "令牌构成 · 此Mac"],
         "입력 토큰": ["Input tokens", "入力トークン", "输入令牌"],

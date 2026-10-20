@@ -84,10 +84,10 @@ struct CodexMonitorProbe {
         let reviewPath = try reviewFixture.write("2026/10/19/review.jsonl", meta() + context(model: "codex-auto-review") + token("2026-10-19T01:00:01Z", total: 500))
         let reviewReader = CodexLocalRecordsReader(root: reviewFixture.root)
         let reviewOnly = reviewReader.scan(now: now, cancellation: CodexRecordsCancellation())!
-        require(reviewOnly.dailyTokens == 0 && reviewOnly.recordsCount == 0 && reviewOnly.models.isEmpty && reviewOnly.currentModel == nil && reviewOnly.lastRecordAt == nil, "auto-review-only records are absent from visible local totals, models, counts and current model")
+        require(reviewOnly.dailyTokens == 500 && reviewOnly.recordsCount == 1 && reviewOnly.models.first?.model == "codex-auto-review" && reviewOnly.currentModel == "codex-auto-review" && reviewOnly.lastRecordAt == date("2026-10-19T01:00:01Z"), "auto-review participates in local totals, models, record counts and current model")
         try reviewFixture.append(reviewPath, context("2026-10-19T01:00:02Z", model: "gpt-6-astra", turn: turnB) + token("2026-10-19T01:00:03Z", total: 550, last: 50))
-        let withoutReview = reviewReader.scan(now: now, cancellation: CodexRecordsCancellation())!
-        require(withoutReview.dailyTokens == 50 && withoutReview.recordsCount == 1 && withoutReview.models.count == 1 && withoutReview.models.first?.totalTokens == 50 && withoutReview.currentModel == "gpt-6-astra", "review tokens never leak into following model deltas or shares")
+        let withReview = reviewReader.scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(withReview.dailyTokens == 550 && withReview.recordsCount == 2 && withReview.models.count == 2 && withReview.models.first(where: { $0.model == "gpt-6-astra" })?.totalTokens == 50 && withReview.models.first(where: { $0.model == "codex-auto-review" })?.totalTokens == 500 && withReview.currentModel == "gpt-6-astra", "review and following model usage are included exactly once with separate deltas")
         let previous = try Fixture(); defer { previous.remove() }
         let previousData = meta("2026-10-18T23:00:00Z") + context("2026-10-18T23:00:00Z") + token("2026-10-18T23:59:00Z", total: 1_000) + token("2026-10-19T00:00:01Z", total: 1_025, last: 25)
         try previous.write("2026/10/18/long-lived.jsonl", previousData)
