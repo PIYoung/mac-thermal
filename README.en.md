@@ -51,7 +51,7 @@ Quit the existing app first. Installs into `~/Applications`; no `sudo` required.
 
 Codex record reading is **OFF by default**. When enabled, only model names, token numbers and timestamps from `~/.codex/sessions` are aggregated in memory. These files also contain conversations, but bodies, commands and credentials are never kept, displayed or transferred. Source files are unchanged; switching off stops reading and clears aggregation.
 
-Usage covers **this Mac’s records for today (UTC)**, not account totals or billing. Optional [official sign-in](docs/CODEX_ACCOUNT.md) adds a separate account quota ring and reset countdown. The robot stops after 10 seconds without another new record; it does not indicate live token consumption or task completion.
+Usage covers **this Mac’s records for today (UTC)**, not account totals or billing. Optional [official sign-in](docs/CODEX_ACCOUNT.md) adds account remaining quota and a reset countdown in the panel. The robot stops after 10 seconds without another new record; it does not indicate live token consumption or task completion.
 
 ---
 

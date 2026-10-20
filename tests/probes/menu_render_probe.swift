@@ -328,39 +328,23 @@ struct MenuRenderProbe {
     static func quotaChecks(in directory: URL) throws {
         let time = sample().time
         var local = CodexMonitorSnapshot(appStartedAt: time.addingTimeInterval(-120), connection: .connected)
-        let painter = MenuBarContent.previewQuotaUpdater(sample: sample())
-        let (off, offLayout) = painter(local)
-        local.quota = CodexQuotaSnapshot(connection: .connected, windows: [
-            CodexQuotaWindow(slot: 0, usedPercent: 32, durationMinutes: 300, resetsAt: time.addingTimeInterval(3600)),
-            CodexQuotaWindow(slot: 1, usedPercent: 75, durationMinutes: 10080, resetsAt: time.addingTimeInterval(86400))
-        ], fetchedAt: time)
-        let (on, layout) = painter(local)
-        try check(offLayout[.codex]?.width == 26 && layout[.codex]?.width == 42 && on!.size.width == off!.size.width + 16, "Quota ring must reserve exactly 16 additional points")
-        for metric in all {
-            try check(layout[metric]!.minX == offLayout[metric]!.minX + 16, "Quota ring changed resource spacing")
-            try check(try pixels(on!, region: layout[metric]) == pixels(off!, region: offLayout[metric]), "Quota ring changed neighboring resource pixels")
+        let painter = MenuBarContent.previewCodexUpdater(sample: sample())
+        let (baseline, baselineLayout) = painter(local)
+        for state in [CodexQuotaConnection.connected, .connecting, .unavailable, .needsLogin, .disconnected] {
+            local.quota = CodexQuotaSnapshot(connection: state, windows: [
+                CodexQuotaWindow(slot: 1, usedPercent: 95, durationMinutes: 10080, resetsAt: time.addingTimeInterval(86400))
+            ], fetchedAt: time, blocked: true)
+            let (image, layout) = painter(local)
+            try check(layout[.codex]?.width == 26 && image!.size == baseline!.size, "Panel-only quota must not reserve menu width")
+            try check(try pixels(image!) == pixels(baseline!), "Account quota state must not change menu pixels")
+            for metric in all { try check(layout[metric] == baselineLayout[metric], "Account quota changed resource spacing") }
+            let text = MenuBarContent.previewCodex(sample: sample(), snapshot: local, preferences: MenuBarPreferences(), dark: false).2
+            try check(!text.contains(L10n.text("계정 사용 제한")) && !text.contains(L10n.text("계정 한도 확인 중")), "Panel-only quota must not appear in menu accessibility text")
         }
-        let ring = CGRect(x: layout[.codex]!.minX + 27, y: 3, width: 15, height: 16)
-        let fullPixels = try pixels(on!, region: ring)
-        var warning = local
-        warning.quota.windows = [CodexQuotaWindow(slot: 0, usedPercent: 95, durationMinutes: 300, resetsAt: time.addingTimeInterval(3600))]
-        let (low, lowLayout) = painter(warning)
-        try check(lowLayout[.codex] == layout[.codex] && (try pixels(low!, region: ring)) != fullPixels, "Low quota must update ring color/fill without resizing")
-        local.quota.fetchedAt = time.addingTimeInterval(-181)
-        let stale = painter(local).0!
-        local.quota = CodexQuotaSnapshot(connection: .unavailable)
-        let unknown = painter(local).0!
-        try check(try pixels(stale, region: ring) == pixels(unknown, region: ring), "Stale quota must use the unknown ring")
-        try check(try pixels(unknown, region: ring) != fullPixels, "Unknown quota must never look like a known percentage")
         local.appStartedAt = nil; local.connection = .notRunning
-        try check(painter(local).1[.codex] != nil, "Connected account quota remains available when desktop is closed")
-        local.quota = CodexQuotaSnapshot()
-        try check(painter(local).1[.codex] == nil, "Disconnected account must restore runtime-based visibility")
-        local.appStartedAt = time; local.connection = .connected
-        let restored = painter(local)
-        try check(restored.1[.codex]?.width == 26 && (try pixels(restored.0!)) == pixels(off!), "Disconnect must restore cached compact menu pixels")
-        try NSBitmapImageRep(cgImage: cgImage(on!)).representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent("codex-quota-light.png"))
-        print("PASS Codex quota ring: live cache/width transitions, unchanged neighbors, low/unknown/stale states, account visibility independent of desktop; synthetic only")
+        local.quota.connection = .connected
+        try check(painter(local).1[.codex] == nil, "Account-only connection must not create a menu icon")
+        print("PASS panel-only quota: account states leave menu pixels, 26pt robot width, resource spacing, accessibility and runtime-based visibility unchanged")
     }
 
     static func appearanceCacheChecks() throws {
