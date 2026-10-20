@@ -214,6 +214,109 @@ private final class CodexUsageChart: FlippedView {
     }
 }
 
+
+private final class CodexInsightGrid: GlassCard {
+    let heading = codexText(size: 11, weight: .semibold)
+    private let keys: [String]
+    private let captions: [NSTextField]
+    private let values: [NSTextField]
+    let message = codexText(size: 10, secondary: true, lines: 2)
+    let action = NSButton()
+    let composition = CodexComposition()
+    var showsComposition = false
+    var actionInLastCell = false { didSet { needsLayout = true } }
+    var cardHeight: CGFloat { 30 + CGFloat((keys.count + 1) / 2) * 34 + (showsComposition ? 15 : 6) }
+    init(_ title: String, keys: [String], composition: Bool = false) {
+        self.keys = keys; captions = keys.map { _ in codexText(size: 9, secondary: true) }
+        values = keys.map { _ in codexText(size: 12, weight: .medium, digits: true) }
+        super.init(frame: .zero)
+        heading.stringValue = L10n.text(title); showsComposition = composition
+        addSubview(heading)
+        for field in captions + values { addSubview(field) }
+        addSubview(message); message.isHidden = true; message.alignment = .center
+        addSubview(action); action.isHidden = true; action.isBordered = false
+        action.contentTintColor = PanelColor.blue; action.font = .systemFont(ofSize: 10, weight: .medium)
+        addSubview(self.composition)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+    override func layout() {
+        super.layout()
+        heading.frame = NSRect(x: 12, y: 7, width: bounds.width - 24, height: 17)
+        let cell = (bounds.width - 30) / 2
+        for index in keys.indices {
+            let x = CGFloat(index % 2) * (cell + 6) + 12, y = CGFloat(index / 2) * 34 + 30
+            captions[index].frame = NSRect(x: x, y: y, width: cell, height: 12)
+            values[index].frame = NSRect(x: x, y: y + 12, width: cell, height: 18)
+        }
+        message.frame = NSRect(x: 12, y: 38, width: bounds.width - 24, height: 30)
+        action.frame = actionInLastCell ? NSRect(x: 132, y: 111, width: 114, height: 23) : NSRect(x: 12, y: bounds.height - 33, width: bounds.width - 24, height: 23)
+        composition.frame = NSRect(x: 12, y: bounds.height - 11, width: bounds.width - 24, height: 4)
+        composition.isHidden = !showsComposition || !message.isHidden
+    }
+    func update(title: String, values texts: [String], help: String) {
+        heading.stringValue = title
+        actionInLastCell = false
+        message.isHidden = true; action.isHidden = true
+        for index in keys.indices {
+            captions[index].stringValue = L10n.text(keys[index]); captions[index].isHidden = false
+            values[index].stringValue = texts.indices.contains(index) ? texts[index] : L10n.text("정보 없음")
+            values[index].isHidden = false
+            values[index].toolTip = help
+        }
+        toolTip = help; needsLayout = true
+    }
+    func show(title: String, message key: String, action actionKey: String? = nil) {
+        heading.stringValue = title
+        actionInLastCell = false
+        for field in captions + values { field.isHidden = true }
+        message.stringValue = L10n.text(key); message.isHidden = false
+        action.isHidden = actionKey == nil; action.title = actionKey.map(L10n.text) ?? ""
+        needsLayout = true
+    }
+    #if PANEL_UPDATES_PROBE
+    var probeValues: [String] { values.filter { !$0.isHidden }.map(\.stringValue) }
+    #endif
+}
+private final class CodexComposition: FlippedView {
+    var fraction: Double? { didSet { if oldValue != fraction { needsDisplay = true } } }
+    override func draw(_ rect: NSRect) {
+        PanelColor.divider.setFill(); NSBezierPath(roundedRect: bounds, xRadius: 2, yRadius: 2).fill()
+        guard let fraction, fraction.isFinite else { return }
+        let x = bounds.width * min(1, max(0, fraction))
+        PanelColor.blue.setFill(); NSRect(x: 0, y: 0, width: x, height: bounds.height).fill()
+        PanelColor.violet.setFill(); NSRect(x: x, y: 0, width: bounds.width - x, height: bounds.height).fill()
+    }
+}
+private final class CodexMinuteChart: FlippedView {
+    private var samples: [CodexUsageMinute] = []
+    private var language = ""
+    func update(_ values: [CodexUsageMinute]) {
+        let next = Array(values.suffix(10)), locale = L10n.language.rawValue
+        guard samples != next || language != locale else { return }
+        samples = next; language = locale; needsDisplay = true
+        setAccessibilityElement(true)
+        let formatter = DateFormatter(); formatter.locale = Locale(identifier: L10n.language.localeIdentifier); formatter.dateFormat = "HH:mm"
+        setAccessibilityLabel(L10n.text("최근 10분 · 이 Mac 기록") + ", " + samples.map { formatter.string(from: $0.startedAt) + ": " + ($0.tokens.map { L10n.format("%lld 토큰", $0) } ?? L10n.text("정보 없음")) }.joined(separator: ", "))
+    }
+    override func draw(_ rect: NSRect) {
+        let step = bounds.width / 10, height = max(1, bounds.height - 14)
+        let maxValue = Double(max(1, samples.compactMap(\.tokens).max() ?? 0))
+        for (index, sample) in samples.enumerated() {
+            let x = CGFloat(index) * step + 2, w = max(1, step - 4)
+            PanelColor.divider.setFill(); NSBezierPath(roundedRect: NSRect(x: x, y: 0, width: w, height: height), xRadius: 3, yRadius: 3).fill()
+            if let tokens = sample.tokens {
+                let h = tokens == 0 ? 1 : max(2, height * Double(tokens) / maxValue)
+                PanelColor.blue.withAlphaComponent(0.7).setFill()
+                NSBezierPath(roundedRect: NSRect(x: x, y: height - h, width: w, height: h), xRadius: 3, yRadius: 3).fill()
+            }
+        }
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 8), .foregroundColor: NSColor.secondaryLabelColor]
+        ("−10m" as NSString).draw(at: NSPoint(x: 0, y: bounds.height - 11), withAttributes: attributes)
+        let now = L10n.text("지금") as NSString
+        now.draw(at: NSPoint(x: bounds.width - now.size(withAttributes: attributes).width, y: bounds.height - 11), withAttributes: attributes)
+    }
+}
+
 /// Numeric account quota and local-record metadata only. No authentication data.
 final class CodexPanelController: NSViewController {
     static let surfaceSize = NSSize(width: 300, height: 420)
@@ -232,6 +335,26 @@ final class CodexPanelController: NSViewController {
     private let quotaStatus = codexText(size: 11, secondary: true, lines: 2)
     private let quotaElapsed = codexText(size: 9, secondary: true, digits: true)
     private lazy var accountButton = NSButton(image: NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(accountClicked))
+    private let insightsScroll = NSScrollView()
+    private let insightsDocument = FlippedView()
+    private let breakdownCard = CodexInsightGrid("토큰 구성 · 이 Mac", keys: ["입력 토큰", "출력 토큰", "캐시 재사용률", "출력 중 추론"], composition: true)
+    private let modelDetailCard = CodexInsightGrid("모델 상세", keys: ["입력 토큰", "출력 토큰", "캐시 재사용률", "출력 중 추론"], composition: true)
+    private let weekCard = CodexInsightGrid("최근 7일 요약 · 계정", keys: ["제공된 날짜 합계", "제공된 날짜 평균", "최다 사용일", "자료 일수"])
+    private let summaryCard = CodexInsightGrid("계정 활동 요약", keys: ["누적 토큰", "하루 최고 토큰", "현재 연속 사용", "최장 연속 사용", "최장 턴 시간"])
+    private let flowCard = GlassCard()
+    private let flowTitle = codexText(size: 11, weight: .semibold)
+    private let flowValue = codexText(size: 10, secondary: true, digits: true)
+    private let minuteChart = CodexMinuteChart()
+    private let closedChevron = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)
+    private let openChevron = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
+    private let modelChevrons = (0..<3).map { _ in NSImageView() }
+    private var visibleModels: [CodexModelUsage] = []
+    private var expandedModel: String?
+    private lazy var modelButtons: [NSButton] = (0..<3).map { index in
+        let button = NSButton(title: "", target: self, action: #selector(modelClicked(_:)))
+        button.tag = index; button.isTransparent = true; button.isBordered = false
+        return button
+    }
     private let totalsCard = GlassCard()
     private let modelsCard = GlassCard()
     private let usageCard = GlassCard()
@@ -258,6 +381,7 @@ final class CodexPanelController: NSViewController {
     var refresh: (() -> Void)?
     var accountAction: (() -> Void)?
     var usageAction: (() -> Void)?
+    var summaryAction: (() -> Void)?
     #if PANEL_UPDATES_PROBE
     private var probeVisible = false
     #endif
@@ -322,35 +446,58 @@ final class CodexPanelController: NSViewController {
         }
         quotaStatus.alignment = .center
         codexPlace(quotaStatus, in: quotaCard, 12, 16, 252, 34)
-        codexPlace(totalsCard, in: canvas, 12, 120, 276, 60)
+        insightsScroll.drawsBackground = false
+        insightsScroll.wantsLayer = true
+        insightsScroll.layer?.masksToBounds = true
+        insightsScroll.contentView.wantsLayer = true
+        insightsScroll.contentView.layer?.masksToBounds = true
+        insightsScroll.hasVerticalScroller = true
+        insightsScroll.autohidesScrollers = true
+        insightsScroll.scrollerStyle = .overlay
+        codexPlace(insightsScroll, in: canvas, 12, 120, 276, 266)
+        insightsDocument.frame = NSRect(x: 0, y: 0, width: 258, height: 800)
+        insightsScroll.documentView = insightsDocument
+        codexPlace(totalsCard, in: insightsDocument, 0, 0, 258, 60)
         codexPlace(dailyTitle, in: totalsCard, 12, 9, 126, 16)
-        codexPlace(dailyValue, in: totalsCard, 10, 27, 254, 27)
+        codexPlace(dailyValue, in: totalsCard, 10, 27, 236, 27)
         dailyScope.alignment = .right
-        codexPlace(dailyScope, in: totalsCard, 138, 11, 126, 13)
-        codexPlace(modelsCard, in: canvas, 12, 304, 276, 82)
+        codexPlace(dailyScope, in: totalsCard, 132, 11, 114, 13)
+        codexPlace(modelsCard, in: insightsDocument, 0, 184, 258, 82)
         codexPlace(modelsTitle, in: modelsCard, 12, 5, 174, 17)
         modelsUnit.alignment = .right
-        codexPlace(modelsUnit, in: modelsCard, 188, 7, 76, 14)
+        codexPlace(modelsUnit, in: modelsCard, 170, 7, 76, 14)
         for index in 0..<3 {
             let y = CGFloat(25 + index * 17)
-            codexPlace(modelNames[index], in: modelsCard, 12, y, 167, 13)
+            codexPlace(modelNames[index], in: modelsCard, 12, y, 149, 13)
             modelValues[index].alignment = .right
-            codexPlace(modelValues[index], in: modelsCard, 184, y, 80, 13)
+            codexPlace(modelValues[index], in: modelsCard, 166, y, 64, 13)
             modelBars[index].color = [PanelColor.blue, PanelColor.violet, PanelColor.teal][index]
-            codexPlace(modelBars[index], in: modelsCard, 12, y + 13, 252, 2)
+            codexPlace(modelBars[index], in: modelsCard, 12, y + 13, 234, 2)
+            modelChevrons[index].contentTintColor = .tertiaryLabelColor
+            modelChevrons[index].imageScaling = .scaleProportionallyDown
+            modelChevrons[index].setAccessibilityElement(false)
+            codexPlace(modelChevrons[index], in: modelsCard, 238, y + 2, 7, 9)
+            codexPlace(modelButtons[index], in: modelsCard, 8, y - 1, 242, 17)
         }
-        codexPlace(modelsEmpty, in: modelsCard, 12, 29, 252, 36)
-        codexPlace(usageCard, in: canvas, 12, 188, 276, 108)
+        codexPlace(modelsEmpty, in: modelsCard, 12, 29, 234, 36)
+        codexPlace(usageCard, in: insightsDocument, 0, 68, 258, 108)
         codexPlace(usageTitle, in: usageCard, 12, 9, 104, 17)
         usageScope.isBordered = false; usageScope.contentTintColor = .secondaryLabelColor
         usageScope.font = .systemFont(ofSize: 9); usageScope.alignment = .right
-        codexPlace(usageScope, in: usageCard, 168, 7, 96, 20)
-        codexPlace(usageChart, in: usageCard, 12, 30, 252, 67)
+        codexPlace(usageScope, in: usageCard, 150, 7, 96, 20)
+        codexPlace(usageChart, in: usageCard, 12, 30, 234, 67)
         usageStatus.alignment = .center
-        codexPlace(usageStatus, in: usageCard, 12, 31, 252, 28)
+        codexPlace(usageStatus, in: usageCard, 12, 31, 234, 28)
         usageConnectButton.isBordered = false; usageConnectButton.contentTintColor = PanelColor.blue
         usageConnectButton.font = .systemFont(ofSize: 10, weight: .medium)
-        codexPlace(usageConnectButton, in: usageCard, 66, 65, 144, 23)
+        codexPlace(usageConnectButton, in: usageCard, 57, 65, 144, 23)
+        for card in [modelDetailCard, breakdownCard, flowCard, weekCard, summaryCard] as [NSView] { insightsDocument.addSubview(card) }
+        codexPlace(flowTitle, in: flowCard, 12, 7, 180, 17)
+        flowValue.alignment = .right
+        codexPlace(flowValue, in: flowCard, 186, 9, 60, 15)
+        codexPlace(minuteChart, in: flowCard, 12, 32, 234, 44)
+        summaryCard.action.target = self; summaryCard.action.action = #selector(summaryClicked)
+        layoutInsights()
         let line = NSBox()
         line.boxType = .separator
         codexPlace(line, in: canvas, 14, 394, 272, 1)
@@ -447,6 +594,7 @@ final class CodexPanelController: NSViewController {
         let models = enabled ? latest.models.filter { $0.totalTokens > 0 && modelName($0.model) != L10n.text("정보 없음") }.sorted {
             $0.totalTokens == $1.totalTokens ? $0.model < $1.model : $0.totalTokens > $1.totalTokens
         } : []
+        visibleModels = Array(models.prefix(3))
         let total = models.reduce(0.0) { $0 + Double($1.totalTokens) }
         modelsEmpty.isHidden = !models.isEmpty
         modelsEmpty.stringValue = L10n.text(!enabled ? "기록 읽기를 켜면 표시됩니다" :
@@ -472,9 +620,93 @@ final class CodexPanelController: NSViewController {
         } ?? notice ?? L10n.text("업데이트 정보 없음")
         updated.toolTip = enabled && latest.incomplete ? L10n.text("검사 범위나 읽기 제한 때문에 일부 기록만 집계했습니다. 표시값은 전체 사용량이 아닙니다.") : notice ?? L10n.text("이 Mac의 로컬 기록만 집계합니다")
         renderUsage()
+        renderInsights()
         refreshButton.isEnabled = enabled || latest.quota.isEnabled
         refreshButton.toolTip = L10n.text("Codex 지금 새로고침")
         refreshButton.setAccessibilityLabel(L10n.text("Codex 지금 새로고침"))
+    }
+
+    private func layoutInsights() {
+        var cards: [(NSView, CGFloat)] = [(totalsCard, 60), (usageCard, 108), (modelsCard, 82)]
+        if expandedModel != nil { cards.append((modelDetailCard, modelDetailCard.cardHeight)) }
+        modelDetailCard.isHidden = expandedModel == nil
+        cards += [(breakdownCard, breakdownCard.cardHeight), (flowCard, 86), (weekCard, weekCard.cardHeight), (summaryCard, summaryCard.cardHeight)]
+        var y: CGFloat = 0
+        for (card, height) in cards {
+            let rect = NSRect(x: 0, y: y, width: 258, height: height)
+            if card.frame != rect { card.frame = rect }
+            y += height + 8
+        }
+        let size = NSSize(width: 258, height: max(266, y - 8))
+        if insightsDocument.frame.size != size { insightsDocument.frame.size = size }
+    }
+    @objc private func modelClicked(_ sender: NSButton) {
+        guard visibleModels.indices.contains(sender.tag) else { return }
+        let model = visibleModels[sender.tag].model
+        expandedModel = expandedModel == model ? nil : model
+        renderInsights(); layoutInsights()
+    }
+    @objc private func summaryClicked() {
+        if latest.quota.connection != .connected { accountAction?() }
+        else if latest.quota.usage.state == .disabled { usageAction?() }
+        else { summaryAction?() }
+    }
+    private func renderInsights() {
+        func ratio(_ fraction: Double?) -> String { fraction.map { L10n.format("%.0f%%", $0 * 100) } ?? L10n.text("정보 없음") }
+        let localHelp = L10n.text("이 Mac의 로컬 기록 기준입니다. 캐시는 입력에, 추론은 출력에 포함되며 합계에 다시 더하지 않습니다.")
+        func breakdown(_ models: [CodexModelUsage], into card: CodexInsightGrid, title: String) {
+            let value = latest.recordsEnabled ? CodexTokenBreakdown.aggregate(models, knownEmpty: latest.recordsCount == 0 && !latest.incomplete) : nil
+            card.update(title: title, values: [tokenText(value?.input), tokenText(value?.output), ratio(value?.cacheFraction), ratio(value?.reasoningFraction)], help: localHelp)
+            card.composition.fraction = value?.inputFraction
+        }
+        breakdown(latest.models, into: breakdownCard, title: L10n.text("토큰 구성 · 이 Mac"))
+        if let selected = expandedModel, let usage = visibleModels.first(where: { $0.model == selected }) {
+            breakdown([usage], into: modelDetailCard, title: selected)
+        } else { expandedModel = nil }
+        for (index, button) in modelButtons.enumerated() {
+            button.isHidden = !visibleModels.indices.contains(index)
+            modelChevrons[index].isHidden = button.isHidden
+            if visibleModels.indices.contains(index) {
+                modelChevrons[index].image = expandedModel == visibleModels[index].model ? openChevron : closedChevron
+                button.setAccessibilityLabel(L10n.format("모델 %@ 상세 보기", visibleModels[index].model))
+                button.toolTip = L10n.text("누르면 입력·출력·캐시·추론 비중을 펼칩니다")
+            }
+        }
+        flowTitle.stringValue = L10n.text("최근 10분 · 이 Mac 기록")
+        let minutes = latest.recordsEnabled ? latest.recentMinutes : []
+        minuteChart.update(minutes)
+        let observed = minutes.compactMap(\.tokens)
+        var minuteTotal: Int64? = observed.isEmpty ? nil : 0
+        for value in observed {
+            guard value >= 0, let before = minuteTotal, before <= Int64.max - value else { minuteTotal = nil; break }
+            minuteTotal = before + value
+        }
+        flowValue.stringValue = tokenText(minuteTotal)
+        flowCard.toolTip = L10n.text("기록 시각별 1분 증가량입니다. 실시간 생성 속도나 실제 작업 시간을 뜻하지 않으며 빈 구간은 정보 없음입니다.")
+        let usage = latest.quota.usage
+        let fresh = latest.quota.connection == .connected && usage.isFresh(at: renderNow)
+        let week = CodexWeekInsight.aggregate(fresh ? usage.days : [])
+        weekCard.update(title: L10n.text("최근 7일 요약 · 계정"), values: [tokenText(week.count > 0 ? week.total : nil), tokenText(week.average), week.peakDay.map { String($0.suffix(5)).replacingOccurrences(of: "-", with: "/") } ?? L10n.text("정보 없음"), "\(week.count)/7"], help: L10n.text("서버가 제공한 날짜만 계산합니다. 오늘은 진행 중일 수 있고 빈 날짜는 0으로 계산하지 않습니다."))
+        let summaryTitle = L10n.text("계정 활동 요약")
+        if latest.quota.connection != .connected {
+            summaryCard.show(title: summaryTitle, message: usageStatus.stringValue,
+                action: usageConnectButton.isHidden ? nil : usageConnectButton.title)
+        } else if !usage.summaryEnabled {
+            summaryCard.show(title: summaryTitle, message: "동의 후 계정 요약을 표시합니다", action: "계정 요약 연결")
+        } else if !fresh {
+            summaryCard.show(title: summaryTitle, message: "사용량 통계 갱신 대기 중", action: "계정 요약 관리")
+        } else {
+            let summary = usage.summary
+            func days(_ n: Int64?) -> String { n.map { L10n.format("%lld일", $0) } ?? L10n.text("정보 없음") }
+            // The service may return any subset. Missing values never become zero.
+            let turn = summary.longestRunningTurnSec.flatMap { $0 <= 315_576_000 ? duration(Double($0)) : nil } ?? L10n.text("정보 없음")
+            summaryCard.update(title: summaryTitle, values: [tokenText(summary.lifetimeTokens), tokenText(summary.peakDailyTokens), days(summary.currentStreakDays), days(summary.longestStreakDays), turn], help: L10n.text("OpenAI가 반환한 계정 요약입니다. 최장 턴은 실제 집중 작업 시간이 아니며 미제공 수치는 정보 없음입니다."))
+            summaryCard.action.title = L10n.text("계정 요약 관리")
+            summaryCard.action.isHidden = false
+            // Keep the action in the unused final grid cell.
+            summaryCard.actionInLastCell = true
+        }
+        layoutInsights()
     }
 
     private func renderUsage() {
@@ -610,6 +842,16 @@ extension CodexPanelController {
     var probeUsageButtonVisible: Bool { !usageConnectButton.isHidden }
     func probeClickUsageAction() { usageConnectButton.performClick(nil) }
     var probeChartFrame: NSRect { usageChart.frame }
+    func probeExpandModel(_ index: Int) { modelButtons[index].performClick(nil); view.layoutSubtreeIfNeeded() }
+    var probeBreakdown: [String] { breakdownCard.probeValues }
+    var probeModelDetails: [String] { modelDetailCard.isHidden ? [] : modelDetailCard.probeValues }
+    var probeWeek: [String] { weekCard.probeValues }
+    var probeSummary: [String] { summaryCard.probeValues }
+    var probeInsightsHeight: CGFloat { insightsDocument.frame.height }
+    func probeScrollInsights(_ y: CGFloat) {
+        insightsScroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(y, insightsDocument.frame.height - insightsScroll.contentSize.height))))
+        insightsScroll.reflectScrolledClipView(insightsScroll.contentView)
+    }
     var probeSeparateCardsVisible: Bool { !usageCard.isHidden && !modelsCard.isHidden && !usageCard.frame.intersects(modelsCard.frame) }
     var probeStrings: [String: String] {
         ["activity": activity.stringValue, "elapsed": elapsed.stringValue, "model": model.stringValue,

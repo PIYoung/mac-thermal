@@ -75,6 +75,12 @@ struct CodexMonitorProbe {
         let rollback = reader.scan(now: now.addingTimeInterval(4), cancellation: CodexRecordsCancellation())!
         require(rollback.dailyTokens == 180 && rollback.incomplete, "old events and rollback never replay historical totals")
 
+        let recentFixture = try Fixture(); defer { recentFixture.remove() }
+        let recentPath = try recentFixture.write("2026/10/19/recent.jsonl", meta() + context() + line("event_msg", "2026-10-19T11:59:00Z", ["type": "token_count", "info": ["total_token_usage": numbers(100, cached: 60, output: 20, reasoning: 10), "last_token_usage": numbers(100, cached: 60, output: 20, reasoning: 10)]]))
+        _ = recentPath
+        let minuteSnapshot = CodexLocalRecordsReader(root: recentFixture.root).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(minuteSnapshot.recentMinutes.count == 10 && minuteSnapshot.recentMinutes.compactMap(\.tokens).reduce(0, +) == 100, "ten one-minute buckets use accepted record timestamps")
+        require(minuteSnapshot.models.first?.cachedInputTokens == 60 && minuteSnapshot.models.first?.outputTokens == 20, "breakdown counters preserve subsets")
         let previous = try Fixture(); defer { previous.remove() }
         let previousData = meta("2026-10-18T23:00:00Z") + context("2026-10-18T23:00:00Z") + token("2026-10-18T23:59:00Z", total: 1_000) + token("2026-10-19T00:00:01Z", total: 1_025, last: 25)
         try previous.write("2026/10/18/long-lived.jsonl", previousData)
@@ -242,7 +248,7 @@ struct CodexMonitorProbe {
         monitor.setRecordsEnabled(false)
         let until = Date().addingTimeInterval(0.3)
         while RunLoop.current.run(mode: .default, before: until), Date() < until {}
-        require(snapshots.last?.recordsEnabled == false && snapshots.last?.dailyTokens == nil && snapshots.last?.models.isEmpty == true, "off clears counts and rejects in-flight enabled callbacks")
+        require(snapshots.last?.recordsEnabled == false && snapshots.last?.dailyTokens == nil && snapshots.last?.models.isEmpty == true && snapshots.last?.recentMinutes.isEmpty == true, "off clears counts and rejects in-flight enabled callbacks")
         require(!defaults.bool(forKey: CodexMonitor.recordsEnabledKey), "explicit toggle persistence")
         monitor.stop(); let count = snapshots.count; monitor.refresh()
         require(snapshots.count == count, "stop has no late refresh delivery")

@@ -17,13 +17,17 @@ enum LoginItemManager {
         return panel.view.subviews.compactMap { $0 as? NSVisualEffectView }.first!.subviews.first!
     }
     private static func bounds(_ node: NSView) {
+        if let scroll = node as? NSScrollView, let document = scroll.documentView {
+            precondition(document.frame.width <= scroll.contentSize.width + 0.5)
+            bounds(document); return
+        }
         for child in node.subviews where !child.isHidden {
             precondition(node.bounds.insetBy(dx: -0.5, dy: -0.5).contains(child.frame),
                 "Codex content outside parent: \(type(of: child)) \(child.frame) in \(node.bounds)")
             if !(child is NSControl) { bounds(child) }
         }
     }
-    private static func render(_ panel: CodexPanelController, appearance: NSAppearance, output: URL, hover: NSPoint? = nil) throws {
+    private static func render(_ panel: CodexPanelController, appearance: NSAppearance, output: URL, hover: NSPoint? = nil, scrollY: CGFloat = 0) throws {
         let content = canvas(panel)
         content.removeFromSuperview()
         let material = NSVisualEffectView(frame: NSRect(origin: .zero, size: CodexPanelController.surfaceSize))
@@ -38,6 +42,7 @@ enum LoginItemManager {
         window.appearance = appearance
         window.contentView = material
         material.layoutSubtreeIfNeeded()
+        panel.probeScrollInsights(scrollY)
         material.displayIfNeeded()
         if let hover { panel.probeHoverUsage(at: hover); material.displayIfNeeded() }
         CATransaction.flush()
@@ -106,7 +111,7 @@ enum LoginItemManager {
             precondition(modelHeading.size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]).width <= 174)
             precondition(panel.probeStrings["scope"] == L10n.text("이 Mac 기록"))
             let partialScope = L10n.text("이 Mac 기록 · 일부") as NSString
-            precondition(partialScope.size(withAttributes: [.font: NSFont.systemFont(ofSize: 9)]).width <= 126,
+            precondition(partialScope.size(withAttributes: [.font: NSFont.systemFont(ofSize: 9)]).width <= 114,
                 "The local-source scope must fit beside the today heading")
             precondition(panel.probeStrings["counts"] == L10n.format("오늘 %lld개 기록", Int64(123)))
             precondition(panel.probeStrings["elapsed"]?.hasPrefix(L10n.format("앱 %@", "")) == true)
@@ -212,7 +217,21 @@ enum LoginItemManager {
             graph.quota.usage = CodexUsageSnapshot(state: .ready, days: template.days.enumerated().map {
                 CodexDailyUsage(day: $0.element.day, tokens: $0.offset == 3 ? nil : Int64([0, 4000, 1200, 0, 6000, 2800, 4200][$0.offset]))
             }, fetchedAt: usageNow)
+            graph.models = [CodexModelUsage(model: "gpt-alpha", inputTokens: 1000, cachedInputTokens: 750, outputTokens: 500, reasoningOutputTokens: 250, totalTokens: 1500)]
+            graph.dailyTokens = 1500
+            graph.recentMinutes = (0..<10).map { CodexUsageMinute(startedAt: usageNow.addingTimeInterval(Double($0 - 9) * 60), tokens: Int64($0 * 100)) }
+            graph.quota.usage.summaryEnabled = true
+            graph.quota.usage.summary = CodexAccountSummary(lifetimeTokens: 100000, peakDailyTokens: 50000, longestRunningTurnSec: 540, currentStreakDays: 8, longestStreakDays: 14)
             panel.apply(graph)
+            precondition(panel.probeBreakdown == ["1.0K", "500", L10n.format("%.0f%%", 75.0), L10n.format("%.0f%%", 50.0)])
+            precondition(panel.probeWeek[3] == "6/7", "Missing day must be excluded from account averages")
+            precondition(panel.probeSummary.count == 5 && panel.probeSummary[4] == "09:00")
+            let collapsed = panel.probeInsightsHeight
+            panel.probeExpandModel(0)
+            precondition(panel.probeModelDetails == panel.probeBreakdown && panel.probeInsightsHeight > collapsed)
+            bounds(canvas(panel))
+            panel.probeExpandModel(0)
+            precondition(panel.probeModelDetails.isEmpty && panel.probeInsightsHeight == collapsed)
             precondition(panel.probeUsageReady && panel.probeUsageTitle == L10n.text("최근 7일"))
             precondition(panel.probeUsageSource == L10n.text("계정 토큰"))
             let grouping = NumberFormatter()
@@ -232,11 +251,11 @@ enum LoginItemManager {
             extreme.quota.usage.days[6] = CodexDailyUsage(day: template.days[6].day, tokens: maxTokens)
             panel.apply(extreme)
             precondition(panel.probeUsageHoverFrame == nil, "Changed data must clear stale hover")
-            for position in [NSPoint(x: 0, y: 0), NSPoint(x: 251, y: 0), NSPoint(x: 251, y: 66), NSPoint(x: 0, y: 66)] {
+            for position in [NSPoint(x: 0, y: 0), NSPoint(x: 233, y: 0), NSPoint(x: 233, y: 66), NSPoint(x: 0, y: 66)] {
                 panel.probeHoverUsage(at: position)
                 precondition(NSRect(origin: .zero, size: panel.probeChartFrame.size).contains(panel.probeUsageHoverFrame!), "Hover callout must fit near every edge")
             }
-            panel.probeHoverUsage(at: NSPoint(x: 251, y: 30))
+            panel.probeHoverUsage(at: NSPoint(x: 233, y: 30))
             precondition(panel.probeUsageHoverValue == L10n.format("%@ 토큰", grouping.string(from: NSNumber(value: maxTokens))!))
             panel.probeExitUsage()
             precondition(panel.probeUsageHoverFrame == nil)
@@ -300,9 +319,12 @@ enum LoginItemManager {
             documentation.quota.usage = CodexUsageSnapshot(state: .ready, days: template.days.enumerated().map {
                 CodexDailyUsage(day: $0.element.day, tokens: Int64([18000, 64000, 32000, 91000, 47000, 76000, 56000][$0.offset]))
             }, fetchedAt: usageNow)
-            documentation.models = [CodexModelUsage(model: "model-alpha", totalTokens: 182_000),
-                                    CodexModelUsage(model: "model-beta", totalTokens: 64_000),
-                                    CodexModelUsage(model: "model-gamma", totalTokens: 21_000)]
+            documentation.models = [CodexModelUsage(model: "model-alpha", inputTokens: 150_000, cachedInputTokens: 120_000, outputTokens: 32_000, reasoningOutputTokens: 12_000, totalTokens: 182_000),
+                                    CodexModelUsage(model: "model-beta", inputTokens: 50_000, cachedInputTokens: 20_000, outputTokens: 14_000, reasoningOutputTokens: 4_000, totalTokens: 64_000),
+                                    CodexModelUsage(model: "model-gamma", inputTokens: 17_000, cachedInputTokens: 9_000, outputTokens: 4_000, reasoningOutputTokens: 2_000, totalTokens: 21_000)]
+            documentation.quota.usage.summaryEnabled = true
+            documentation.quota.usage.summary = CodexAccountSummary(lifetimeTokens: 1234567890, peakDailyTokens: 9123456, longestRunningTurnSec: 540, currentStreakDays: 8, longestStreakDays: 14)
+            documentation.recentMinutes = (0..<10).map { CodexUsageMinute(startedAt: Date().addingTimeInterval(Double($0 - 9) * 60), tokens: Int64([0,1200,3000,500,0,4000,6000,1200,2400,900][$0])) }
             for language in AppLanguage.allCases {
                 L10n.setLanguage(language, defaults: defaults)
                 let appearance = NSAppearance(named: .aqua)!
@@ -311,6 +333,12 @@ enum LoginItemManager {
                 panel.apply(documentation)
                 panel.prepareForPresentation()
                 try render(panel, appearance: appearance, output: output.appendingPathComponent("codex-\(language.rawValue)-light.png"))
+                let detailPanel = CodexPanelController()
+                detailPanel.apply(documentation); detailPanel.prepareForPresentation(); detailPanel.probeExpandModel(0)
+                try render(detailPanel, appearance: appearance, output: output.appendingPathComponent("codex-insights-\(language.rawValue).png"), scrollY: 274)
+                let summaryPanel = CodexPanelController()
+                summaryPanel.apply(documentation); summaryPanel.prepareForPresentation()
+                try render(summaryPanel, appearance: appearance, output: output.appendingPathComponent("codex-summary-\(language.rawValue).png"), scrollY: 530)
                 let hoverPanel = CodexPanelController()
                 hoverPanel.apply(documentation); hoverPanel.prepareForPresentation()
                 try render(hoverPanel, appearance: appearance, output: output.appendingPathComponent("codex-hover-\(language.rawValue).png"), hover: NSPoint(x: 126, y: 30))

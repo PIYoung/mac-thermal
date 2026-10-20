@@ -84,13 +84,18 @@ struct CodexUsageSnapshot: Equatable {
     var state: CodexUsageState = .disabled
     var days: [CodexDailyUsage] = []
     var fetchedAt: Date?
+    var summaryEnabled = false
+    var summary = CodexAccountSummary()
 
     func isFresh(at now: Date) -> Bool {
         guard state == .ready, let fetchedAt else { return false }
         return (-5...900).contains(now.timeIntervalSince(fetchedAt))
     }
-    static func parse(_ result: [String: Any], now: Date) -> Self {
-        guard let rows = result["dailyUsageBuckets"] as? [[String: Any]], rows.count <= 4096 else { return Self(state: .unavailable) }
+    static func parse(_ result: [String: Any], now: Date, includeSummary: Bool = false) -> Self {
+        let summary = includeSummary ? CodexAccountSummary.parse(result["summary"]) : CodexAccountSummary()
+        guard let rows = result["dailyUsageBuckets"] as? [[String: Any]], rows.count <= 4096 else {
+            return Self(state: summary.isEmpty ? .unavailable : .ready, fetchedAt: now, summaryEnabled: includeSummary, summary: summary)
+        }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -109,7 +114,7 @@ struct CodexUsageSnapshot: Equatable {
             if let previous = values[day], previous != count { conflicts.insert(day) }
             values[day] = count
         }
-        return Self(state: .ready, days: keys.map { CodexDailyUsage(day: $0, tokens: conflicts.contains($0) ? nil : values[$0]) }, fetchedAt: now)
+        return Self(state: .ready, days: keys.map { CodexDailyUsage(day: $0, tokens: conflicts.contains($0) ? nil : values[$0]) }, fetchedAt: now, summaryEnabled: includeSummary, summary: summary)
     }
 }
 
@@ -140,10 +145,70 @@ struct CodexMonitorSnapshot {
     /// UTC-today totals from local records; not the whole account's usage.
     var dailyTokens: Int64?
     var models: [CodexModelUsage] = []
+    var recentMinutes: [CodexUsageMinute] = []
     var updatedAt: Date?
     /// An original localized UI key, never an upstream error message.
     var noticeKey: String?
     var quota = CodexQuotaSnapshot()
 
     static var pending: Self { Self() }
+}
+
+struct CodexAccountSummary: Equatable {
+    var lifetimeTokens: Int64?
+    var peakDailyTokens: Int64?
+    var longestRunningTurnSec: Int64?
+    var currentStreakDays: Int64?
+    var longestStreakDays: Int64?
+    var isEmpty: Bool { [lifetimeTokens, peakDailyTokens, longestRunningTurnSec, currentStreakDays, longestStreakDays].allSatisfy { $0 == nil } }
+    static func parse(_ value: Any?) -> Self {
+        let data = value as? [String: Any] ?? [:]
+        func number(_ key: String) -> Int64? {
+            guard let n = CodexQuotaSnapshot.number(data[key]), n.rounded() == n,
+                  (0...9_007_199_254_740_991).contains(n) else { return nil }
+            return Int64(n)
+        }
+        return Self(lifetimeTokens: number("lifetimeTokens"), peakDailyTokens: number("peakDailyTokens"),
+            longestRunningTurnSec: number("longestRunningTurnSec"), currentStreakDays: number("currentStreakDays"), longestStreakDays: number("longestStreakDays"))
+    }
+}
+struct CodexUsageMinute: Equatable {
+    let startedAt: Date
+    var tokens: Int64?
+}
+struct CodexTokenBreakdown: Equatable {
+    let input: Int64
+    let output: Int64
+    let cached: Int64
+    let reasoning: Int64
+    var total: Int64 { input + output }
+    var inputFraction: Double? { total > 0 ? Double(input) / Double(total) : nil }
+    var cacheFraction: Double? { input > 0 ? Double(cached) / Double(input) : nil }
+    var reasoningFraction: Double? { output > 0 ? Double(reasoning) / Double(output) : nil }
+    static func aggregate(_ models: [CodexModelUsage], knownEmpty: Bool) -> Self? {
+        guard !models.isEmpty || knownEmpty else { return nil }
+        var input: Int64 = 0, output: Int64 = 0, cached: Int64 = 0, reasoning: Int64 = 0
+        for model in models {
+            guard [model.inputTokens, model.outputTokens, model.cachedInputTokens, model.reasoningOutputTokens, model.totalTokens].allSatisfy({ $0 >= 0 }),
+                  model.inputTokens <= Int64.max - model.outputTokens, model.inputTokens + model.outputTokens == model.totalTokens,
+                  model.cachedInputTokens <= model.inputTokens, model.reasoningOutputTokens <= model.outputTokens,
+                  input <= Int64.max - model.inputTokens, output <= Int64.max - model.outputTokens,
+                  cached <= Int64.max - model.cachedInputTokens, reasoning <= Int64.max - model.reasoningOutputTokens else { return nil }
+            input += model.inputTokens; output += model.outputTokens; cached += model.cachedInputTokens; reasoning += model.reasoningOutputTokens
+        }
+        guard input <= Int64.max - output else { return nil }
+        return Self(input: input, output: output, cached: cached, reasoning: reasoning)
+    }
+}
+struct CodexWeekInsight {
+    let count: Int
+    let total: Int64
+    let average: Int64?
+    let peakDay: String?
+    static func aggregate(_ days: [CodexDailyUsage]) -> Self {
+        let known = days.prefix(7).filter { ($0.tokens ?? -1) >= 0 && ($0.tokens ?? 0) <= 9_007_199_254_740_991 }
+        let total = known.reduce(Int64(0)) { $0 + ($1.tokens ?? 0) }
+        return Self(count: known.count, total: total, average: known.isEmpty ? nil : total / Int64(known.count),
+            peakDay: known.max { ($0.tokens ?? 0) < ($1.tokens ?? 0) }?.day)
+    }
 }

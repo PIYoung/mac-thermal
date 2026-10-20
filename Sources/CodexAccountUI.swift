@@ -38,6 +38,23 @@ final class CodexAccountPresenter: NSObject, NSWindowDelegate {
         if answer == .alertThirdButtonReturn { client.setUsageApproved(false) }
     }
 
+    func showSummaryReview() {
+        guard client.latest.connection == .connected else { showAccount(); return }
+        guard client.latest.usage.state != .disabled else { showUsageReview(); return }
+        let enabled = client.latest.usage.summaryEnabled
+        let alert = NSAlert()
+        alert.messageText = L10n.text("계정 요약 연결")
+        alert.informativeText = L10n.text("기존 OpenAI 응답에서 누적 토큰·하루 최고 토큰·현재 및 최장 연속 사용일·최장 턴 시간 5개를 추가로 표시합니다. 숫자만 이 Mac의 메모리에 보관하고 개발자 서버 전송이나 파일 저장은 하지 않습니다. 끄면 요약 숫자를 지우며 날짜별 그래프는 유지됩니다. 제공되지 않는 값은 정보 없음으로 표시합니다.")
+        alert.addButton(withTitle: L10n.text("취소"))
+        alert.addButton(withTitle: L10n.text(enabled ? "지금 새로고침" : "동의하고 조회"))
+        if enabled { alert.addButton(withTitle: L10n.text("계정 요약 끄기")) }
+        let answer = alert.runModal()
+        if answer == .alertSecondButtonReturn {
+            if enabled { client.refresh() } else { client.setSummaryApproved(true) }
+        }
+        if answer == .alertThirdButtonReturn { client.setSummaryApproved(false) }
+    }
+
     func showDeviceLogin(url: URL, code: String) {
         closeLogin()
         loginURL = url

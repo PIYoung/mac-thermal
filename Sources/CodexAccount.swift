@@ -159,6 +159,7 @@ final class CodexQuotaClient {
     static let enabledKey = "codexAccountQuotaEnabledV1"
     static let removalKey = "codexAccountRemovalPendingV1"
     static let usageKey = "codexDailyUsageApprovedV1"
+    static let summaryKey = "codexAccountSummaryApprovedV1"
     private var usage = CodexUsageSnapshot()
     private var lastUsageAttempt: Date?
     private let defaults: UserDefaults
@@ -227,10 +228,20 @@ final class CodexQuotaClient {
         defaults.set(enabled, forKey: Self.usageKey)
         usage = CodexUsageSnapshot(state: enabled ? .loading : .disabled)
         if !enabled {
+            defaults.set(false, forKey: Self.summaryKey)
             for id in pending.filter({ $0.value == .usage }).map(\.key) {
                 pending.removeValue(forKey: id); deadlines.removeValue(forKey: id)?.cancel()
             }
         }
+        publish(latest)
+        if enabled { requestUsage(manual: true) }
+    }
+
+    func setSummaryApproved(_ enabled: Bool) {
+        guard !enabled || defaults.bool(forKey: Self.usageKey) else { return }
+        defaults.set(enabled, forKey: Self.summaryKey)
+        usage.summaryEnabled = enabled
+        usage.summary = CodexAccountSummary()
         publish(latest)
         if enabled { requestUsage(manual: true) }
     }
@@ -253,6 +264,7 @@ final class CodexQuotaClient {
         disconnecting = true
         defaults.set(false, forKey: Self.enabledKey)
         defaults.set(false, forKey: Self.usageKey)
+        defaults.set(false, forKey: Self.summaryKey)
         usage = CodexUsageSnapshot()
         defaults.set(true, forKey: Self.removalKey)
         wantsLogin = false
@@ -285,6 +297,7 @@ final class CodexQuotaClient {
     private func publish(_ snapshot: CodexQuotaSnapshot) {
         var value = snapshot
         value.usage = defaults.bool(forKey: Self.usageKey) ? usage : CodexUsageSnapshot()
+        value.usage.summaryEnabled = defaults.bool(forKey: Self.usageKey) && defaults.bool(forKey: Self.summaryKey)
         latest = value; onUpdate?(value)
     }
 
@@ -414,7 +427,7 @@ final class CodexQuotaClient {
             publish(CodexQuotaSnapshot.parse(result, now: now()))
         case .usage:
             guard defaults.bool(forKey: Self.usageKey) else { return }
-            usage = CodexUsageSnapshot.parse(result, now: now()); publish(latest)
+            usage = CodexUsageSnapshot.parse(result, now: now(), includeSummary: defaults.bool(forKey: Self.summaryKey)); publish(latest)
         case .cancel: break
         case .logout: finishDisconnect()
         }

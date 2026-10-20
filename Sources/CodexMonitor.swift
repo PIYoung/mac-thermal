@@ -524,6 +524,9 @@ final class CodexLocalRecordsReader {
         }
         var models: [String: CodexModelUsage] = [:]
         var total: Int64 = 0
+        let minuteEnd = floor(now.timeIntervalSince1970 / 60) * 60 + 60
+        let minuteStart = minuteEnd - 600
+        var minuteTotals: [Int64?] = (0..<10).map { incomplete || minuteStart + Double($0) * 60 < dayStart.timeIntervalSince1970 ? nil : 0 }
         for record in records.values {
             var usage = models[record.model] ?? CodexModelUsage(model: record.model)
             let values = [usage.inputTokens, usage.cachedInputTokens, usage.outputTokens, usage.reasoningOutputTokens, usage.totalTokens, total]
@@ -533,10 +536,18 @@ final class CodexLocalRecordsReader {
             usage.outputTokens += record.numbers.output; usage.reasoningOutputTokens += record.numbers.reasoning
             usage.totalTokens += record.numbers.total; total += record.numbers.total
             models[record.model] = usage
+            let timestamp = record.key.timestamp.timeIntervalSince1970
+            if timestamp >= minuteStart, timestamp <= now.timeIntervalSince1970 {
+                let index = min(9, max(0, Int((timestamp - minuteStart) / 60)))
+                let before = minuteTotals[index] ?? 0
+                if before <= Int64.max - record.numbers.total { minuteTotals[index] = before + record.numbers.total }
+                else { incomplete = true; minuteTotals[index] = nil }
+            }
             if snapshot.lastRecordAt == nil || record.key.timestamp > snapshot.lastRecordAt! {
                 snapshot.lastRecordAt = record.key.timestamp; snapshot.currentModel = record.model
             }
         }
+        snapshot.recentMinutes = minuteTotals.enumerated().map { CodexUsageMinute(startedAt: Date(timeIntervalSince1970: minuteStart + Double($0.offset) * 60), tokens: incomplete && $0.element == 0 ? nil : $0.element) }
         snapshot.incomplete = incomplete
         snapshot.recordsCount = records.isEmpty && incomplete ? nil : records.count
         snapshot.dailyTokens = records.isEmpty && incomplete ? nil : total
