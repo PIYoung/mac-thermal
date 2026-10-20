@@ -1,6 +1,6 @@
 # Optional Codex account quota
 
-The Codex panel’s person icon opens a separate account review. Local metrics and local UTC-day token records work without an account. Mac Thermal does not require an API key or make paid model calls for quota lookup; ChatGPT/Codex account eligibility and limits still apply.
+The Codex panel’s footer person icon opens a separate account review. Local metrics and local UTC-day token records work without an account. Mac Thermal does not require an API key or make paid model calls for quota lookup; ChatGPT/Codex account eligibility and limits still apply.
 
 After explicit consent, Mac Thermal uses **Codex’s documented managed ChatGPT device-code login**. A supported, independently installed OpenAI-signed Codex executable is required. The official page is `https://auth.openai.com/codex/device`. Complete sign-in there; never paste credentials, device codes or login tokens into chat or issue reports. If your account does not allow device-code sign-in, cancel. The app does not change account security settings or use an undocumented endpoint as a fallback.
 
@@ -45,7 +45,7 @@ When signed out or re-authentication is required, account cards show a sign-in m
 
 ## Extended insights
 
-The fixed 300×420 panel keeps quota and the footer fixed. Its body scrolls vertically, reserving room for macOS always-visible scrollbars. The initial viewport shows today, token composition and local model TOP 3 together. Clicking a model row expands that model’s composition immediately below the ranking.
+The fixed 300×420 panel starts directly with the quota card, without a title, runtime or badge header. Account management is in the footer. Quota and the footer stay fixed; removing the header adds 36 points to the scrolling body. Its body scrolls vertically, reserving room for macOS always-visible scrollbars. The initial viewport shows today, token composition and local model TOP 3 together. Clicking a model row expands that model’s composition immediately below the ranking.
 
 The local composition card shows input/output tokens, cached-input reuse and reasoning-output share. Cache is a subset of input and reasoning a subset of output; neither is added twice. Blue input and violet output values correspond to the thin composition strip. Below the model ranking, account cards group lifetime/peak tokens, streaks and longest turn, followed by seven-day total/mean/peak date/coverage. Missing dates are excluded from means and today may be incomplete. There is no ten-minute record aggregation or daily graph rendering. No new file scope, timer or network method is added.
 

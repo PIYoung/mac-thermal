@@ -97,6 +97,9 @@ enum LoginItemManager {
                     return (child as? NSTextField).map { [$0.stringValue] } ?? visibleText(child)
                 }
             }
+            verify(!visibleText(canvas(panel)).contains("Codex"), "Visible title header must be removed")
+            verify(panel.probeTopCardFrame.minY == 12 && panel.probeBodyFrame.height == 302, "Removing header must reclaim 36 points for content")
+            verify(panel.probeAccountFrame.minY == 396, "Account management must remain available in the footer")
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 기록")))
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 7일")))
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 10분 · 이 Mac 기록")))
@@ -202,6 +205,9 @@ enum LoginItemManager {
                 panel.probeClickUsageAction()
             }
             verify(accountPrompts == 2 && statsPrompts == 0, "Logged-out graph action must open sign-in review, never enable queries")
+            panel.probeClickAccount()
+            verify(accountPrompts == 3 && statsPrompts == 0, "Footer account control must retain sign-in and connection management")
+            accountPrompts = 2
             var consent = sample
             consent.quota.connection = .connected
             panel.apply(consent)
