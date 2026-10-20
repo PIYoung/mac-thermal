@@ -44,4 +44,4 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 
 Codex robot idle/active motion reuses the original four geometric typing poses at two cadences. No external animation, sprite, library or model is added.
 
-The compact AI header button uses the untinted native AppKit glass bezel with blue lettering on macOS 26+, an original translucent fallback on older macOS, and the system sparkles/back symbols inside the app. No external artwork, package or repeating animation is added.
+The AI header button uses an original blue-to-purple gradient with high-contrast white lettering and system sparkles/back symbols inside the app. No external artwork, package or repeating animation is added.

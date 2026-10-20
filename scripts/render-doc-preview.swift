@@ -57,9 +57,7 @@ enum RenderDocPreview {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(tabNames[tab], forKey: "dashboardSelectedResourceTabV4")
         L10n.setLanguage(language, defaults: defaults)
-        // Native glass is composited by WindowServer and omitted by offscreen
-        // cacheDisplay. Use the app's real older-macOS artwork for this fixture.
-        let panel = PanelController(defaults: defaults, usesNativeAdviceGlass: false)
+        let panel = PanelController(defaults: defaults)
         let view = panel.view
         view.appearance = appearance
         view.frame = NSRect(origin: .zero, size: PanelController.size)
