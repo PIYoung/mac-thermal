@@ -97,9 +97,9 @@ enum LoginItemManager {
                     return (child as? NSTextField).map { [$0.stringValue] } ?? visibleText(child)
                 }
             }
-            verify(!visibleText(canvas(panel)).contains("Codex"), "Visible title header must be removed")
-            verify(panel.probeTopCardFrame.minY == 12 && panel.probeBodyFrame.height == 302, "Removing header must reclaim 36 points for content")
-            verify(panel.probeAccountFrame.minY == 396, "Account management must remain available in the footer")
+            verify(visibleText(canvas(panel)).contains("Codex"), "Original title header must be restored")
+            verify(panel.probeQuotaIsInScroll && panel.probeBodyFrame.minY == 48 && panel.probeBodyFrame.height == 338, "Quota and all content cards must share one scrolling body beneath the header")
+            verify(panel.probeAccountFrame.minY == 14, "Account management must return to the original header")
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 기록")))
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 7일")))
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 10분 · 이 Mac 기록")))
@@ -206,7 +206,7 @@ enum LoginItemManager {
             }
             verify(accountPrompts == 2 && statsPrompts == 0, "Logged-out graph action must open sign-in review, never enable queries")
             panel.probeClickAccount()
-            verify(accountPrompts == 3 && statsPrompts == 0, "Footer account control must retain sign-in and connection management")
+            verify(accountPrompts == 3 && statsPrompts == 0, "Header account control must retain sign-in and connection management")
             accountPrompts = 2
             var consent = sample
             consent.quota.connection = .connected
@@ -245,6 +245,11 @@ enum LoginItemManager {
             panel.probeClickUsageAction()
             verify(statsPrompts == beforeManage + 1 && panel.probeSummary.count == 5, "Statistics management remains accessible when daily buckets are absent but account summary is available")
             panel.apply(graph)
+            let fixedHeader = panel.probeAccountFrame
+            let quotaY = panel.probeQuotaVisibleY
+            panel.probeScrollInsights(120)
+            verify(panel.probeQuotaVisibleY < quotaY - 100 && panel.probeAccountFrame == fixedHeader, "Quota must scroll with the other cards while title/account controls stay fixed")
+            panel.probeScrollInsights(0)
             let collapsed = panel.probeInsightsHeight
             panel.probeExpandModel(0)
             verify(panel.probeModelDetails == panel.probeBreakdown && panel.probeInsightsHeight > collapsed)
@@ -254,7 +259,7 @@ enum LoginItemManager {
             verify(panel.probeUsageReady)
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 7일")))
             verify(!visibleText(canvas(panel)).contains(L10n.text("최근 10분 · 이 Mac 기록")))
-            verify(collapsed < 500 && panel.probeLocalCardsFit, "Today, composition and models must fit before scrolling; account summaries stay below")
+            verify(collapsed < 600 && panel.probeLocalCardsFit, "Today, composition and models must fit before scrolling; account summaries stay below")
             verify(panel.probeSeparateCardsVisible)
             bounds(canvas(panel))
             graph.quota.usage.fetchedAt = usageNow.addingTimeInterval(-901)

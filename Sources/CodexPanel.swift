@@ -29,6 +29,32 @@ private final class CodexCanvas: FlippedView {
     }
 }
 
+private final class CodexPill: FlippedView {
+    private let label = codexText(size: 9, weight: .semibold)
+    private var color = NSColor.secondaryLabelColor
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        label.alignment = .center
+        addSubview(label)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
+    override func layout() {
+        super.layout()
+        label.frame = bounds.insetBy(dx: 5, dy: 3)
+    }
+    func update(_ value: String, color: NSColor) {
+        label.stringValue = value
+        label.textColor = color
+        self.color = color
+        setAccessibilityLabel(value)
+        needsDisplay = true
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        color.withAlphaComponent(0.10).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 10, yRadius: 10).fill()
+    }
+}
+
 private final class CodexBar: FlippedView {
     var fraction: Double? { didSet { needsDisplay = true } }
     var color = PanelColor.blue
@@ -127,6 +153,7 @@ final class CodexPanelController: NSViewController {
     private var latest = CodexMonitorSnapshot.pending
     private var renderNow = Date()
     private var languageObserver: NSObjectProtocol?
+    private let connection = CodexPill(frame: .zero)
     private let activityCard = GlassCard()
     private let quotaCard = GlassCard()
     private let quotaTitles = (0..<2).map { _ in codexText(size: 10, weight: .medium) }
@@ -134,6 +161,7 @@ final class CodexPanelController: NSViewController {
     private let quotaResets = (0..<2).map { _ in codexText(size: 9, secondary: true, digits: true) }
     private let quotaBars = (0..<2).map { _ in CodexBar() }
     private let quotaStatus = codexText(size: 11, secondary: true, lines: 2)
+    private let quotaElapsed = codexText(size: 9, secondary: true, digits: true)
     private lazy var accountButton = NSButton(image: NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(accountClicked))
     private let insightsScroll = NSScrollView()
     private let insightsDocument = FlippedView()
@@ -208,24 +236,38 @@ final class CodexPanelController: NSViewController {
             view = PanelSurfaceHost(glass: glass, surfaceSize: Self.surfaceSize)
         }
         preferredContentSize = Self.size
-        codexPlace(activityCard, in: canvas, 12, 12, 276, 64)
-        codexPlace(activity, in: activityCard, 12, 10, 142, 19)
+        let icon = NSImageView(image: NSImage(systemSymbolName: "terminal", accessibilityDescription: nil) ?? NSImage())
+        icon.contentTintColor = PanelColor.blue
+        icon.imageScaling = .scaleProportionallyDown
+        icon.setAccessibilityElement(false)
+        codexPlace(icon, in: canvas, 15, 16, 19, 19)
+        let brand = codexText(size: 16, weight: .semibold)
+        brand.stringValue = "Codex"
+        codexPlace(brand, in: canvas, 42, 12, 62, 25)
+        quotaElapsed.alignment = .right
+        codexPlace(quotaElapsed, in: canvas, 108, 20, 68, 14)
+        accountButton.isBordered = false
+        accountButton.contentTintColor = .secondaryLabelColor
+        codexPlace(accountButton, in: canvas, 180, 14, 21, 23)
+        codexPlace(connection, in: canvas, 205, 15, 80, 21)
+        codexPlace(activityCard, in: insightsDocument, 0, 0, 258, 64)
+        codexPlace(activity, in: activityCard, 12, 10, 124, 19)
         elapsed.alignment = .right
-        codexPlace(elapsed, in: activityCard, 156, 12, 108, 16)
-        codexPlace(model, in: activityCard, 12, 37, 140, 16)
+        codexPlace(elapsed, in: activityCard, 138, 12, 108, 16)
+        codexPlace(model, in: activityCard, 12, 37, 122, 16)
         counts.alignment = .right
-        codexPlace(counts, in: activityCard, 152, 37, 112, 16)
-        codexPlace(quotaCard, in: canvas, 12, 12, 276, 64)
+        codexPlace(counts, in: activityCard, 134, 37, 112, 16)
+        codexPlace(quotaCard, in: insightsDocument, 0, 0, 258, 64)
         for index in 0..<2 {
             let y = CGFloat(7 + index * 27)
             codexPlace(quotaTitles[index], in: quotaCard, 12, y, 66, 15)
             codexPlace(quotaValues[index], in: quotaCard, 80, y - 1, 70, 16)
             quotaResets[index].alignment = .right
-            codexPlace(quotaResets[index], in: quotaCard, 152, y, 112, 15)
-            codexPlace(quotaBars[index], in: quotaCard, 12, y + 17, 252, 3)
+            codexPlace(quotaResets[index], in: quotaCard, 152, y, 94, 15)
+            codexPlace(quotaBars[index], in: quotaCard, 12, y + 17, 234, 3)
         }
         quotaStatus.alignment = .center
-        codexPlace(quotaStatus, in: quotaCard, 12, 16, 252, 34)
+        codexPlace(quotaStatus, in: quotaCard, 12, 16, 234, 34)
         insightsScroll.drawsBackground = false
         insightsScroll.wantsLayer = true
         insightsScroll.layer?.masksToBounds = true
@@ -234,7 +276,7 @@ final class CodexPanelController: NSViewController {
         insightsScroll.hasVerticalScroller = true
         insightsScroll.autohidesScrollers = true
         insightsScroll.scrollerStyle = .overlay
-        codexPlace(insightsScroll, in: canvas, 12, 84, 276, 302)
+        codexPlace(insightsScroll, in: canvas, 12, 48, 276, 338)
         insightsDocument.frame = NSRect(x: 0, y: 0, width: 258, height: 800)
         insightsScroll.documentView = insightsDocument
         codexPlace(totalsCard, in: insightsDocument, 0, 0, 258, 60)
@@ -269,10 +311,7 @@ final class CodexPanelController: NSViewController {
         let line = NSBox()
         line.boxType = .separator
         codexPlace(line, in: canvas, 14, 394, 272, 1)
-        codexPlace(updated, in: canvas, 14, 399, 220, 14)
-        accountButton.isBordered = false
-        accountButton.contentTintColor = .secondaryLabelColor
-        codexPlace(accountButton, in: canvas, 242, 396, 22, 22)
+        codexPlace(updated, in: canvas, 14, 399, 244, 14)
         refreshButton.isBordered = false
         refreshButton.contentTintColor = .secondaryLabelColor
         codexPlace(refreshButton, in: canvas, 266, 396, 22, 22)
@@ -322,17 +361,20 @@ final class CodexPanelController: NSViewController {
         guard isViewLoaded else { return }
         let enabled = latest.recordsEnabled
         let connected = latest.connection == .connected
+        let connectionKey: String
         let activityKey: String
+        let connectionColor: NSColor
         if !enabled {
-            activityKey = "기록 읽기 꺼짐"
+            connectionKey = "읽기 꺼짐"; activityKey = "기록 읽기 꺼짐"; connectionColor = .secondaryLabelColor
         } else {
             switch latest.connection {
-            case .notRunning: activityKey = "실행 안 됨"
-            case .connecting: activityKey = "로컬 기록 확인 중"
-            case .connected: activityKey = "로컬 기록 연결"
-            case .unavailable: activityKey = "기록 읽기 불가"
+            case .notRunning: connectionKey = "실행 안 됨"; activityKey = "실행 안 됨"; connectionColor = .secondaryLabelColor
+            case .connecting: connectionKey = "확인 중"; activityKey = "로컬 기록 확인 중"; connectionColor = PanelColor.blue
+            case .connected: connectionKey = "로컬 기록"; activityKey = "로컬 기록 연결"; connectionColor = .systemGreen
+            case .unavailable: connectionKey = "읽기 불가"; activityKey = "기록 읽기 불가"; connectionColor = .systemOrange
             }
         }
+        connection.update(L10n.text(connectionKey), color: connectionColor)
         activity.stringValue = L10n.text(activityKey)
         counts.stringValue = enabled ? latest.recordsCount.flatMap { $0 >= 0 && !(latest.incomplete && $0 == 0) ? L10n.format("오늘 %lld개 기록", Int64($0)) : nil } ?? "—" : "—"
         counts.toolTip = L10n.text("이 Mac에서 UTC 오늘에 기록된 유효한 토큰 항목 수입니다. 파일 수가 아닙니다.")
@@ -394,7 +436,7 @@ final class CodexPanelController: NSViewController {
     }
 
     private func layoutInsights() {
-        var cards: [(NSView, CGFloat)] = [(totalsCard, 60), (breakdownCard, breakdownCard.cardHeight), (modelsCard, 82)]
+        var cards: [(NSView, CGFloat)] = [(latest.quota.isEnabled ? quotaCard : activityCard, 64), (totalsCard, 60), (breakdownCard, breakdownCard.cardHeight), (modelsCard, 82)]
         if expandedModel != nil { cards.append((modelDetailCard, modelDetailCard.cardHeight)) }
         modelDetailCard.isHidden = expandedModel == nil
         cards.append((summaryCard, summaryCard.cardHeight))
@@ -406,7 +448,8 @@ final class CodexPanelController: NSViewController {
             if card.frame != rect { card.frame = rect }
             y += height + 8
         }
-        let size = NSSize(width: 258, height: max(302, y - 8))
+        (latest.quota.isEnabled ? activityCard : quotaCard).frame = NSRect(x: 0, y: 0, width: 258, height: 64)
+        let size = NSSize(width: 258, height: max(338, y - 8))
         if insightsDocument.frame.size != size { insightsDocument.frame.size = size }
     }
     @objc private func modelClicked(_ sender: NSButton) {
@@ -524,11 +567,17 @@ final class CodexPanelController: NSViewController {
         let quota = latest.quota
         activityCard.isHidden = quota.isEnabled
         quotaCard.isHidden = !quota.isEnabled
+        quotaElapsed.isHidden = !quota.isEnabled
+        if let started = latest.appStartedAt, elapsed.stringValue != "—" {
+            quotaElapsed.stringValue = duration(renderNow.timeIntervalSince(started))
+        } else { quotaElapsed.stringValue = "—" }
+        quotaElapsed.toolTip = elapsed.toolTip
         accountButton.contentTintColor = quota.connection == .connected ? PanelColor.blue : .secondaryLabelColor
         accountButton.toolTip = L10n.text(quota.isEnabled ? "ChatGPT 한도 관리" : "ChatGPT 한도 연결")
         accountButton.setAccessibilityLabel(accountButton.toolTip)
         accountButton.isEnabled = quota.connection != .disconnecting
         quotaCard.toolTip = L10n.text("계정의 Codex 한도입니다. 로컬 토큰 집계와 별개이며 리셋 후에는 서버 확인을 기다립니다.")
+        if quota.isEnabled { connection.update(L10n.text("계정 한도"), color: quota.connection == .connected ? PanelColor.blue : .secondaryLabelColor) }
         let showRows = quota.isFresh(at: renderNow) && !quota.windows.isEmpty
         quotaStatus.isHidden = showRows
         let statusKey: String
@@ -591,7 +640,8 @@ extension CodexPanelController {
     func probeClickAccount() { accountButton.performClick(nil) }
     var probeAccountFrame: NSRect { accountButton.frame }
     var probeBodyFrame: NSRect { insightsScroll.frame }
-    var probeTopCardFrame: NSRect { quotaCard.frame }
+    var probeQuotaIsInScroll: Bool { quotaCard.superview === insightsDocument }
+    var probeQuotaVisibleY: CGFloat { quotaCard.convert(.zero, to: insightsScroll.superview).y }
     var probeUsageReady: Bool { usageReady }
     var probeUsageStatus: String { usageStatus }
     var probeUsageButtonTitle: String { usageButtonTitle }
