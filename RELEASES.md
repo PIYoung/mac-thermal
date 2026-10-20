@@ -1,5 +1,15 @@
 # Releases
 
+## Unreleased — v2.12.0
+
+Home-directory cleanup without a required folder picker. Build 45.
+
+- Start from a home-scope explanation and an explicit Auto scan button. Opening or reopening the app/panel does not scan the home directory.
+- Inspect local file metadata only, excluding system/Library/application, hidden/package, known development/cloud and other-device locations. Skip inaccessible items and never follow symbolic links. Arbitrarily named sync folders may be undetected; disclose this before scanning.
+- Keep every home candidate unchecked, including old installers. Require direct selection and exact final confirmation before any Trash move. Preserve optional remembered one-folder mode under folder management.
+- Bound home inspection to 50,000 entries, 1,000 candidates, depth 20 and 20 seconds; support cancellation and show partial-result warnings. Revalidate reviewed files and ancestors before moving them.
+- Add four-language guidance and synthetic home/scope/UI regression checks. No file-content reads, external transmission, Full Disk Access request, new packages, permanent deletion or automatic Trash emptying.
+
 ## v2.11.1 — 2026-10-20
 
 Optional Codex quota-reset notifications and matching settings scrolling. Build 44.

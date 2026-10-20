@@ -3,6 +3,16 @@ import Foundation
 // Original project translations: English, Japanese, Simplified Chinese.
 extension L10n {
     static let cleanupTranslations: [String: [String]] = [
+        "내 홈 폴더 · 자동 검사": ["Home · Auto scan", "ホーム · 自動検査", "主文件夹 · 自动扫描"],
+        "특정 폴더만 검사": ["Choose one folder", "フォルダを指定", "指定文件夹"],
+        "홈 폴더 자동 검사로 전환": ["Switch to home scan", "ホームの自動検査へ", "切换为主文件夹扫描"],
+        "자동 검사": ["Auto scan", "自動検査", "自动扫描"],
+        "홈 아래 로컬 파일의 이름·크기·날짜만 검사합니다. 파일 내용은 읽거나 전송하지 않습니다.": ["Inspect local file names, sizes and dates under your home. No file contents are read or sent.", "ホーム内のローカルファイルの名前・サイズ・日時のみ確認します。内容は読み取り・送信しません。", "仅检查主文件夹内本地文件的名称、大小和日期。不读取或发送文件内容。"],
+        "30일 지난 설치 파일·100MB 이상 파일을 찾습니다. 시스템·Library·숨김·앱·개발·알려진 클라우드 경로는 제외하며, 접근이 막힌 곳은 건너뜁니다.": ["Find installers and files of 100MB+ created and modified 30+ days ago. Skip system, Library, hidden, app, development and known cloud paths, and inaccessible locations.", "作成・変更から30日以上のインストーラ・100MB以上のファイルを探します。システム・Library・非表示・アプリ・開発・既知のクラウドやアクセス不可の場所は除外します。", "查找创建和修改均满30天的安装文件及100MB以上文件。跳过系统、Library、隐藏项、应用、开发项目、已知云路径和无法访问的位置。"],
+        "모든 동기화 폴더를 감지할 수는 없습니다. 후보는 직접 선택하고, 휴지통 이동 전 다시 확인합니다.": ["Some sync folders may be undetected. Select files yourself and review before moving to Trash.", "すべての同期フォルダは検出できません。ファイルを手動選択し、ゴミ箱への移動前に確認します。", "无法检测所有同步文件夹。请自行选择文件，并在移到废纸篓前确认。"],
+        "자동 선택 없음 · 정리할 파일을 직접 선택하세요": ["Nothing preselected · choose files to clean", "自動選択なし · ファイルを手動選択", "不预选任何文件 · 请自行选择"],
+        "홈 폴더를 자동 검사하고 선택한 파일만 확인 후 휴지통으로 이동합니다": ["Scan your home, review your selection, then move only selected files to Trash", "ホームを自動検査し、選択したファイルのみ確認後にゴミ箱へ移動します", "自动扫描主文件夹，确认后仅将所选文件移到废纸篓"],
+
         "기억한 폴더 확인 중": ["Checking saved folder", "記憶したフォルダを確認中", "正在检查已保存的文件夹"],
         "기억한 폴더가 변경되었거나 사용할 수 없습니다. 폴더를 다시 선택하세요": ["The saved folder changed or is unavailable. Choose the folder again.", "記憶したフォルダが変更されたか使用できません。再度選択してください。", "已保存的文件夹已更改或不可用，请重新选择。"],
         "추천": ["Suggested", "推奨", "推荐"],

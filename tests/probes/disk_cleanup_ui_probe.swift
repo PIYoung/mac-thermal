@@ -30,12 +30,12 @@ private final class ExecutionFixture: @unchecked Sendable {
 
 @main
 enum DiskCleanupUIProbe {
-    private static func waitUntil(_ condition: () -> Bool) {
+    private static func waitUntil(line: UInt = #line, _ condition: () -> Bool) {
         let deadline = Date().addingTimeInterval(5)
         while !condition(), Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(0.01))
         }
-        precondition(condition(), "A synthetic cleanup job did not complete")
+        precondition(condition(), "A synthetic cleanup job did not complete (caller line \(line))")
     }
     private static func visibleLabels(_ node: NSView) -> [String] {
         guard !node.isHidden else { return [] }
@@ -82,6 +82,60 @@ enum DiskCleanupUIProbe {
         let suite = "local.mac-thermal.auto-entry.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
+        let homeFixture = EntryFixture()
+        var homeOperations = DiskCleanupViewOperations(scan: { _, _, _, _ in
+            preconditionFailure("Home entry must not use selected-folder scanning")
+        }, execute: { _, _, _, _ in
+            homeFixture.recordExecution(); return DiskCleanupResult(items: [], cancelled: false)
+        })
+        homeOperations.scanHome = { _, progress in
+            homeFixture.recordScan(expected: false)
+            progress(DiskCleanupProgress(visitedCount: 3, candidateCount: 3, completedCount: 0, totalCount: 0))
+            return plan
+        }
+        let homeView = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), operations: homeOperations, defaults: defaults)
+        precondition(homeFixture.counts.0 == 0)
+        homeView.onEntry(); homeView.onEntry()
+        precondition(homeView.probeStage == "ready" && homeView.probeAutomaticHome && homeFixture.counts.0 == 0,
+            "Opening the cleanup page must only explain the home scope, never inspect it")
+        let initialLanguage = L10n.language
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults); homeView.refreshLanguage(); homeView.layoutSubtreeIfNeeded()
+            checkBounds(homeView); checkPolicyTextFits(homeView)
+            precondition(homeView.probePrimaryTitle == L10n.text("자동 검사"))
+        }
+        L10n.setLanguage(initialLanguage, defaults: defaults)
+        homeView.probePressPrimary()
+        waitUntil { homeView.probeStage == "review" }
+        precondition(homeFixture.counts.0 == 1 && homeFixture.counts.2 == 0)
+        precondition(homeView.probeCandidateCount == 3 && homeView.probeSelectedIDs.isEmpty && homeView.probeRecommendedIDs.isEmpty,
+            "Automatic home scans must never precheck even old installers")
+        precondition(!homeView.probePrimaryEnabled && homeView.probeBanner.contains(L10n.text("자동 선택 없음 · 정리할 파일을 직접 선택하세요")))
+        homeView.onEntry()
+        precondition(homeFixture.counts.0 == 1)
+        homeView.probeToggleCandidate(at: 0); homeView.probePressPrimary()
+        precondition(homeView.probeStage == "confirmation" && homeView.probeConfirmedIDs.count == 1 && homeFixture.counts.2 == 0,
+            "Selecting a file only prepares review; it must not execute a Trash operation")
+        let newHomeView = DiskCleanupView(frame: homeView.frame, operations: homeOperations, defaults: defaults)
+        newHomeView.onEntry()
+        precondition(newHomeView.probeStage == "ready" && newHomeView.probeSelectedIDs.isEmpty && homeFixture.counts.0 == 1,
+            "A later home view must neither reuse a file confirmation nor scan automatically")
+
+        let started = DispatchSemaphore(value: 0), finish = DispatchSemaphore(value: 0)
+        var stoppingOperations = homeOperations
+        stoppingOperations.scanHome = { cancellation, _ in
+            started.signal(); _ = finish.wait(timeout: .now() + 2)
+            precondition(cancellation.isCancelled)
+            return plan
+        }
+        let stopping = DiskCleanupView(frame: homeView.frame, operations: stoppingOperations, defaults: defaults)
+        stopping.onEntry(); stopping.probePressPrimary()
+        precondition(started.wait(timeout: .now() + 2) == .success)
+        stopping.probePressSecondary(); finish.signal()
+        waitUntil { stopping.probeStage == "review" }
+        precondition(stopping.probeSelectedIDs.isEmpty && stopping.probeBanner.contains(L10n.text("검사를 중지해 일부 항목만 표시합니다")))
+        print("Home cleanup UI passed: four-language scope disclosure before explicit scan, injectable scanner only, no prechecked files, exact review, cancellation, no launch/reopen scans and no Trash calls")
+
         let fixture = EntryFixture()
         let operations = DiskCleanupViewOperations(scan: { _, expected, _, _ in
             fixture.recordScan(expected: expected != nil)
@@ -93,8 +147,8 @@ enum DiskCleanupUIProbe {
         let view = DiskCleanupView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), operations: operations, defaults: defaults)
         precondition(fixture.counts.0 == 0, "Constructing the view must never scan")
         view.onEntry()
-        precondition(fixture.counts.0 == 0, "No approved folder means no scan and no Downloads fallback")
-        waitUntil { view.probeStage == "idle" }
+        precondition(fixture.counts.0 == 0, "Entry prepares home scope without reading it or opening a picker")
+        waitUntil { view.probeStage == "ready" }
         view.probeAcceptFolder(root)
         view.onEntry()
         view.onEntry()
@@ -124,7 +178,7 @@ enum DiskCleanupUIProbe {
         reopened.probeForgetFolder()
         precondition(DiskCleanup.restoreRememberedFolder(defaults: defaults) == nil)
         reopened.onEntry()
-        precondition(reopened.probeStage == "idle" && fixture.counts.0 == 2, "Forgetting must remove approval without any fallback scan")
+        precondition(reopened.probeStage == "ready" && reopened.probeAutomaticHome && fixture.counts.0 == 2, "Switching to home must remove the bookmark and wait for an explicit scan")
 
         let partial = try DiskCleanup.scan(rootURL: root, cancellation: DiskCleanupCancellation(),
             limits: DiskCleanupLimits(maximumEntries: 20_000, maximumCandidates: 1, maximumDepth: 20, maximumSeconds: 8), now: future)
@@ -245,7 +299,7 @@ enum DiskCleanupUIProbe {
         let initialFrame = window.frame
         panel.probeOpenDiskCleanup()
         let cleanup = panel.probeDiskCleanupView!
-        waitUntil { cleanup.probeStage == "idle" }
+        waitUntil { cleanup.probeStage == "ready" }
         cleanup.probeSetPlan(plan)
         precondition(cleanup.probeStage == "review" && cleanup.probeCandidateCount == 12)
         cleanup.probeToggleCandidate(at: 2)

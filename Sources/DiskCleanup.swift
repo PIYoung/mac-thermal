@@ -105,6 +105,8 @@ fileprivate struct CleanupFileRecord {
 
 struct DiskCleanupPlan {
     let rootURL: URL
+    fileprivate let automaticHomeRoot: URL?
+    var isAutomaticHome: Bool { automaticHomeRoot != nil }
     let candidates: [DiskCleanupCandidate]
     let scannedCount: Int
     let skippedCount: Int
@@ -157,7 +159,7 @@ struct DiskCleanupResult {
     let cancelled: Bool
 }
 
-/// Explicit, bounded local-folder inspection. No file contents, browser data,
+/// Explicit, bounded selected-folder or home metadata inspection. No file contents, browser data,
 /// cache trees, permissions, startup tasks, or permanent removal are touched.
 enum DiskCleanup {
     private static let rememberedFolderKey = "diskCleanupRememberedFolderV1"
@@ -200,7 +202,7 @@ enum DiskCleanup {
     }
 
     private static func hasProjectMarker(_ descriptor: Int32) -> Bool {
-        for name in [".git", ".hg", ".svn"] {
+        for name in [".git", ".hg", ".svn", "package.json", "Cargo.toml", "go.mod", "pyproject.toml", "pom.xml", "build.gradle", "build.gradle.kts", "Package.swift", "CMakeLists.txt", "requirements.txt", "setup.py", "gradlew"] {
             var marker = stat()
             if fstatat(descriptor, name, &marker, AT_SYMLINK_NOFOLLOW) == 0 { return true }
         }
@@ -230,7 +232,7 @@ enum DiskCleanup {
         return false
     }
 
-    private static func canonicalRoot(_ url: URL) throws -> URL {
+    private static func canonicalRoot(_ url: URL, permittedHome: URL? = nil) throws -> URL {
         guard url.isFileURL else { throw DiskCleanupError(reason: .invalidRoot) }
         let input = url.standardizedFileURL
         var value = stat()
@@ -249,7 +251,7 @@ enum DiskCleanup {
         guard let canonical = physicalURL(input) else { throw DiskCleanupError(reason: statReason()) }
         guard normalized == canonical.path else { throw DiskCleanupError(reason: .symbolicLink) }
         guard !cloudPath(canonical) else { throw DiskCleanupError(reason: .cloudLocation) }
-        guard !protectedRoot(canonical) else { throw DiskCleanupError(reason: .protectedLocation) }
+        guard !protectedRoot(canonical) || canonical.path == permittedHome?.path else { throw DiskCleanupError(reason: .protectedLocation) }
         guard !canonical.pathComponents.dropFirst().contains(where: { $0.hasPrefix(".") }) else {
             throw DiskCleanupError(reason: .protectedLocation)
         }
@@ -362,7 +364,7 @@ enum DiskCleanup {
                                defaults: UserDefaults) -> DiskCleanupRememberedFolder? {
         // Cancelling analysis does not revoke a previously approved folder.
         // A deliberately changed folder is forgotten explicitly by the UI.
-        guard !plan.cancelled else { return nil }
+        guard !plan.cancelled, !plan.isAutomaticHome else { return nil }
         do {
             guard verifyAncestors(plan.rootAncestors) == nil else {
                 throw DiskCleanupError(reason: .changed)
@@ -433,11 +435,41 @@ enum DiskCleanup {
         }
     }
 
+    /// The only production entry that can inspect a whole home directory.
+    /// Called by the explicit Automatic scan button; never on launch or entry.
+    static func scanHome(cancellation: DiskCleanupCancellation,
+                         progress: (DiskCleanupProgress) -> Void = { _ in }) throws -> DiskCleanupPlan {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        guard let canonical = physicalURL(home) else { throw DiskCleanupError(reason: .invalidRoot) }
+        return try inspect(rootURL: home, permittedHome: canonical, cancellation: cancellation,
+            limits: DiskCleanupLimits(maximumEntries: 50_000, maximumCandidates: 1_000, maximumDepth: 20, maximumSeconds: 20), progress: progress)
+    }
+
+    #if DISK_CLEANUP_PROBE
+    /// Synthetic homes must live in an owned probe fixture, never the user's home.
+    static func scanHomeFixture(rootURL: URL, cancellation: DiskCleanupCancellation = DiskCleanupCancellation(),
+                                limits: DiskCleanupLimits = .default, now: Date = Date(),
+                                progress: (DiskCleanupProgress) -> Void = { _ in }) throws -> DiskCleanupPlan {
+        guard rootURL.path.hasPrefix("/private/tmp/MacThermalCleanupProbe-"),
+              let canonical = physicalURL(rootURL) else { throw DiskCleanupError(reason: .invalidRoot) }
+        return try inspect(rootURL: rootURL, permittedHome: canonical, cancellation: cancellation,
+                           limits: limits, now: now, progress: progress)
+    }
+    #endif
+
     static func scan(rootURL: URL, cancellation: DiskCleanupCancellation,
                      limits: DiskCleanupLimits = .default, now: Date = Date(),
                      expectedFolder: DiskCleanupRememberedFolder? = nil,
                      progress: (DiskCleanupProgress) -> Void = { _ in }) throws -> DiskCleanupPlan {
-        let root = try canonicalRoot(rootURL)
+        try inspect(rootURL: rootURL, permittedHome: nil, cancellation: cancellation,
+                    limits: limits, now: now, expectedFolder: expectedFolder, progress: progress)
+    }
+
+    private static func inspect(rootURL: URL, permittedHome: URL?, cancellation: DiskCleanupCancellation,
+                                limits: DiskCleanupLimits = .default, now: Date = Date(),
+                                expectedFolder: DiskCleanupRememberedFolder? = nil,
+                                progress: (DiskCleanupProgress) -> Void) throws -> DiskCleanupPlan {
+        let root = try canonicalRoot(rootURL, permittedHome: permittedHome)
         let rootAncestors = try ancestorChain(root)
         try verifySelectedScope(rootAncestors)
         guard let rootIdentity = rootAncestors.last?.identity else { throw DiskCleanupError(reason: .invalidRoot) }
@@ -534,7 +566,7 @@ enum DiskCleanup {
                     if resources.isPackage == true || type?.conforms(to: .package) == true {
                         issue(relativePath, .packageDirectory); continue
                     }
-                    if ["Library", "System", "Applications"].contains(name) { issue(relativePath, .protectedLocation); continue }
+                    if ["Library", "System", "Applications", "node_modules", "Pods", "DerivedData"].contains(name) { issue(relativePath, .protectedLocation); continue }
                     if depth >= depthLimit { truncated = true; issue(relativePath, .scanLimit); continue }
                     let child = openat(descriptor, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
                     guard child >= 0 else { issue(relativePath, statReason()); continue }
@@ -566,7 +598,7 @@ enum DiskCleanup {
         }
         walk(rootDescriptor, directory: root, ancestors: rootAncestors, depth: 0)
         notify(force: true)
-        return DiskCleanupPlan(rootURL: root, candidates: candidates.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending },
+        return DiskCleanupPlan(rootURL: root, automaticHomeRoot: permittedHome, candidates: candidates.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending },
             scannedCount: scanned, skippedCount: skipped, truncated: truncated,
             cancelled: cancellation.isCancelled, issues: issues, rootAncestors: rootAncestors, records: records)
     }
@@ -576,6 +608,11 @@ enum DiskCleanup {
         guard inside(candidate.url.path, root: plan.rootURL.path),
               candidate.url.path == plan.rootURL.appendingPathComponent(candidate.relativePath).path else { return .outsideScope }
         if let reason = verifyAncestors(record.ancestors) { return reason }
+        do {
+            let root = try canonicalRoot(plan.rootURL, permittedHome: plan.automaticHomeRoot)
+            guard root.path == plan.rootURL.path else { return .changed }
+        } catch let error as DiskCleanupError { return error.reason }
+        catch { return .changed }
         let descriptor = open(plan.rootURL.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard descriptor >= 0 else { return statReason() }
         defer { close(descriptor) }

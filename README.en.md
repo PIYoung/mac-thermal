@@ -21,7 +21,7 @@
 - **Menu bar:** CPU temperature and usage, GPU usage, SSD read/write rates, network speeds and animated indicators.
 - **Click-open panel:** CPU, GPU, memory, SSD and network tabs, recent graphs, top three CPU/memory processes and system uptime.
 - **Codex:** A left companion shows local tokens today, input/output, cache reuse and model TOP 3. Optional account quota and activity summaries share a scrolling card layout with an original slim scrollbar.
-- **Disk cleanup:** Review candidates in a chosen folder, then confirm before moving selected files to Trash.
+- **Disk cleanup:** Start a home scan without choosing a folder. Select candidates yourself, then confirm before moving them to Trash. Optional one-folder scanning remains available.
 - **Settings:** Choose metrics, motion and startup at login. Korean by default; English, Japanese and Simplified Chinese supported.
 
 ## Install

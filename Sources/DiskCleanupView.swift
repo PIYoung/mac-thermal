@@ -5,13 +5,18 @@ import QuartzCore
 struct DiskCleanupViewOperations {
     var scan: (URL, DiskCleanupRememberedFolder?, DiskCleanupCancellation, (DiskCleanupProgress) -> Void) throws -> DiskCleanupPlan
     var execute: (DiskCleanupPlan, Set<UUID>, DiskCleanupCancellation, (DiskCleanupProgress) -> Void) -> DiskCleanupResult
+    // A non-live test transport must explicitly inject home scanning as well.
+    var scanHome: (DiskCleanupCancellation, (DiskCleanupProgress) -> Void) throws -> DiskCleanupPlan = { _, _ in
+        throw DiskCleanupError(reason: .invalidRoot)
+    }
     var availableBytes: (URL) -> Int64? = { root in
         ((try? FileManager.default.attributesOfFileSystem(forPath: root.path))?[.systemFreeSize] as? NSNumber)?.int64Value
     }
 
     static let live = Self(
         scan: { try DiskCleanup.scan(rootURL: $0, cancellation: $2, expectedFolder: $1, progress: $3) },
-        execute: { DiskCleanup.execute(plan: $0, selectedIDs: $1, cancellation: $2, progress: $3) })
+        execute: { DiskCleanup.execute(plan: $0, selectedIDs: $1, cancellation: $2, progress: $3) },
+        scanHome: { try DiskCleanup.scanHome(cancellation: $0, progress: $1) })
 }
 
 private final class CleanupPrimaryButtonCell: NSButtonCell {
@@ -149,6 +154,8 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     private let operations: DiskCleanupViewOperations
     private let defaults: UserDefaults
     private let queue = DispatchQueue(label: "local.mac-thermal.cleanup", qos: .utility)
+    private static let scopePreferenceKey = "diskCleanupScopeV2"
+    private var automaticHome = true
     private var stage = Stage.idle
     private var folderURL: URL?
     private var rememberedFolder: DiskCleanupRememberedFolder?
@@ -254,7 +261,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     override func layout() {
         super.layout()
         back.frame = NSRect(x: 0, y: 0, width: 57, height: 24)
-        folder.frame = NSRect(x: 64, y: 5, width: folderURL == nil ? 240 : 208, height: 14)
+        folder.frame = NSRect(x: 64, y: 5, width: 208, height: 14)
         changeFolder.frame = NSRect(x: 280, y: 1, width: 25, height: 23)
         summary.frame = NSRect(x: 4, y: 26, width: 300, height: 17)
         body.frame = NSRect(x: 0, y: 45, width: 308, height: 168)
@@ -279,6 +286,11 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     func onEntry() {
         guard !entryAttempted, stage == .idle, folderURL == nil, plan == nil, !pickerInFlight else { return }
         entryAttempted = true
+        if defaults.string(forKey: Self.scopePreferenceKey) != "folder" {
+            prepareHomeScan()
+            return
+        }
+        automaticHome = false
         jobGeneration &+= 1
         let generation = jobGeneration
         let cancellation = DiskCleanupCancellation()
@@ -293,7 +305,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
                 guard let self, self.jobGeneration == generation else { return }
                 self.cancellation = nil
                 guard !cancellation.isCancelled, let remembered else {
-                    self.stage = .idle; self.render(animated: false); return
+                    self.prepareHomeScan(); return
                 }
                 self.rememberedFolder = remembered
                 self.hasRememberedFolder = true
@@ -304,7 +316,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         }
     }
     private var isBusy: Bool { stage == .restoring || stage == .scanning || stage == .executing }
-    private var canForgetFolder: Bool { hasRememberedFolder && !isBusy && !pickerInFlight }
+    private var canForgetFolder: Bool { !automaticHome && !isBusy && !pickerInFlight }
     private func totalBytes(_ candidates: [DiskCleanupCandidate]) -> Int64 {
         candidates.reduce(0) { partial, candidate in
             let sum = partial.addingReportingOverflow(candidate.sizeBytes)
@@ -314,15 +326,15 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     private func render(animated: Bool = true) {
         back.title = "‹ SSD"
         back.setAccessibilityLabel(L10n.text("SSD 모니터로 돌아가기"))
-        folder.stringValue = folderURL?.path ?? L10n.text("선택한 폴더만 검사합니다")
+        folder.stringValue = automaticHome ? L10n.text("내 홈 폴더 · 자동 검사") : (folderURL?.path ?? L10n.text("선택한 폴더만 검사합니다"))
         folder.toolTip = folderURL?.path
-        changeFolder.isHidden = folderURL == nil
+        changeFolder.isHidden = false
         changeFolder.isEnabled = !isBusy && !pickerInFlight
         changeFolder.toolTip = L10n.text("폴더 관리")
         changeFolder.setAccessibilityLabel(L10n.text("폴더 관리"))
         changeFolder.item(at: 0)?.title = L10n.text("폴더 관리")
-        changeFolder.item(at: 1)?.title = L10n.text("폴더 변경")
-        changeFolder.item(at: 2)?.title = L10n.text("기억한 폴더 해제")
+        changeFolder.item(at: 1)?.title = L10n.text("특정 폴더만 검사")
+        changeFolder.item(at: 2)?.title = L10n.text("홈 폴더 자동 검사로 전환")
         changeFolder.item(at: 1)?.isEnabled = !isBusy && !pickerInFlight
         changeFolder.item(at: 2)?.isEnabled = canForgetFolder
         notice.stringValue = L10n.text("휴지통으로 옮겨도 바로 공간이 늘어나지는 않습니다. 휴지통은 자동으로 비우지 않습니다.")
@@ -340,11 +352,17 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         switch stage {
         case .idle, .ready:
             summary.stringValue = L10n.text("파일을 지우기 전에 항목과 동작을 확인합니다")
-            message.stringValue = errorMessage ?? L10n.text("클라우드와 동기화되지 않는 로컬 폴더를 선택하세요") + "\n" + L10n.text("선택한 폴더를 기억하고 다음 정리 때 자동 검사합니다")
-            detail.stringValue = L10n.text("생성·수정 모두 30일 이상 지난 설치 파일 또는 100MB 이상 파일을 찾습니다. 오래된 설치 파일만 미리 선택하고, 이동은 최종 확인 후 진행합니다.")
-            primary.title = L10n.text(folderURL == nil ? "폴더 선택" : "검사 시작")
-            secondary.title = L10n.text("폴더 변경")
-            secondary.isHidden = folderURL == nil
+            if automaticHome {
+                message.stringValue = errorMessage ?? L10n.text("홈 아래 로컬 파일의 이름·크기·날짜만 검사합니다. 파일 내용은 읽거나 전송하지 않습니다.")
+                detail.stringValue = L10n.text("30일 지난 설치 파일·100MB 이상 파일을 찾습니다. 시스템·Library·숨김·앱·개발·알려진 클라우드 경로는 제외하며, 접근이 막힌 곳은 건너뜁니다.")
+                notice.stringValue = L10n.text("모든 동기화 폴더를 감지할 수는 없습니다. 후보는 직접 선택하고, 휴지통 이동 전 다시 확인합니다.")
+            } else {
+                message.stringValue = errorMessage ?? L10n.text("클라우드와 동기화되지 않는 로컬 폴더를 선택하세요") + "\n" + L10n.text("선택한 폴더를 기억하고 다음 정리 때 자동 검사합니다")
+                detail.stringValue = L10n.text("생성·수정 모두 30일 이상 지난 설치 파일 또는 100MB 이상 파일을 찾습니다. 오래된 설치 파일만 미리 선택하고, 이동은 최종 확인 후 진행합니다.")
+            }
+            primary.title = L10n.text(automaticHome ? "자동 검사" : (folderURL == nil ? "폴더 선택" : "검사 시작"))
+            secondary.title = L10n.text("특정 폴더만 검사")
+            secondary.isHidden = true
         case .restoring:
             summary.stringValue = L10n.text("기억한 폴더 확인 중")
             message.stringValue = L10n.text("기억한 폴더 확인 중")
@@ -365,7 +383,9 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             candidateRows = plan?.candidates ?? []
             banner.isHidden = false
             banner.stringValue = L10n.text("30일 이상 · 설치 파일 / 100MB 이상")
-            if let plan, !plan.cancelled && !plan.truncated && !stopRequested {
+            if automaticHome {
+                banner.stringValue += "\n" + L10n.text("자동 선택 없음 · 정리할 파일을 직접 선택하세요")
+            } else if let plan, !plan.cancelled && !plan.truncated && !stopRequested {
                 banner.stringValue += "\n" + L10n.text("추천: 설치 파일만 · 대용량 파일 직접 선택")
             }
             let chosen = candidateRows.filter { selectedIDs.contains($0.id) }
@@ -380,7 +400,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
             }
             body.toolTip = scanDetail
             if let plan, !candidateRows.isEmpty, plan.cancelled || plan.truncated || stopRequested {
-                banner.stringValue += "\n" + L10n.text(plan.cancelled || stopRequested ? "검사를 중지해 일부 항목만 표시합니다" : "검사 한도에 도달해 일부 항목만 표시합니다")
+                banner.stringValue = L10n.text("30일 이상 · 설치 파일 / 100MB 이상") + "\n" + L10n.text(plan.cancelled || stopRequested ? "검사를 중지해 일부 항목만 표시합니다" : "검사 한도에 도달해 일부 항목만 표시합니다")
             }
         case .confirmation:
             candidateRows = confirmation?.candidates ?? []
@@ -457,7 +477,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
     @objc private func primaryAction() {
         guard !pickerInFlight else { return }
         switch stage {
-        case .idle: chooseFolder()
+        case .idle: if automaticHome { prepareHomeScan(); startScan() } else { chooseFolder() }
         case .ready: startScan()
         case .review:
             guard let plan else { return }
@@ -486,12 +506,16 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         guard canForgetFolder else { return }
         DiskCleanup.forgetRememberedFolder(defaults: defaults)
         jobGeneration &+= 1
-        rememberedFolder = nil; folderURL = nil; plan = nil; confirmation = nil; result = nil
-        hasRememberedFolder = false
-        entryAttempted = true
-        selectedIDs = []; recommendedIDs = []
-        errorMessage = L10n.text("기억한 폴더를 해제했습니다. 새 폴더를 선택하세요")
-        stage = .idle; render()
+        prepareHomeScan()
+    }
+    private func prepareHomeScan() {
+        automaticHome = true
+        defaults.set("home", forKey: Self.scopePreferenceKey)
+        rememberedFolder = nil; hasRememberedFolder = false
+        folderURL = FileManager.default.homeDirectoryForCurrentUser
+        plan = nil; confirmation = nil; result = nil; resultAvailableBytes = nil
+        selectedIDs = []; recommendedIDs = []; errorMessage = nil; stopRequested = false
+        entryAttempted = true; stage = .ready; render(animated: false)
     }
     private func acceptFolder(_ url: URL) {
         guard !isBusy, !pickerInFlight else { return }
@@ -500,6 +524,8 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         rememberedFolder = nil
         hasRememberedFolder = false
         entryAttempted = true
+        automaticHome = false
+        defaults.set("folder", forKey: Self.scopePreferenceKey)
         folderURL = url
         plan = nil; confirmation = nil; result = nil; selectedIDs = []; recommendedIDs = []
         errorMessage = nil; stage = .ready
@@ -532,6 +558,7 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         jobGeneration &+= 1
         let generation = jobGeneration
         let expectedFolder = rememberedFolder
+        let scanningHome = automaticHome
         let cancellation = DiskCleanupCancellation()
         self.cancellation = cancellation
         stopRequested = false; errorMessage = nil; plan = nil; confirmation = nil; result = nil; resultAvailableBytes = nil; selectedIDs = []; recommendedIDs = []
@@ -540,16 +567,18 @@ final class DiskCleanupView: FlippedView, NSTableViewDataSource, NSTableViewDele
         queue.async { [weak self] in
             guard let self else { return }
             do {
-                let plan = try self.operations.scan(root, expectedFolder, cancellation) { [weak self] progress in
+                let report: (DiskCleanupProgress) -> Void = { [weak self] progress in
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.jobGeneration == generation else { return }; self.updateProgress(progress)
                     }
                 }
-                let remembered = plan.cancelled || cancellation.isCancelled ? nil : DiskCleanup.rememberFolder(from: plan, defaults: self.defaults)
+                let plan = try scanningHome ? self.operations.scanHome(cancellation, report)
+                    : self.operations.scan(root, expectedFolder, cancellation, report)
+                let remembered = scanningHome || plan.cancelled || cancellation.isCancelled ? nil : DiskCleanup.rememberFolder(from: plan, defaults: self.defaults)
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.jobGeneration == generation else { return }
                     self.plan = plan
-                    self.recommendedIDs = plan.cancelled || plan.truncated || cancellation.isCancelled ? [] : Set(plan.candidates.filter { $0.reason == .oldInstaller }.map(\.id))
+                    self.recommendedIDs = scanningHome || plan.cancelled || plan.truncated || cancellation.isCancelled ? [] : Set(plan.candidates.filter { $0.reason == .oldInstaller }.map(\.id))
                     self.selectedIDs = self.recommendedIDs
                     if let remembered { self.rememberedFolder = remembered; self.hasRememberedFolder = true }
                     self.cancellation = nil; self.stage = .review; self.render()
@@ -644,10 +673,12 @@ extension DiskCleanupView {
     var probeListHeight: CGFloat { scroll.frame.height }
     var probeBanner: String { banner.stringValue }
     var probeForgetEnabled: Bool { canForgetFolder }
+    var probeAutomaticHome: Bool { automaticHome }
     func probeAcceptFolder(_ url: URL) { acceptFolder(url) }
     func probeForgetFolder() { forgetFolder() }
     func probeSetPlan(_ plan: DiskCleanupPlan) {
         guard !isBusy else { return }
+        automaticHome = plan.isAutomaticHome
         folderURL = plan.rootURL; self.plan = plan; selectedIDs = []; recommendedIDs = []; confirmation = nil; result = nil
         stage = .review; render(animated: false)
     }

@@ -48,6 +48,7 @@ private struct Fixture {
 @main
 struct DiskCleanupProbe {
     static func main() throws {
+        try homeScanBoundaries()
         try candidatesAndTraversal()
         try identityAndScope()
         try selectionCancellationAndFailure()
@@ -55,6 +56,59 @@ struct DiskCleanupProbe {
         try rememberedFolderRoundtrip()
         try rememberedFolderChangedScopes()
         print("Disk cleanup fixtures passed: metadata candidates; recent/hidden/package/cloud/project exclusions; no symlink traversal; identity/parent/marker changes; exact subset; cancellation; partial failure; bounded scan and no-op. All Trash actions were injected moves inside owned temporary fixtures.")
+    }
+
+    private static func homeScanBoundaries() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let expected = ["Downloads/old.dmg", "Documents/archive.bin", "Desktop/old.pkg", "Pictures/raw.bin", "Movies/video.bin", "Music/audio.bin", "Other/old.dmg"]
+        for path in expected { try fixture.file(path, bytes: path.hasSuffix(".bin") ? 120_000_000 : 8) }
+        for path in ["Library/private.dmg", "System/private.dmg", "Applications/private.dmg", ".ssh/private.dmg", ".vscode/extensions/private.dmg", ".Trash/private.dmg", "CloudStorage/private.dmg", "OneDrive/private.dmg", "Photos.photoslibrary/private.dmg", "node_modules/private.dmg", "Pods/private.dmg", "DerivedData/private.dmg"] {
+            try fixture.file(path)
+        }
+        for marker in [".git", "package.json", "Cargo.toml", "build.gradle", "Package.swift"] {
+            let name = marker.replacingOccurrences(of: ".", with: "_")
+            try fixture.file("Project-" + name + "/" + marker)
+            try fixture.file("Project-" + name + "/asset.dmg")
+        }
+        let outside = try fixture.file("outside.dmg", in: fixture.outside)
+        try fixture.fm.createSymbolicLink(at: fixture.root.appendingPathComponent("Linked"), withDestinationURL: fixture.outside)
+        let plan = try DiskCleanup.scanHomeFixture(rootURL: fixture.root, now: fixture.now)
+        precondition(plan.isAutomaticHome)
+        precondition(Set(plan.candidates.map(\.relativePath)) == Set(expected))
+        precondition(!plan.truncated && !plan.cancelled)
+        let suite = "local.mac-thermal.home-scope." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        precondition(DiskCleanup.rememberFolder(from: plan, defaults: defaults) == nil && defaults.dictionaryRepresentation()["diskCleanupRememberedFolderV1"] == nil,
+            "Home plans must not become selected-folder bookmarks")
+        let chosen = plan.candidates.first { $0.relativePath == "Desktop/old.pkg" }!
+        var moved: [URL] = []
+        let result = DiskCleanup.execute(plan: plan, selectedIDs: [chosen.id], cancellation: DiskCleanupCancellation(), trashExecutor: {
+            moved.append($0); return try fixture.move($0)
+        })
+        precondition(moved == [chosen.url] && result.items.count == 1 && result.items[0].status == .moved)
+        precondition(fixture.fm.fileExists(atPath: outside.path))
+        for candidate in plan.candidates where candidate.id != chosen.id { precondition(fixture.fm.fileExists(atPath: candidate.url.path)) }
+        let limited = try DiskCleanup.scanHomeFixture(rootURL: fixture.root,
+            limits: DiskCleanupLimits(maximumEntries: 1, maximumCandidates: 500, maximumDepth: 20, maximumSeconds: 8), now: fixture.now)
+        precondition(limited.truncated && limited.scannedCount == 1)
+        let cancellation = DiskCleanupCancellation()
+        let stopped = try DiskCleanup.scanHomeFixture(rootURL: fixture.root, cancellation: cancellation, now: fixture.now) { _ in cancellation.cancel() }
+        precondition(stopped.cancelled)
+        let again = try DiskCleanup.scanHomeFixture(rootURL: fixture.root, now: fixture.now)
+        try fixture.file("Documents/.git")
+        let document = again.candidates.first { $0.relativePath == "Documents/archive.bin" }!
+        var calls = 0
+        let changed = DiskCleanup.execute(plan: again, selectedIDs: [document.id], cancellation: DiskCleanupCancellation(), trashExecutor: { _ in calls += 1; return nil })
+        precondition(calls == 0 && changed.items.first?.reason == .protectedLocation)
+        // Replace the root after review: even an identical pathname must not authorize a move.
+        try fixture.fm.moveItem(at: fixture.root, to: fixture.base.appendingPathComponent("OldHome"))
+        try fixture.fm.createDirectory(at: fixture.root, withIntermediateDirectories: true)
+        try fixture.file("Downloads/old.dmg")
+        let stale = DiskCleanup.execute(plan: again, selectedIDs: Set(again.candidates.map(\.id)), cancellation: DiskCleanupCancellation(), trashExecutor: { _ in calls += 1; return nil })
+        precondition(calls == 0 && stale.items.allSatisfy { $0.status == .skipped })
+        print("Automatic home scan passed: personal-folder coverage, developer/cloud/hidden/package exclusions, no symlink traversal, exact selection, root/project revalidation, bounded cancellation and no bookmark widening; owned synthetic home only")
     }
 
     private static func candidatesAndTraversal() throws {

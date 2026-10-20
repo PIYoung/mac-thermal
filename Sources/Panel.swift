@@ -511,7 +511,7 @@ final class PanelController: NSViewController {
         button.controlSize = .small
         button.font = .systemFont(ofSize: 10, weight: .medium)
         localizedAccessibilityLabel(button, "디스크 정리")
-        localizedToolTip(button, "폴더와 정리할 파일을 직접 선택하고 확인한 뒤 휴지통으로 이동합니다")
+        localizedToolTip(button, "홈 폴더를 자동 검사하고 선택한 파일만 확인 후 휴지통으로 이동합니다")
         return button
     }()
     private let diskRead = text("측정 중", size: 20, weight: .medium, digits: true)
