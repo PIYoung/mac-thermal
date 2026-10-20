@@ -1,6 +1,16 @@
 @main
 struct PanelPresentationProbe {
     static func main() {
+        // AppKit may keep a window ordered while it is hidden or covered. A
+        // reopen must show it instead of being consumed as an already-open toggle.
+        for (ordered, exposed, hidden) in [(true, false, false), (true, true, true), (false, false, false)] {
+            var request = PanelPresentationRequest()
+            let token = request.begin()
+            let presented = PanelPresentationRequest.isPresented(isOrdered: ordered, isExposed: exposed, appHidden: hidden)
+            precondition(request.evaluate(token: token, hasAnchor: true, isActive: true, isVisible: presented) == .show)
+            precondition(request.evaluate(token: token, hasAnchor: true, isActive: true, isVisible: true) == .ignore)
+        }
+        precondition(PanelPresentationRequest.isPresented(isOrdered: true, isExposed: true, appHidden: false))
         // Missing activation notifications must not leave the menu toggle
         // permanently stuck in a pending state.
         var inactive = PanelPresentationRequest()

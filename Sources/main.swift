@@ -177,7 +177,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(togglePanel)
-            button.sendAction(on: [.leftMouseDown, .rightMouseDown])
+            // Complete status-button tracking before activation/presentation.
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.title = ""
             button.image = nil
             menuContent.attach(to: button)
@@ -286,12 +287,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func togglePanel() {
-        if dashboard.isVisible || panelRequest.pending { hidePanel() }
+        if dashboard.isPresented || panelRequest.pending { hidePanel() }
         else { requestPanelShow() }
     }
 
     private func requestPanelShow() {
-        guard !dashboard.isVisible else { panelRequest.cancel(); return }
+        guard !dashboard.isPresented else { panelRequest.cancel(); return }
         let token = panelRequest.begin()
         if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
         DispatchQueue.main.async { [weak self] in self?.showPendingPanel(token: token) }
@@ -300,7 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showPendingPanel(token: UInt) {
         let button = statusItem.button
         switch panelRequest.evaluate(token: token, hasAnchor: button?.window != nil,
-                                     isActive: NSApp.isActive, isVisible: dashboard.isVisible) {
+                                     isActive: NSApp.isActive, isVisible: dashboard.isPresented) {
         case .show:
             if let button { dashboard.show(below: button) }
         case .retry:

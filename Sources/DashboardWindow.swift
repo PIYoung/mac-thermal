@@ -83,6 +83,10 @@ final class DashboardWindow: NSPanel {
     var prepareCompanion: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+    var isPresented: Bool {
+        PanelPresentationRequest.isPresented(isOrdered: isVisible,
+            isExposed: occlusionState.contains(.visible), appHidden: NSApp.isHidden)
+    }
 
     init(controller: PanelController, companion: NSViewController? = nil,
          companionSize: NSSize = NSSize(width: 300, height: 420)) {

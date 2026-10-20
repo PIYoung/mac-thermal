@@ -2,8 +2,9 @@
 
 ## Unreleased — v2.14.2
 
-- Move AI help from the footer to a compact neutral pill with a subtle fill, border and sparkle icon beside Settings. Keep the resource body, fixed panel dimensions, menu spacing and all four languages.
+- Move AI help from the footer to a compact native glass pill with secondary blue tint and a sparkle icon beside Settings. Keep the resource body, fixed panel dimensions, menu spacing and all four languages.
 - Cover all six unavailable-model states, generation errors, basic-guidance retention and login-approval UI fixtures. Exercise notification denial/unavailable states and real POSIX access denial/recovery on owned temporary folders, without changing macOS privacy settings.
+- Distinguish an ordered window from a currently exposed panel when reopening, and finish status-button mouse tracking before toggling the dashboard.
 - Invalidate the local-record catalog timestamp after source access fails, so restored access re-enumerates on the next scan. Document the boundary between synthetic/POSIX tests and untested fresh-install macOS TCC denial in docs/PERMISSION_TESTING.md.
 
 ## v2.14.1 — 2026-10-20

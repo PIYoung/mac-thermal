@@ -23,6 +23,6 @@ xcrun swiftc -O -D PANEL_UPDATES_PROBE -D HEALTH_ADVICE_PROBE -target arm64-appl
   "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" "$source_dir/CodexTranslations.swift" \
   "$build_dir/ProbeModels.swift" "$source_dir/MenuBarPreferences.swift" "$source_dir/Uptime.swift" "$source_dir/CPUUsageHistory.swift" "$source_dir/LiquidTabs.swift" \
   "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" \
-  "$source_dir/Panel.swift" "$source_dir/DashboardLayout.swift" "$source_dir/DashboardWindow.swift" "$project_dir/tests/probes/health_advice_probe.swift" \
+  "$source_dir/Panel.swift" "$source_dir/DashboardLayout.swift" "$source_dir/DashboardWindow.swift" "$source_dir/PanelPresentationRequest.swift" "$project_dir/tests/probes/health_advice_probe.swift" \
   -Xlinker -weak_framework -Xlinker FoundationModels -framework AppKit -framework QuartzCore -o "$build_dir/health-advice-probe"
 "$build_dir/health-advice-probe"

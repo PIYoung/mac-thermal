@@ -12,6 +12,12 @@ struct PanelPresentationRequest {
     private(set) var token: UInt?
     var pending: Bool { token != nil }
 
+    /// An ordered window may still be hidden by AppKit or another Space.
+    /// Reopening must bring it forward rather than treat it as an open toggle.
+    static func isPresented(isOrdered: Bool, isExposed: Bool, appHidden: Bool) -> Bool {
+        isOrdered && isExposed && !appHidden
+    }
+
     private let maxAttempts: Int
     private var generation: UInt = 0
     private var attempts = 0

@@ -24,10 +24,10 @@ enum PanelColor {
 private final class AdviceEntryButtonCell: NSButtonCell {
     override func drawBezel(withFrame frame: NSRect, in controlView: NSView) {
         let path = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 1), xRadius: 8, yRadius: 8)
-        PanelColor.adaptive(.black.withAlphaComponent(isHighlighted ? 0.09 : 0.045),
-                            .white.withAlphaComponent(isHighlighted ? 0.14 : 0.075)).setFill()
-        path.fill()
-        PanelColor.divider.setStroke(); path.lineWidth = 0.75; path.stroke()
+        NSGradient(starting: PanelColor.adaptive(.white.withAlphaComponent(0.64), .white.withAlphaComponent(0.18)),
+                   ending: PanelColor.adaptive(.white.withAlphaComponent(0.24), .white.withAlphaComponent(0.055)))?.draw(in: path, angle: 90)
+        PanelColor.blue.withAlphaComponent(isHighlighted ? 0.15 : 0.075).setFill(); path.fill()
+        PanelColor.edge.setStroke(); path.lineWidth = 0.8; path.stroke()
     }
 }
 
@@ -487,13 +487,22 @@ final class PanelController: NSViewController {
 
     private let adviceMonitor = HealthAdviceMonitor()
     private let adviceEngine: OnDeviceAdviceGenerating
+    private let usesNativeAdviceGlass: Bool
     private var showingAdvice = false
     private lazy var adviceContent = HealthAdviceView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), engine: adviceEngine)
     private lazy var adviceButton: NSButton = {
         let button = NSButton(frame: .zero)
-        button.cell = AdviceEntryButtonCell(textCell: "")
+        if #available(macOS 26.0, *), usesNativeAdviceGlass {
+            button.bezelStyle = .glass
+            button.tintProminence = .secondary
+            button.bezelColor = PanelColor.blue
+            button.borderShape = .capsule
+        } else {
+            button.cell = AdviceEntryButtonCell(textCell: "")
+            button.bezelStyle = .rounded
+        }
         button.target = self; button.action = #selector(toggleAdvice)
-        button.bezelStyle = .rounded; button.controlSize = .small
+        button.controlSize = .small
         button.font = .systemFont(ofSize: 10, weight: .medium)
         button.imagePosition = .imageLeft; button.imageHugsTitle = true
         button.contentTintColor = .secondaryLabelColor
@@ -702,14 +711,16 @@ final class PanelController: NSViewController {
     private let tabDefaultsKey = "dashboardSelectedResourceTabV4"
     private static let tabIdentifiers = ["cpu", "gpu", "memory", "ssd", "network"]
     private static let tabLabels = ["CPU", "GPU", "메모리", "SSD", "통신"]
-    init(defaults: UserDefaults = .standard, adviceEngine: OnDeviceAdviceGenerating = AppleOnDeviceAdvice()) {
+    init(defaults: UserDefaults = .standard, adviceEngine: OnDeviceAdviceGenerating = AppleOnDeviceAdvice(), usesNativeAdviceGlass: Bool = true) {
         self.adviceEngine = adviceEngine
+        self.usesNativeAdviceGlass = usesNativeAdviceGlass
         tabDefaults = defaults
         menuBarPreferences = .load(defaults: defaults)
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) {
         adviceEngine = AppleOnDeviceAdvice()
+        usesNativeAdviceGlass = true
         tabDefaults = .standard
         menuBarPreferences = .load()
         super.init(coder: coder)
@@ -1167,12 +1178,14 @@ final class PanelController: NSViewController {
     private func updateAdviceButton() {
         let title = L10n.text(showingAdvice ? "돌아가기" : "AI 설명")
         adviceButton.title = title
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: NSColor.labelColor]
+        let color = PanelColor.adaptive(NSColor(calibratedRed: 0.14, green: 0.33, blue: 0.65, alpha: 1),
+                                       NSColor(calibratedRed: 0.62, green: 0.77, blue: 1, alpha: 1))
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: color]
         adviceButton.attributedTitle = NSAttributedString(string: title, attributes: attributes)
         adviceButton.attributedAlternateTitle = adviceButton.attributedTitle
         let symbol = NSImage(systemSymbolName: showingAdvice ? "chevron.left" : "sparkles", accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
-        adviceButton.image = symbol?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.secondaryLabelColor]))
+        adviceButton.image = symbol?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [color]))
         adviceButton.image?.isTemplate = false
         adviceButton.setAccessibilityLabel(L10n.text(showingAdvice ? "상태 안내 닫기" : "현재 탭의 AI 설명 열기"))
         adviceButton.toolTip = L10n.text("현재 상태와 해볼 일을 확인해요 · AI를 사용할 수 없으면 기본 안내를 표시해요")

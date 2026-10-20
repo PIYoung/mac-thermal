@@ -40,7 +40,7 @@ common_sources=(
 )
 xcrun swiftc -O -D PANEL_UPDATES_PROBE -target arm64-apple-macosx14.0 \
   -module-cache-path "$build_dir/module-cache" "${common_sources[@]}" \
-  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" "$source_dir/Panel.swift" "$source_dir/DashboardLayout.swift" "$source_dir/DashboardWindow.swift" \
+  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" "$source_dir/Panel.swift" "$source_dir/DashboardLayout.swift" "$source_dir/DashboardWindow.swift" "$source_dir/PanelPresentationRequest.swift" \
   -Xlinker -weak_framework -Xlinker FoundationModels -framework AppKit -framework QuartzCore -o "$build_dir/panel-updates-probe"
 if [[ "$benchmark" == true ]]; then
   if [[ -n "$baseline_panel" ]]; then
