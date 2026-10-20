@@ -3,6 +3,7 @@ import Foundation
 // Original translations for Mac Thermal. Entries are English, Japanese, Simplified Chinese.
 extension L10n {
     static let panelTranslations: [String: [String]] = [
+        "현재 상태와 해볼 일을 확인해요 · AI를 사용할 수 없으면 기본 안내를 표시해요": ["Review your status and next steps · basic guidance is available without AI", "状態と対処方法を確認 · AIが利用できない場合は基本案内を表示します", "查看状态和建议操作 · AI不可用时显示基本指引"],
         "기기 내 AI · 요청할 때만 실행": ["On-device AI · only on request", "端末内AI · リクエスト時のみ", "设备端AI · 仅按需运行"],
         "macOS 26 이상에서 AI를 사용할 수 있어요": ["AI requires macOS 26 or later", "AIはmacOS 26以降で利用できます", "AI需要macOS 26或更高版本"],
         "Apple Intelligence를 켜면 AI 설명을 사용할 수 있어요": ["Enable Apple Intelligence to use AI explanations", "Apple IntelligenceをオンにするとAI説明を利用できます", "启用Apple Intelligence后可使用AI说明"],

@@ -105,6 +105,12 @@ final class HealthAdviceView: FlippedView {
     var probeReport: HealthAdviceReport? { report }
     var probeStatus: String { status.stringValue }
     var probeExplanation: OnDeviceAdviceText? { explanation }
+    var probeDocumentText: String {
+        func labels(_ view: NSView) -> [String] {
+            (view as? NSTextField).map { [$0.stringValue] } ?? view.subviews.flatMap(labels)
+        }
+        return labels(document).joined(separator: "\n")
+    }
     func probeAction() { act() }
     #endif
 }

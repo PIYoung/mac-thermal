@@ -241,6 +241,24 @@ struct CodexMonitorProbe {
         let cancelled = CodexRecordsCancellation(); cancelled.cancel()
         require(reader.scan(now: now, cancellation: cancelled) == nil, "cancelled scan performs no work or delivery")
 
+        let denied = try Fixture(); defer { denied.remove() }
+        try denied.write("2026/10/19/denied.jsonl", base)
+        let deniedReader = CodexLocalRecordsReader(root: denied.root)
+        require(deniedReader.scan(now: now, cancellation: CodexRecordsCancellation())!.dailyTokens == 100, "permission recovery baseline")
+        let originalMode = (try FileManager.default.attributesOfItem(atPath: denied.root.path)[.posixPermissions] as! NSNumber).uint16Value
+        defer { _ = chmod(denied.root.path, mode_t(originalMode)) }
+        require(chmod(denied.root.path, 0) == 0, "restrict owned fixture directory")
+        let deniedFD = Darwin.open(denied.root.path, O_RDONLY | O_DIRECTORY)
+        if deniedFD >= 0 { Darwin.close(deniedFD) }
+        require(deniedFD < 0, "fixture must actually deny filesystem access")
+        let inaccessible = deniedReader.scan(now: now.addingTimeInterval(1), cancellation: CodexRecordsCancellation())!
+        require(inaccessible.connection == .unavailable && inaccessible.dailyTokens == nil && inaccessible.models.isEmpty, "denied source clears stale counters instead of reporting zero")
+        require(chmod(denied.root.path, mode_t(originalMode)) == 0, "restore owned fixture directory")
+        let recovered = deniedReader.scan(now: now.addingTimeInterval(2), cancellation: CodexRecordsCancellation())!
+        require(recovered.connection == .connected && recovered.dailyTokens == 100, "restored permission re-enumerates immediately without waiting for catalog expiry")
+        let missing = CodexLocalRecordsReader(root: denied.root.appendingPathComponent("missing")).scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(missing.connection == .unavailable && missing.dailyTokens == nil, "missing source is unavailable rather than a zero count")
+
         let suite = "MacThermal.CodexMonitorProbe." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }

@@ -52,10 +52,31 @@ struct DiskCleanupProbe {
         try candidatesAndTraversal()
         try identityAndScope()
         try selectionCancellationAndFailure()
+        try deniedDirectoryRecovery()
         try limitsAndInvalidRoots()
         try rememberedFolderRoundtrip()
         try rememberedFolderChangedScopes()
         print("Disk cleanup fixtures passed: metadata candidates; recent/hidden/package/cloud/project exclusions; no symlink traversal; identity/parent/marker changes; exact subset; cancellation; partial failure; bounded scan and no-op. All Trash actions were injected moves inside owned temporary fixtures.")
+    }
+
+    private static func deniedDirectoryRecovery() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let file = try fixture.file("keep.dmg")
+        let original = (try fixture.fm.attributesOfItem(atPath: fixture.root.path)[.posixPermissions] as! NSNumber).uint16Value
+        defer { _ = chmod(fixture.root.path, mode_t(original)) }
+        precondition(chmod(fixture.root.path, 0) == 0)
+        let descriptor = open(fixture.root.path, O_RDONLY | O_DIRECTORY)
+        if descriptor >= 0 { close(descriptor) }
+        precondition(descriptor < 0, "Owned fixture must actually reject access")
+        do {
+            _ = try fixture.scan()
+            preconditionFailure("Unreadable selected folder must not produce a successful plan")
+        } catch let error as DiskCleanupError { precondition(error.reason == .permissionDenied) }
+        precondition(chmod(fixture.root.path, mode_t(original)) == 0)
+        let recovered = try fixture.scan()
+        precondition(recovered.candidates.count == 1 && fixture.fm.fileExists(atPath: file.path))
+        print("Disk permission failure/recovery passed on owned POSIX-denied fixture; no macOS TCC settings or real Trash operation")
     }
 
     private static func homeScanBoundaries() throws {

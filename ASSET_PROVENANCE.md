@@ -43,3 +43,5 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 - 상태 안내·AI 설명 화면: 자체 AppKit 카드와 기존 GlassScroller를 재사용합니다. 외부 이미지·아이콘·모델·패키지를 추가하지 않습니다. Foundation Models는 macOS가 제공하는 선택형 시스템 프레임워크이며 SystemLanguageModel.default만 사용합니다. 생성 문구와 별도로 측정 근거·기본 안내·고정 행동 버튼을 표시합니다.
 
 Codex robot idle/active motion reuses the original four geometric typing poses at two cadences. No external animation, sprite, library or model is added.
+
+The prominent AI header button uses an original static blue/violet gradient, native AppKit button behavior and the system sparkles/back symbols inside the app. No external artwork, package or repeating animation is added.

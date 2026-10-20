@@ -19,6 +19,19 @@ enum PanelColor {
     static let divider = adaptive(.black.withAlphaComponent(0.07), .white.withAlphaComponent(0.10))
 }
 
+/// Original, static AI entry treatment; a native button retains keyboard focus,
+/// hit testing and accessibility. No timer or attention-seeking animation.
+private final class AdviceEntryButtonCell: NSButtonCell {
+    override func drawBezel(withFrame frame: NSRect, in controlView: NSView) {
+        let path = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 1), xRadius: 10, yRadius: 10)
+        let blue = NSColor(calibratedRed: 0.18, green: 0.31, blue: 0.77, alpha: 1)
+        let purple = NSColor(calibratedRed: 0.46, green: 0.20, blue: 0.70, alpha: 1)
+        NSGradient(starting: blue, ending: purple)?.draw(in: path, angle: 0)
+        if isHighlighted { NSColor.black.withAlphaComponent(0.16).setFill(); path.fill() }
+        NSColor.white.withAlphaComponent(0.26).setStroke(); path.lineWidth = 1; path.stroke()
+    }
+}
+
 /// Original glass-style artwork on the native scroller: native hit testing,
 /// dragging, paging and accessibility remain intact. No repeating animation.
 final class GlassScroller: NSScroller {
@@ -478,9 +491,13 @@ final class PanelController: NSViewController {
     private var showingAdvice = false
     private lazy var adviceContent = HealthAdviceView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), engine: adviceEngine)
     private lazy var adviceButton: NSButton = {
-        let button = NSButton(title: L10n.text("AI 설명"), target: self, action: #selector(toggleAdvice))
-        button.bezelStyle = .rounded; button.controlSize = .small
-        button.font = .systemFont(ofSize: 10, weight: .medium)
+        let button = NSButton(frame: .zero)
+        button.cell = AdviceEntryButtonCell(textCell: "")
+        button.target = self; button.action = #selector(toggleAdvice)
+        button.bezelStyle = .rounded; button.controlSize = .regular
+        button.font = .systemFont(ofSize: 10, weight: .semibold)
+        button.imagePosition = .imageLeft; button.imageHugsTitle = true
+        button.contentTintColor = .white
         return button
     }()
     var adviceActionRequested: ((AdviceAction) -> Void)?
@@ -764,9 +781,10 @@ final class PanelController: NSViewController {
         brand.imageScaling = .scaleProportionallyDown
         brand.setAccessibilityElement(false)
         place(brand, in: canvas, 16, 13, 30, 30)
-        place(text("Mac Thermal", size: 15, weight: .semibold), in: canvas, 54, 11, 226, 20)
-        place(uptimeLabel, in: canvas, 54, 32, 226, 14)
+        place(text("Mac Thermal", size: 15, weight: .semibold), in: canvas, 54, 11, 153, 20)
+        place(uptimeLabel, in: canvas, 54, 32, 153, 14)
         localizedToolTip(uptimeLabel, "잠자기 시간을 포함한 부팅 후 경과 시간 · 1분 단위")
+        place(adviceButton, in: canvas, 211, 13, 82, 32)
         place(menuBarSettingsButton, in: canvas, 300, 16, 24, 24)
         place(tabs, in: canvas, 16, 55, 308, 24)
         tabViews = Self.tabIdentifiers.map { _ in
@@ -811,8 +829,7 @@ final class PanelController: NSViewController {
         let footerLine = NSBox()
         footerLine.boxType = .separator
         place(footerLine, in: canvas, 16, 379, 308, 1)
-        place(updated, in: canvas, 17, 388, 172, 15)
-        place(adviceButton, in: canvas, 197, 385, 61, 23)
+        place(updated, in: canvas, 17, 388, 238, 15)
         let refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: L10n.text("새로고침")) ?? NSImage(), target: self, action: #selector(refreshNow))
         let quitButton = NSButton(image: NSImage(systemSymbolName: "power", accessibilityDescription: L10n.text("종료")) ?? NSImage(), target: self, action: #selector(quitApp))
         for (button, title, x) in [(refreshButton, "지금 새로고침", CGFloat(267)), (quitButton, "Mac Thermal 종료", CGFloat(300))] {
@@ -1127,8 +1144,7 @@ final class PanelController: NSViewController {
         settingsScroll.isHidden = !showingMenuBarSettings
         adviceContent.isHidden = showingMenuBarSettings || !showingAdvice
         adviceButton.isHidden = showingMenuBarSettings
-        adviceButton.title = L10n.text(showingAdvice ? "돌아가기" : "AI 설명")
-        adviceButton.setAccessibilityLabel(L10n.text(showingAdvice ? "상태 안내 닫기" : "현재 탭의 AI 설명 열기"))
+        updateAdviceButton()
         menuBarSettingsButton.contentTintColor = showingMenuBarSettings ? PanelColor.blue : PanelColor.secondary
         localizedAccessibilityLabel(menuBarSettingsButton, showingMenuBarSettings ? "Mac Thermal 설정 닫기" : "Mac Thermal 설정 열기")
         for (index, content) in tabViews.enumerated() {
@@ -1149,6 +1165,19 @@ final class PanelController: NSViewController {
         if showingAdvice { suspendAdvice(); showSelectedTab() }
         else { openAdvice() }
     }
+    private func updateAdviceButton() {
+        let title = L10n.text(showingAdvice ? "돌아가기" : "AI 설명")
+        adviceButton.title = title
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .semibold), .foregroundColor: NSColor.white]
+        adviceButton.attributedTitle = NSAttributedString(string: title, attributes: attributes)
+        adviceButton.attributedAlternateTitle = adviceButton.attributedTitle
+        let symbol = NSImage(systemSymbolName: showingAdvice ? "chevron.left" : "sparkles", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
+        adviceButton.image = symbol?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        adviceButton.image?.isTemplate = false
+        adviceButton.setAccessibilityLabel(L10n.text(showingAdvice ? "상태 안내 닫기" : "현재 탭의 AI 설명 열기"))
+        adviceButton.toolTip = L10n.text("현재 상태와 해볼 일을 확인해요 · AI를 사용할 수 없으면 기본 안내를 표시해요")
+    }
     private func openAdvice() {
         guard !showingMenuBarSettings, let topic = AdviceTopic(rawValue: tabs.selectedSegment) else { return }
         showingAdvice = true
@@ -1159,8 +1188,7 @@ final class PanelController: NSViewController {
         showingAdvice = false
         if isViewLoaded {
             adviceContent.suspend(); adviceContent.isHidden = true
-            adviceButton.title = L10n.text("AI 설명")
-            adviceButton.setAccessibilityLabel(L10n.text("현재 탭의 AI 설명 열기"))
+            updateAdviceButton()
             for (index, content) in tabViews.enumerated() { content.isHidden = showingMenuBarSettings || index != tabs.selectedSegment }
         }
     }
@@ -1545,6 +1573,14 @@ extension PanelController {
     var probeAdviceIsVisible: Bool { showingAdvice && !adviceContent.isHidden }
     var probeAdviceView: HealthAdviceView { adviceContent }
     var probeAdviceButtonFits: Bool { (adviceButton.cell?.cellSize.width ?? 0) <= adviceButton.frame.width }
+    var probeAdviceEntryIsProminent: Bool {
+        !adviceButton.isHidden && adviceButton.frame == NSRect(x: 211, y: 13, width: 82, height: 32) && adviceButton.image != nil
+    }
+    var probeAdviceHeaderFits: Bool {
+        (uptimeLabel.stringValue as NSString).size(withAttributes: [.font: uptimeLabel.font!]).width <= uptimeLabel.frame.width
+    }
+    var probeAdviceDocumentText: String { adviceContent.probeDocumentText }
+    var probeLoginLabel: String { loginLabel.stringValue }
     #endif
     var probeSelectedTab: Int { tabs.selectedSegment }
     var probeTabLabels: [String] { Self.tabLabels.map(L10n.text) }

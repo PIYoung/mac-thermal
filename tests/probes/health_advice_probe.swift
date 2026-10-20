@@ -5,7 +5,8 @@ import Darwin
 // No collector, account, real model, notification or application is invoked.
 enum LoginItemManager {
     struct State { let enabled: Bool; let requiresApproval: Bool; let title: String }
-    static func state() -> State { .init(enabled: false, requiresApproval: false, title: "Fixture") }
+    static var fixtureState = State(enabled: false, requiresApproval: false, title: "Fixture")
+    static func state() -> State { fixtureState }
     static func enable() throws {}
     static func disable() throws {}
     static func openSettings() {}
@@ -17,11 +18,13 @@ final class AdviceFixtureEngine: OnDeviceAdviceGenerating {
     var delay: UInt64 = 1_000_000
     var ignoresCancellation = false
     var invalid = false
+    var fails = false
     var calls: Int { lock.lock(); defer { lock.unlock() }; return count }
     func availability(language: AppLanguage) -> AdviceModelAvailability { available }
     private func record() { lock.lock(); count += 1; lock.unlock() }
     func generate(_ report: HealthAdviceReport) async throws -> OnDeviceAdviceText {
         record()
+        if fails { throw CocoaError(.featureUnsupported) }
         if ignoresCancellation { await withCheckedContinuation { continuation in
             DispatchQueue.global().asyncAfter(deadline: .now() + Double(delay) / 1_000_000_000) { continuation.resume() }
         } }
@@ -98,11 +101,24 @@ struct HealthAdviceProbe {
         precondition(engine.calls == 0)
         session.start(base); await wait(); precondition(engine.calls == 1 && delivered == 1)
         session.start(monitor.report(.cpu, sample: sample(cpu: 105))); await wait(); precondition(engine.calls == 1)
-        engine.available = .notEnabled; session.start(base); await wait(); precondition(engine.calls == 1)
+        for availability: AdviceModelAvailability in [.requiresOS, .notEnabled, .preparing, .unsupportedDevice, .unsupportedLanguage, .unavailable] {
+            engine.available = availability
+            var message: String?
+            session.onState = { if case .basic(let text) = $0 { message = text } }
+            session.start(base); await wait()
+            precondition(engine.calls == 1 && message == availability.message)
+        }
+        session.onState = { if case .explained = $0 { delivered += 1 } }
         engine.available = .ready; engine.invalid = true; session.start(base); await wait(); precondition(delivered == 1)
         engine.invalid = false; engine.delay = 80_000_000; engine.ignoresCancellation = true
         session.start(base); await wait(5); session.cancel(); await wait(); precondition(delivered == 1)
         await wait(90); precondition(!session.probeBusy)
+        engine.fails = true
+        var failureMessage: String?
+        session.onState = { if case .basic(let text) = $0 { failureMessage = text } }
+        session.start(base); await eventually { failureMessage != nil }
+        precondition(failureMessage == L10n.text("AI 설명을 완료하지 못해 기본 안내를 표시해요"))
+        engine.fails = false
         let timeoutEngine = AdviceFixtureEngine(); timeoutEngine.delay = 80_000_000
         let timeoutSession = AdviceSessionController(engine: timeoutEngine, timeoutNanoseconds: 5_000_000)
         var timedOut = false
@@ -125,11 +141,37 @@ struct HealthAdviceProbe {
                 panel.probeSelectTab(topic.rawValue); panel.probeOpenAdvice()
                 precondition(panel.probeAdviceIsVisible && panel.probeAdviceView.probeReport?.topic == topic)
                 precondition(panel.probeAdviceButtonFits)
+                precondition(panel.probeAdviceEntryIsProminent && panel.probeAdviceHeaderFits)
                 precondition(panel.probeAdviceView.probeStatus == AdviceModelAvailability.notEnabled.message)
                 precondition(window.frame == frame && PanelController.surfaceSize == NSSize(width: 340, height: 420))
                 panel.probeCloseAdvice(); precondition(!panel.probeAdviceIsVisible && panel.probeAdviceView.probeReport == nil)
             }
         }
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults)
+            for availability: AdviceModelAvailability in [.requiresOS, .notEnabled, .preparing, .unsupportedDevice, .unsupportedLanguage, .unavailable] {
+                engine.available = availability
+                for topic in AdviceTopic.allCases {
+                    panel.probeSelectTab(topic.rawValue); panel.probeOpenAdvice()
+                    precondition(panel.probeAdviceView.probeStatus == availability.message)
+                    for key in ["현재 상태", "판단 근거", "해볼 일"] {
+                        precondition(panel.probeAdviceDocumentText.contains(L10n.text(key)))
+                    }
+                    precondition(panel.probeAdviceView.probeExplanation == nil)
+                    panel.probeCloseAdvice()
+                    precondition(panel.probeAdviceEntryIsProminent && panel.probeAdviceButtonFits)
+                }
+            }
+            for (state, expected) in [
+                (LoginItemManager.State(enabled: false, requiresApproval: false, title: "Not registered fixture"), "꺼짐"),
+                (LoginItemManager.State(enabled: false, requiresApproval: true, title: "Approval required fixture"), "승인 필요"),
+                (LoginItemManager.State(enabled: true, requiresApproval: false, title: "Enabled fixture"), "켜짐")
+            ] {
+                LoginItemManager.fixtureState = state; panel.updateLoginState()
+                precondition(panel.probeLoginLabel == L10n.text(expected) && panel.probeAdviceEntryIsProminent)
+            }
+        }
+        engine.available = .notEnabled
         L10n.setLanguage(.korean, defaults: defaults)
         precondition(engine.calls == 0)
         var actions: [AdviceAction] = []
@@ -138,6 +180,7 @@ struct HealthAdviceProbe {
         panel.probeSelectTab(0); panel.probeOpenAdvice(); panel.probeAdviceView.probeAction()
         precondition(actions == [.diskCleanup, .activityMonitor])
         panel.probeToggleSettings(); precondition(!panel.probeAdviceIsVisible)
+        precondition(!panel.probeAdviceEntryIsProminent)
         panel.probeToggleSettings(); panel.probeOpenAdvice(); panel.suspendAdvice()
         panel.prepareForPresentation(); precondition(!panel.probeAdviceIsVisible)
         panel.probeOpenAdvice(); window.cancelOperation(nil)
@@ -153,7 +196,7 @@ struct HealthAdviceProbe {
         precondition(panel.probeAdviceView.probeStatus == L10n.text("고온 또는 높은 메모리 압박으로 AI 실행을 쉬고 있어요"))
         panel.probeCloseAdvice()
         precondition(window.frame == frame)
-        print("PASS advice UI: five tabs/four languages, fixed frame, safe unavailable fallback, injected actions, settings/tab/dismissal cleanup, heat cancellation")
+        print("PASS advice UI: prominent header button, five tabs/four languages, six unavailable-model states with basic guidance, login-approval fixture states, fixed frame, injected actions, settings/tab/dismissal cleanup, heat cancellation")
     }
     @MainActor static func main() async {
         setbuf(stdout, nil)

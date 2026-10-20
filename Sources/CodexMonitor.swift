@@ -288,7 +288,7 @@ final class CodexLocalRecordsReader {
         }
         needsCatchUp = false
         guard let (verified, rootFD) = CodexRecordsScope.open(root, expected: scope) else {
-            states.removeAll(); catalog.removeAll(); catalogValid = false
+            states.removeAll(); catalog.removeAll(); catalogValid = false; catalogAt = nil
             var snapshot = CodexMonitorSnapshot(); snapshot.recordsEnabled = true; snapshot.connection = .unavailable
             snapshot.noticeKey = "로컬 Codex 기록을 읽을 수 없습니다"; snapshot.updatedAt = now
             return cancellation.isCancelled ? nil : snapshot
@@ -321,7 +321,7 @@ final class CodexLocalRecordsReader {
         guard !cancellation.isCancelled else { return nil }
         // Never publish data from a directory that was exchanged during a scan.
         guard let (_, verificationFD) = CodexRecordsScope.open(root, expected: verified) else {
-            states.removeAll(); catalog.removeAll(); catalogValid = false
+            states.removeAll(); catalog.removeAll(); catalogValid = false; catalogAt = nil
             var snapshot = CodexMonitorSnapshot(); snapshot.recordsEnabled = true; snapshot.connection = .unavailable
             snapshot.noticeKey = "로컬 Codex 기록을 읽을 수 없습니다"; snapshot.updatedAt = now
             return snapshot

@@ -46,3 +46,5 @@ results are ignored. Cancellation invalidates delivery immediately, while OS
 model shutdown may complete later. No new OS notifications, data source, disk
 cleanup permission, fan control, process termination or security-policy change
 is introduced by this feature.
+
+See [permission verification](docs/PERMISSION_TESTING.md) for the tested unavailable/denied states and the untested fresh-install macOS permission-dialog boundaries. No permission is required merely to open basic resource guidance; model generation and optional features retain their own availability/access constraints.

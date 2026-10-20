@@ -100,6 +100,14 @@ final class FakeResetNotifications: CodexResetNotificationTransport {
         restart.stop(); current = date(721); restart.receive(sample(721, reset: 1080))
         current = date(1081); restart.receive(sample(1081, reset: 1440))
         check(restartWire.posts == 1 && !restart.enabled, "Stop prevents all later reset deliveries while preserving the saved preference")
+        for permission in [CodexResetPermission.denied, .notDetermined, .unavailable] {
+            defaults.set(true, forKey: CodexResetNotifications.enabledKey)
+            let blockedWire = FakeResetNotifications(); blockedWire.permissionValue = permission
+            let blocked = CodexResetNotifications(defaults: defaults, transport: blockedWire, now: { current })
+            blocked.start(); blocked.receive(sample(61, reset: 360))
+            check(!blocked.enabled && blockedWire.requests == 0 && blockedWire.posts == 0, "Saved alert opt-in without current permission must remain off, without a launch-time prompt or notification")
+            blocked.stop()
+        }
         print("Codex reset notification probe PASS (\(count) checks; synthetic quota and notification transport only; no real permission prompt, account query or notification)")
     }
 }
