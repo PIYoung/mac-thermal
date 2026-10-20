@@ -494,8 +494,7 @@ final class PanelController: NSViewController {
         let button = NSButton(frame: .zero)
         if #available(macOS 26.0, *), usesNativeAdviceGlass {
             button.bezelStyle = .glass
-            button.tintProminence = .secondary
-            button.bezelColor = PanelColor.blue
+            button.tintProminence = .none
             button.borderShape = .capsule
         } else {
             button.cell = AdviceEntryButtonCell(textCell: "")
