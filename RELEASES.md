@@ -1,5 +1,14 @@
 # Releases
 
+## v2.7.1 — Unreleased
+
+Reduce menu bar rendering overhead. Build 29.
+
+- Cache text rasters and the current animation frame for AppKit’s alternating status-item appearances, reuse layout while labels stay the same, and skip redundant effective-appearance notifications. Keep light/dark contrast, warning colors and accessibility/language invalidation.
+- Remove a redundant full-image crop and avoid setting the status-item width when it has not changed.
+- Preserve the eight-frame-per-second animation limit, monitoring cadence, motion gates and paired-panel layout.
+- Verify repeated appearance changes reuse cached text with identical pixels and fresh measurements invalidate the cache. No external dependencies or permissions are added.
+
 ## v2.7.0 — 2026-10-19
 
 Compact resource surfaces and an optional local Codex companion. Build 28.

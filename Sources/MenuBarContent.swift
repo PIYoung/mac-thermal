@@ -9,6 +9,29 @@ final class MenuBarContent: NSObject {
     private var codexActivity = CodexMenuActivity()
     private var codexFrame = 0
     private var baseImage: CGImage?
+    private struct AppearanceKey: Hashable {
+        let name: String
+        let scale: CGFloat
+        let increasedContrast: Bool
+    }
+    private struct BaseRendering {
+        let image: CGImage
+        let ink: CGColor
+    }
+    // AppKit snapshots the same status button in several appearances. Keep the
+    // text raster for each appearance instead of remeasuring/redrawing it at 8fps.
+    private var baseRenderings: [AppearanceKey: BaseRendering] = [:]
+    private var renderedAppearance: AppearanceKey?
+    private var layoutSignature = ""
+    private struct FrameKey: Hashable {
+        let appearance: AppearanceKey
+        let animated: Bool
+        let codexPose: Int
+    }
+    private var frameRenderings: [FrameKey: NSImage] = [:]
+    #if MENU_RENDER_PROBE
+    private var baseRasterizationCount = 0
+    #endif
     private var ink = NSColor.labelColor.cgColor
     private var scale: CGFloat = 2
     private var timer: Timer?
@@ -42,6 +65,7 @@ final class MenuBarContent: NSObject {
         didSet {
             guard preferences != oldValue else { return }
             lastTick = nil
+            frameRenderings.removeAll()
             if !preferences.motionEnabled || !preferences.visibleMetrics.contains(.codex) { codexActivity.cancelGesture() }
             if preferences.visibleMetrics != oldValue.visibleMetrics {
                 textSignature = ""
@@ -56,15 +80,15 @@ final class MenuBarContent: NSObject {
     init(frame: NSRect) {
         super.init()
         observe(.default, .appLanguageDidChange) { [weak self] _ in
-            self?.appearanceChanged()
+            self?.appearanceChanged(force: true)
             self?.updateAccessibility()
         }
         let workspace = NSWorkspace.shared.notificationCenter
-        observe(workspace, NSWorkspace.accessibilityDisplayOptionsDidChangeNotification) { [weak self] _ in self?.appearanceChanged() }
+        observe(workspace, NSWorkspace.accessibilityDisplayOptionsDidChangeNotification) { [weak self] _ in self?.appearanceChanged(force: true) }
         observe(workspace, NSWorkspace.willSleepNotification) { [weak self] _ in self?.systemSleeping = true; self?.configureAnimation() }
         observe(workspace, NSWorkspace.didWakeNotification) { [weak self] _ in self?.systemSleeping = false; self?.lastTick = nil; self?.configureAnimation() }
         observe(workspace, NSWorkspace.screensDidSleepNotification) { [weak self] _ in self?.displaySleeping = true; self?.configureAnimation() }
-        observe(workspace, NSWorkspace.screensDidWakeNotification) { [weak self] _ in self?.displaySleeping = false; self?.lastTick = nil; self?.appearanceChanged() }
+        observe(workspace, NSWorkspace.screensDidWakeNotification) { [weak self] _ in self?.displaySleeping = false; self?.lastTick = nil; self?.appearanceChanged(force: true) }
         observe(.default, NSWindow.didChangeBackingPropertiesNotification) { [weak self] notification in
             guard let self, let window = notification.object as? NSWindow, window === self.button?.window else { return }
             self.appearanceChanged()
@@ -94,7 +118,7 @@ final class MenuBarContent: NSObject {
         button.imageHugsTitle = true
         appearanceObservation?.invalidate()
         appearanceObservation = button.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in self?.appearanceChanged() }
-        appearanceChanged()
+        appearanceChanged(force: true)
     }
 
     var contentWidth: CGFloat { ceil((button?.image?.size.width ?? displayWidth) + 6) }
@@ -110,6 +134,7 @@ final class MenuBarContent: NSObject {
     }
 
     func update(sample: Snapshot) {
+        frameRenderings.removeAll()
         self.sample = sample
         let lines = labels
         let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)"
@@ -179,11 +204,25 @@ final class MenuBarContent: NSObject {
             diskPhase = (diskPhase + elapsed / max(0.9, period / sqrt(intensity))).truncatingRemainder(dividingBy: 1)
         }
         codexFrame = Int(now * 8) % 4
+        frameRenderings.removeAll()
         displayFrame()
     }
 
-    private func appearanceChanged() {
-        baseImage = nil
+    private var drawingAppearance: NSAppearance {
+        previewAppearance ?? button?.effectiveAppearance ?? NSAppearance.currentDrawing()
+    }
+
+    private var appearanceKey: AppearanceKey {
+        AppearanceKey(name: drawingAppearance.name.rawValue,
+                      scale: max(1, button?.window?.backingScaleFactor ?? 2),
+                      increasedContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+    }
+
+    private func appearanceChanged(force: Bool = false) {
+        // Effective-appearance KVO also fires when the resolved appearance did
+        // not change. Do not assign another image and invalidate replicants then.
+        guard force || baseImage == nil || renderedAppearance != appearanceKey else { return }
+        if force { baseRenderings.removeAll(); frameRenderings.removeAll() }
         rebuildBase()
         configureAnimation()
         displayFrame()
@@ -283,14 +322,11 @@ final class MenuBarContent: NSObject {
     }
 
     private func rebuildBase(labels preparedLabels: [String]? = nil) {
-        scale = max(1, button?.window?.backingScaleFactor ?? 2)
-        let appearance = previewAppearance ?? button?.effectiveAppearance ?? NSAppearance.currentDrawing()
-        appearance.performAsCurrentDrawingAppearance {
-            let color = sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor
-            ink = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
-            let lines = preparedLabels ?? labels
-            // Measure each selected group's actual two-line text once per sample.
-            // No hidden slot or fixed-width storage tail is retained between groups.
+        let lines = preparedLabels ?? labels
+        let signature = orderedMetrics.map(\.rawValue).joined(separator: ",") + "|" + lines.joined(separator: "|") + "|\(sample.thermal.level)"
+        if signature != layoutSignature || layoutSignature.isEmpty {
+            layoutSignature = signature
+            baseRenderings.removeAll()
             layout = []
             var cursor: CGFloat = 2
             for (index, metric) in orderedMetrics.enumerated() {
@@ -309,6 +345,18 @@ final class MenuBarContent: NSObject {
                 cursor += width + 7
             }
             displayWidth = layout.isEmpty ? 18 : ceil(cursor - 7 + 2)
+        }
+        let key = appearanceKey
+        scale = key.scale
+        if let cached = baseRenderings[key] {
+            baseImage = cached.image
+            ink = cached.ink
+            renderedAppearance = key
+            return
+        }
+        drawingAppearance.performAsCurrentDrawingAppearance {
+            let color = sample.thermal.level > 0 ? sample.thermal.color : NSColor.labelColor
+            ink = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
             guard let context = context() else { baseImage = nil; return }
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
@@ -324,6 +372,15 @@ final class MenuBarContent: NSObject {
                 context.fill(CGRect(x: group.origin + group.width + 3.25, y: 5, width: 0.5, height: 12))
             }
             baseImage = context.makeImage()
+            if let baseImage {
+                // Bound memory even if a display supplies many appearance names.
+                if baseRenderings.count >= 4 { baseRenderings.removeAll() }
+                baseRenderings[key] = BaseRendering(image: baseImage, ink: ink)
+                renderedAppearance = key
+                #if MENU_RENDER_PROBE
+                baseRasterizationCount += 1
+                #endif
+            }
         }
     }
 
@@ -338,7 +395,7 @@ final class MenuBarContent: NSObject {
     }
 
     private func displayFrame() {
-        guard let button, let image = composite() else { return }
+        guard let button, let image = composite(), button.image !== image else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         button.image = image
@@ -347,9 +404,13 @@ final class MenuBarContent: NSObject {
 
     private func composite() -> NSImage? {
         if baseImage == nil { rebuildBase() }
-        guard let context = context(), let baseImage else { return nil }
-        context.draw(baseImage, in: CGRect(origin: .zero, size: canvasSize))
+        guard let baseImage, let renderedAppearance else { return nil }
         let animated = motionAllowed && !systemSleeping && !displaySleeping && hasActivity
+        let codexPose = animated && codexActivity.isAnimating(at: ProcessInfo.processInfo.systemUptime) ? codexFrame : 0
+        let key = FrameKey(appearance: renderedAppearance, animated: animated, codexPose: codexPose)
+        if let cached = frameRenderings[key] { return cached }
+        guard let context = context() else { return nil }
+        context.draw(baseImage, in: CGRect(origin: .zero, size: canvasSize))
         for group in layout {
             context.saveGState()
             context.translateBy(x: group.origin, y: 0)
@@ -358,7 +419,7 @@ final class MenuBarContent: NSObject {
             case .gpu: drawGPU(in: context, phase: animated ? gpuPhase : 0, animated: animated)
             case .ssd: drawCapacity(in: context, phase: animated ? diskPhase : 0, animated: animated)
             case .codex:
-                drawCodex(in: context, frame: animated && codexActivity.isAnimating(at: ProcessInfo.processInfo.systemUptime) ? codexFrame : 0)
+                drawCodex(in: context, frame: codexPose)
             case .network:
                 drawFlow(in: context, x: 0, bytes: sample.upload, phase: animated ? uploadPhase : 0.45, upward: true, animated: animated)
                 drawFlow(in: context, x: 9, bytes: sample.download, phase: animated ? downloadPhase : 0.45, upward: false, animated: animated)
@@ -366,8 +427,13 @@ final class MenuBarContent: NSObject {
             context.restoreGState()
         }
         let width = displayWidth
-        guard let image = context.makeImage()?.cropping(to: CGRect(x: 0, y: 0, width: width * scale, height: Self.imageSize.height * scale)) else { return nil }
-        return NSImage(cgImage: image, size: NSSize(width: width, height: Self.imageSize.height))
+        guard let image = context.makeImage() else { return nil }
+        let frame = NSImage(cgImage: image, size: NSSize(width: width, height: Self.imageSize.height))
+        // A transient snapshot appearance may recur several times in one tick.
+        // Cache only this frame, discarding it on data, preference or phase changes.
+        if frameRenderings.count >= 8 { frameRenderings.removeAll() }
+        frameRenderings[key] = frame
+        return frame
     }
 
     /// Original 26pt robot and keyboard, drawn entirely from basic shapes.
@@ -523,6 +589,21 @@ final class MenuBarContent: NSObject {
         return (content.composite(), frames, content.accessibilityLines.joined(separator: "\n"))
     }
 
+    #if MENU_RENDER_PROBE
+    /// Exercise AppKit's alternating snapshot appearances on one cached painter.
+    static func previewAppearanceRenderer(sample: Snapshot) -> (Bool, Snapshot?, Bool) -> (NSImage?, Int) {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        content.preferences = MenuBarPreferences()
+        return { dark, replacement, force in
+            content.previewAppearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            if let replacement { content.update(sample: replacement) }
+            content.appearanceChanged(force: force)
+            return (content.composite(), content.baseRasterizationCount)
+        }
+    }
+    #endif
+
     /// Offscreen fixtures exercise the same painter without changing the menu bar.
     static func preview(sample: Snapshot, preferences: MenuBarPreferences, dark: Bool, phase: Double, sleeping: Bool = false) -> NSImage? {
         previewRenderer(sample: sample, preferences: preferences, dark: dark, sleeping: sleeping)(phase, nil)
@@ -539,6 +620,7 @@ final class MenuBarContent: NSObject {
         content.rebuildBase()
         return { phase, replacement in
             if let replacement { content.update(sample: replacement) }
+            content.frameRenderings.removeAll()
             content.cpuPhase = phase
             content.gpuPhase = phase
             content.uploadPhase = phase

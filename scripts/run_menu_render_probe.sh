@@ -18,7 +18,7 @@ main = (project / 'Sources/main.swift').read_text().split('final class AppDelega
 resources = (project / 'Sources/Resources.swift').read_text().split('enum ResourceSampler', 1)[0]
 (project / 'build' / 'ProbeModels.swift').write_text(main + '\n' + resources)
 PY
-xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$build_dir/module-cache" \
+xcrun swiftc -O -D MENU_RENDER_PROBE -target arm64-apple-macosx14.0 -module-cache-path "$build_dir/module-cache" \
   "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" "$source_dir/CodexTranslations.swift" \
   "$build_dir/ProbeModels.swift" "$source_dir/CodexModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/CodexMenuState.swift" "$source_dir/MenuBarContent.swift" "$project_dir/tests/probes/menu_render_probe.swift" \

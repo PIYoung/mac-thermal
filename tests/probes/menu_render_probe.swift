@@ -325,6 +325,42 @@ struct MenuRenderProbe {
         L10n.setLanguage(.korean, defaults: isolated)
         print("PASS Codex menu: 32 selections × four languages × two appearances, source states, finite fresh-record gesture, no catch-up/re-enable replay, OFF/sleep gates")
     }
+    static func appearanceCacheChecks() throws {
+        let painter = MenuBarContent.previewAppearanceRenderer(sample: sample(thermal: .serious))
+        let (light, _) = painter(false, nil, false)
+        let (dark, initialCount) = painter(true, nil, false)
+        guard let light, let dark else { throw ProbeError.failed("appearance cache fixture missing") }
+        try check(try pixels(light) != pixels(dark), "appearance cache lost text/icon contrast")
+        for _ in 0..<100 {
+            let (nextLight, _) = painter(false, nil, false)
+            let (nextDark, count) = painter(true, nil, false)
+            try check(count == initialCount, "snapshot appearances repeatedly rasterized cached text")
+            try check(nextLight === light && nextDark === dark, "same animation frame was repeatedly composited")
+            try check(try pixels(nextLight!) == pixels(light), "cached light appearance changed pixels")
+            try check(try pixels(nextDark!) == pixels(dark), "cached dark appearance changed pixels")
+        }
+        let (changed, changedCount) = painter(true, sample(cpu: 99, thermal: .fair), false)
+        try check(changedCount > initialCount && (try pixels(changed!)) != pixels(dark), "sample/thermal update left stale text or color")
+        let (_, forcedCount) = painter(true, nil, true)
+        try check(forcedCount > changedCount, "accessibility/language invalidation reused stale raster")
+        let nominal = MenuBarContent.previewAppearanceRenderer(sample: sample())
+        let (first, _) = nominal(false, nil, false)
+        let (second, nominalCount) = nominal(true, nil, false)
+        try check(first != nil && second != nil && (try pixels(first!)) != pixels(second!),
+                  "nominal light/dark contrast lost")
+        for dark in [true, false, true, false] {
+            let (next, count) = nominal(dark, nil, false)
+            try check(next === (dark ? second : first) && count == nominalCount,
+                      "nominal snapshot repeatedly rasterized its frame")
+        }
+        let (warning, _) = nominal(false, sample(thermal: .serious), false)
+        try check(warning?.isTemplate == false, "warning was tinted as a monochrome template")
+        try check((try pixels(warning!)) != pixels(first!), "warning transition reused nominal frame")
+        let (recovered, _) = nominal(false, sample(), false)
+        try check(try pixels(recovered!) == pixels(first!), "warning recovery left a stale colored frame")
+        print("PASS appearance cache: 200 alternating snapshots reuse identical pixels and frame objects; light/dark contrast, data, warnings, recovery and forced appearance updates invalidate correctly")
+    }
+
     static func benchmark() throws {
         let frames = 1_000
         for visible in [all, Set<MenuBarMetric>([.ssd, .network]), []] {
@@ -371,6 +407,7 @@ struct MenuRenderProbe {
             try motionChecks()
             try cacheAndAccessibilityChecks()
             try codexChecks(in: directory)
+            try appearanceCacheChecks()
             if CommandLine.arguments.contains("--benchmark") { try benchmark() }
             try contactSheet(in: directory)
             print("OUTPUT \(directory.path)")

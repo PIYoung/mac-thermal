@@ -120,13 +120,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.codexSnapshot = snapshot
             self.codexPanel.apply(snapshot)
             self.menuContent.update(codex: snapshot)
-            self.statusItem.length = self.menuContent.contentWidth
+            if abs(self.statusItem.length - self.menuContent.contentWidth) > 0.5 {
+                self.statusItem.length = self.menuContent.contentWidth
+            }
         }
         codexMonitor.start()
         panel.menuBarPreferencesChanged = { [weak self] preferences in
             guard let self else { return }
             self.menuContent.preferences = preferences
-            self.statusItem.length = self.menuContent.contentWidth
+            if abs(self.statusItem.length - self.menuContent.contentWidth) > 0.5 {
+                self.statusItem.length = self.menuContent.contentWidth
+            }
         }
         _ = panel.view
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
