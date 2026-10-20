@@ -73,15 +73,26 @@ private final class CodexUsageChart: FlippedView {
     private var days: [CodexDailyUsage] = []
     private var tracking: NSTrackingArea?
     private var hovered: Int?
+    private var pointer: NSPoint?
+    private var hoverValue = ""
+    private var hoverSize = NSSize.zero
+    private let numberFormatter = NumberFormatter()
+    private let hoverDateAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 8), .foregroundColor: NSColor.secondaryLabelColor]
+    private let hoverValueAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold), .foregroundColor: NSColor.labelColor]
     private var language = ""
     func update(_ values: [CodexDailyUsage]) {
         let next = Array(values.prefix(7)), locale = L10n.language.rawValue
         guard next != days || locale != language else { return }
-        days = next; language = locale; hovered = nil
+        days = next; language = locale
+        numberFormatter.locale = Locale(identifier: L10n.language.localeIdentifier)
+        numberFormatter.numberStyle = .decimal
+        clearHover()
         let labels = days.map { "\($0.day): " + ($0.tokens.map(Self.compact) ?? L10n.text("정보 없음")) }
         setAccessibilityElement(true)
         setAccessibilityLabel(L10n.text("최근 7일 계정 토큰 사용량") + ", " + labels.joined(separator: ", "))
-        toolTip = L10n.text("서버가 반환한 날짜별 토큰입니다. 빈 날짜는 정보 없음이며 0이 아닙니다.")
+        // Custom callouts are immediate; a second delayed native tooltip would overlap.
+        toolTip = nil
+        setAccessibilityHelp(L10n.text("서버가 반환한 날짜별 토큰입니다. 빈 날짜는 정보 없음이며 0이 아닙니다."))
         needsDisplay = true
     }
     private static func compact(_ count: Int64) -> String {
@@ -92,19 +103,53 @@ private final class CodexUsageChart: FlippedView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
     }
-    override func mouseMoved(with event: NSEvent) {
-        guard days.count > 1 else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        let index = max(0, min(days.count - 1, Int(((point.x - 4) / max(1, bounds.width - 8) * CGFloat(days.count - 1)).rounded())))
-        guard hovered != index else { return }
-        hovered = index
-        toolTip = days[index].day + " · " + (days[index].tokens.map { L10n.format("%lld 토큰", $0) } ?? L10n.text("정보 없음"))
+    override func mouseEntered(with event: NSEvent) { updateHover(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseMoved(with event: NSEvent) { updateHover(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseExited(with event: NSEvent) { clearHover() }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { clearHover() }
+    }
+    private func clearHover() {
+        guard hovered != nil || pointer != nil else { return }
+        hovered = nil; pointer = nil; hoverValue = ""; hoverSize = .zero
         needsDisplay = true
     }
-    override func mouseExited(with event: NSEvent) { hovered = nil; needsDisplay = true }
+    private func updateHover(at point: NSPoint) {
+        guard !days.isEmpty, point.x.isFinite, point.y.isFinite, bounds.contains(point) else { clearHover(); return }
+        let index = max(0, min(days.count - 1, Int(((point.x - 4) / max(1, bounds.width - 8) * CGFloat(days.count - 1)).rounded())))
+        guard hovered != index || pointer != point else { return }
+        if hovered != index {
+            let day = days[index]
+            hoverValue = day.tokens.map {
+                L10n.format("%@ 토큰", numberFormatter.string(from: NSNumber(value: $0)) ?? String($0))
+            } ?? L10n.text("정보 없음")
+            let dateWidth = (day.day as NSString).size(withAttributes: hoverDateAttributes).width
+            let valueWidth = (hoverValue as NSString).size(withAttributes: hoverValueAttributes).width
+            hoverSize = NSSize(width: min(max(1, bounds.width - 4), max(dateWidth, valueWidth) + 16), height: 32)
+        }
+        hovered = index; pointer = point; needsDisplay = true
+    }
+    private var hoverFrame: NSRect? {
+        guard let pointer, hovered != nil else { return nil }
+        let width = hoverSize.width, height = min(hoverSize.height, bounds.height - 4)
+        var x = pointer.x + 10
+        if x + width > bounds.maxX - 2 { x = pointer.x - width - 10 }
+        var y = pointer.y - height - 8
+        if y < 2 { y = pointer.y + 8 }
+        return NSRect(x: max(2, min(bounds.width - width - 2, x)),
+            y: max(2, min(bounds.height - height - 2, y)), width: width, height: height)
+    }
+    #if PANEL_UPDATES_PROBE
+    func probeHover(at point: NSPoint) { updateHover(at: point) }
+    func probeExit() { clearHover() }
+    var probeHoverFrame: NSRect? { hoverFrame }
+    var probeHoverValue: String { hoverValue }
+    var probeHoverDay: String? { hovered.map { days[$0].day } }
+    #endif
     override func draw(_ dirtyRect: NSRect) {
         guard !days.isEmpty else { return }
         let plot = NSRect(x: 4, y: 5, width: max(1, bounds.width - 8), height: max(1, bounds.height - 22))
@@ -141,16 +186,30 @@ private final class CodexUsageChart: FlippedView {
             }
             for item in segment { color.withAlphaComponent(0.8).setFill(); NSBezierPath(ovalIn: NSRect(x: item.x - 1.7, y: item.y - 1.7, width: 3.4, height: 3.4)).fill() }
         }
-        if let hovered, days.indices.contains(hovered), let tokens = days[hovered].tokens {
-            let selected = point(hovered, tokens)
-            color.withAlphaComponent(0.12).setFill(); NSBezierPath(ovalIn: NSRect(x: selected.x - 5, y: selected.y - 5, width: 10, height: 10)).fill()
-            color.setFill(); NSBezierPath(ovalIn: NSRect(x: selected.x - 2.5, y: selected.y - 2.5, width: 5, height: 5)).fill()
+        if let hovered, days.indices.contains(hovered) {
+            let x = plot.minX + plot.width * CGFloat(hovered) / CGFloat(max(1, days.count - 1))
+            color.withAlphaComponent(0.35).setStroke()
+            let guide = NSBezierPath()
+            guide.move(to: NSPoint(x: x, y: plot.minY)); guide.line(to: NSPoint(x: x, y: plot.maxY))
+            guide.lineWidth = 0.5; guide.setLineDash([2, 2], count: 2, phase: 0); guide.stroke()
+            if let tokens = days[hovered].tokens {
+                let selected = point(hovered, tokens)
+                color.withAlphaComponent(0.12).setFill(); NSBezierPath(ovalIn: NSRect(x: selected.x - 5, y: selected.y - 5, width: 10, height: 10)).fill()
+                color.setFill(); NSBezierPath(ovalIn: NSRect(x: selected.x - 2.5, y: selected.y - 2.5, width: 5, height: 5)).fill()
+            }
         }
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor]
         for index in [0, days.count - 1] {
             let label = String(days[index].day.suffix(5)).replacingOccurrences(of: "-", with: "/") as NSString
             let width = label.size(withAttributes: attributes).width
             label.draw(at: NSPoint(x: index == 0 ? 1 : bounds.width - width - 1, y: bounds.height - 12), withAttributes: attributes)
+        }
+        if let rect = hoverFrame, let hovered {
+            let bubble = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
+            NSColor.windowBackgroundColor.withAlphaComponent(0.98).setFill(); bubble.fill()
+            PanelColor.divider.setStroke(); bubble.lineWidth = 0.5; bubble.stroke()
+            (days[hovered].day as NSString).draw(at: NSPoint(x: rect.minX + 8, y: rect.minY + 3), withAttributes: hoverDateAttributes)
+            (hoverValue as NSString).draw(at: NSPoint(x: rect.minX + 8, y: rect.minY + 15), withAttributes: hoverValueAttributes)
         }
     }
 }
@@ -418,8 +477,8 @@ final class CodexPanelController: NSViewController {
     private func renderUsage() {
         let usage = latest.quota.usage
         usageTitle.stringValue = L10n.text("최근 7일")
-        usageScope.title = L10n.text("계정 통계")
-        usageScope.toolTip = L10n.text("사용량 그래프 연결 관리")
+        usageScope.title = L10n.text("계정 토큰")
+        usageScope.toolTip = L10n.text("로그인한 계정의 서버 집계 일별 토큰 · 최근 7일 · 약 5분마다 갱신. 이 Mac의 로컬 집계·잔여 한도와 다릅니다. 입력·출력·캐시 구성과 집계 시간대는 제공되지 않습니다. 누르면 연결을 관리합니다.")
         usageScope.setAccessibilityLabel(usageScope.toolTip)
         let ready = usage.isFresh(at: renderNow) && usage.days.contains { $0.tokens != nil }
         usageChart.isHidden = !ready; usageStatus.isHidden = ready
@@ -513,6 +572,12 @@ extension CodexPanelController {
     var probeUsageReady: Bool { !usageChart.isHidden }
     var probeUsageStatus: String { usageStatus.stringValue }
     var probeUsageTitle: String { usageTitle.stringValue }
+    func probeHoverUsage(at point: NSPoint) { usageChart.probeHover(at: point) }
+    func probeExitUsage() { usageChart.probeExit() }
+    var probeUsageHoverFrame: NSRect? { usageChart.probeHoverFrame }
+    var probeUsageHoverValue: String { usageChart.probeHoverValue }
+    var probeUsageHoverDay: String? { usageChart.probeHoverDay }
+    var probeUsageSource: String { usageScope.title }
     var probeChartFrame: NSRect { usageChart.frame }
     var probeSeparateCardsVisible: Bool { !usageCard.isHidden && !modelsCard.isHidden && !usageCard.frame.intersects(modelsCard.frame) }
     var probeStrings: [String: String] {

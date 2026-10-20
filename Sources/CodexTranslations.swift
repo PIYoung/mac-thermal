@@ -4,6 +4,9 @@ import Foundation
 extension L10n {
     static let codexTranslations: [String: [String]] = [
         "최근 7일": ["Last 7 days", "直近7日", "最近7天"],
+        "계정 토큰": ["Account tokens", "アカウントトークン", "账号令牌"],
+        "%@ 토큰": ["%@ tokens", "%@トークン", "%@令牌"],
+        "로그인한 계정의 서버 집계 일별 토큰 · 최근 7일 · 약 5분마다 갱신. 이 Mac의 로컬 집계·잔여 한도와 다릅니다. 입력·출력·캐시 구성과 집계 시간대는 제공되지 않습니다. 누르면 연결을 관리합니다.": ["Server-reported daily tokens for the signed-in account · last 7 days · refreshes about every 5 minutes. Separate from this Mac's local totals and remaining quota. Input/output/cache breakdown and accounting time zone are unavailable. Click to manage the connection.", "ログイン中のアカウントのサーバー集計日別トークン・直近7日・約5分ごとに更新。このMacのローカル集計や残り上限とは異なります。入力・出力・キャッシュ内訳と集計タイムゾーンは提供されません。クリックして接続を管理。", "已登录账号的服务器每日令牌统计 · 最近7天 · 约每5分钟更新。与此Mac的本地统计及剩余额度不同。不提供输入、输出、缓存明细及统计时区。点击管理连接。"],
         "계정 통계": ["Account data", "アカウント統計", "账号统计"],
         "최근 7일 계정 토큰 사용량": ["Account tokens over the last 7 days", "直近7日間のアカウントトークン使用量", "最近7天账号令牌用量"],
         "서버가 반환한 날짜별 토큰입니다. 빈 날짜는 정보 없음이며 0이 아닙니다.": ["Daily tokens returned by the server. Missing dates mean unavailable, not zero.", "サーバーの日別トークンです。空白の日付は情報なしで、0ではありません。", "服务器返回的每日令牌。缺失日期表示数据未知，并非零。"],

@@ -23,7 +23,7 @@ enum LoginItemManager {
             if !(child is NSControl) { bounds(child) }
         }
     }
-    private static func render(_ panel: CodexPanelController, appearance: NSAppearance, output: URL) throws {
+    private static func render(_ panel: CodexPanelController, appearance: NSAppearance, output: URL, hover: NSPoint? = nil) throws {
         let content = canvas(panel)
         content.removeFromSuperview()
         let material = NSVisualEffectView(frame: NSRect(origin: .zero, size: CodexPanelController.surfaceSize))
@@ -39,6 +39,7 @@ enum LoginItemManager {
         window.contentView = material
         material.layoutSubtreeIfNeeded()
         material.displayIfNeeded()
+        if let hover { panel.probeHoverUsage(at: hover); material.displayIfNeeded() }
         CATransaction.flush()
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 600, pixelsHigh: 840, bitsPerSample: 8,
             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
@@ -180,11 +181,42 @@ enum LoginItemManager {
             }, fetchedAt: usageNow)
             panel.apply(graph)
             precondition(panel.probeUsageReady && panel.probeUsageTitle == L10n.text("최근 7일"))
+            precondition(panel.probeUsageSource == L10n.text("계정 토큰"))
+            let grouping = NumberFormatter()
+            grouping.locale = Locale(identifier: language.localeIdentifier); grouping.numberStyle = .decimal
+            panel.probeHoverUsage(at: NSPoint(x: 4, y: 5))
+            precondition(panel.probeUsageHoverValue == L10n.format("%@ 토큰", grouping.string(from: 0)!))
+            precondition(panel.probeUsageHoverDay == graph.quota.usage.days[0].day)
+            let initialHover = panel.probeUsageHoverFrame!
+            panel.probeHoverUsage(at: NSPoint(x: 8, y: 8))
+            precondition(panel.probeUsageHoverFrame != initialHover, "Callout follows the pointer inside the same date")
+            panel.apply(graph)
+            precondition(panel.probeUsageHoverFrame != nil, "Unchanged two-second snapshots must not dismiss hover")
+            panel.probeHoverUsage(at: NSPoint(x: 126, y: 30))
+            precondition(panel.probeUsageHoverValue == L10n.text("정보 없음"), "Missing date must never show a zero or interpolated value")
+            var extreme = graph
+            let maxTokens: Int64 = 9_007_199_254_740_991
+            extreme.quota.usage.days[6] = CodexDailyUsage(day: template.days[6].day, tokens: maxTokens)
+            panel.apply(extreme)
+            precondition(panel.probeUsageHoverFrame == nil, "Changed data must clear stale hover")
+            for position in [NSPoint(x: 0, y: 0), NSPoint(x: 251, y: 0), NSPoint(x: 251, y: 66), NSPoint(x: 0, y: 66)] {
+                panel.probeHoverUsage(at: position)
+                precondition(NSRect(origin: .zero, size: panel.probeChartFrame.size).contains(panel.probeUsageHoverFrame!), "Hover callout must fit near every edge")
+            }
+            panel.probeHoverUsage(at: NSPoint(x: 251, y: 30))
+            precondition(panel.probeUsageHoverValue == L10n.format("%@ 토큰", grouping.string(from: NSNumber(value: maxTokens))!))
+            panel.probeExitUsage()
+            precondition(panel.probeUsageHoverFrame == nil)
+            panel.probeHoverUsage(at: NSPoint(x: CGFloat.nan, y: 30))
+            precondition(panel.probeUsageHoverFrame == nil)
+            panel.apply(graph)
+
             precondition(panel.probeSeparateCardsVisible)
             bounds(canvas(panel))
             graph.quota.usage.fetchedAt = usageNow.addingTimeInterval(-901)
             panel.apply(graph)
             precondition(!panel.probeUsageReady && panel.probeUsageStatus == L10n.text("사용량 통계 갱신 대기 중"))
+            precondition(panel.probeUsageHoverFrame == nil, "Stale account data must hide its hover values")
             precondition(panel.probeSeparateCardsVisible, "Unavailable graph data must not hide the local models")
             var account = sample
             let fresh = Date()
@@ -246,6 +278,9 @@ enum LoginItemManager {
                 panel.apply(documentation)
                 panel.prepareForPresentation()
                 try render(panel, appearance: appearance, output: output.appendingPathComponent("codex-\(language.rawValue)-light.png"))
+                let hoverPanel = CodexPanelController()
+                hoverPanel.apply(documentation); hoverPanel.prepareForPresentation()
+                try render(hoverPanel, appearance: appearance, output: output.appendingPathComponent("codex-hover-\(language.rawValue).png"), hover: NSPoint(x: 126, y: 30))
             }
             L10n.setLanguage(.korean, defaults: defaults)
             for (name, appearanceName) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
@@ -266,6 +301,6 @@ enum LoginItemManager {
                 try render(missing, appearance: appearance, output: output.appendingPathComponent("codex-unavailable-\(name).png"))
             }
         }
-        print("Codex panel passed: 4-language fixed bounds, simultaneous separate graph/models cards without toggle, removed recent-record and settings items, local UTC-today scope, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
+        print("Codex panel passed: 4-language immediate hover values/zero/missing/edge bounds/exit/stale reset, fixed bounds, simultaneous separate graph/models cards without toggle, removed recent-record and settings items, local UTC-today scope, hidden updates, stale/partial/unknown states, app runtime and safe metadata; synthetic only, no local-record or server access")
     }
 }

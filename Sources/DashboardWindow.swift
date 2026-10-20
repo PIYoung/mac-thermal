@@ -93,6 +93,7 @@ final class DashboardWindow: NSPanel {
         title = "Mac Thermal"
         isReleasedWhenClosed = false
         isFloatingPanel = true
+        acceptsMouseMovedEvents = true
         hidesOnDeactivate = true
         level = .floating
         isOpaque = false
