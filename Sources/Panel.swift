@@ -22,6 +22,13 @@ enum PanelColor {
 /// Original, static AI entry treatment; a native button retains keyboard focus,
 /// hit testing and accessibility. No timer or attention-seeking animation.
 private final class AdviceEntryButtonCell: NSButtonCell {
+    override func drawInterior(withFrame frame: NSRect, in controlView: NSView) {
+        // The rounded bezel's native content inset is low in this compact frame.
+        // Center the icon and title together, retaining native text/image drawing.
+        let content = titleRect(forBounds: frame).union(imageRect(forBounds: frame))
+        let centeredFrame = frame.offsetBy(dx: frame.midX - content.midX, dy: frame.midY - content.midY)
+        super.drawInterior(withFrame: centeredFrame, in: controlView)
+    }
     override func drawBezel(withFrame frame: NSRect, in controlView: NSView) {
         let path = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 1), xRadius: 10, yRadius: 10)
         let blue = NSColor(calibratedRed: 0.18, green: 0.31, blue: 0.77, alpha: 1)
