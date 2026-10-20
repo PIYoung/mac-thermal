@@ -245,11 +245,19 @@ enum LoginItemManager {
             panel.probeClickUsageAction()
             verify(statsPrompts == beforeManage + 1 && panel.probeSummary.count == 5, "Statistics management remains accessible when daily buckets are absent but account summary is available")
             panel.apply(graph)
+            let fixedBody = panel.probeBodyFrame
+            let restingThumb = panel.probeScrollerThumb
+            verify(restingThumb.width == 3 && panel.probeScrollerHitFrame.width >= 12, "Thin artwork must retain a native-sized dragging target")
+            panel.probeScrollerHover(true)
+            verify(panel.probeScrollerThumb.width == 6 && panel.probeBodyFrame == fixedBody, "Hover must emphasize the thumb without changing content layout")
+            panel.probeScrollerHover(false)
             let fixedHeader = panel.probeAccountFrame
             let quotaY = panel.probeQuotaVisibleY
             panel.probeScrollInsights(120)
             verify(panel.probeQuotaVisibleY < quotaY - 100 && panel.probeAccountFrame == fixedHeader, "Quota must scroll with the other cards while title/account controls stay fixed")
+            verify(panel.probeScrollerValue > 0 && panel.probeScrollerThumb.minY > restingThumb.minY, "Custom thumb must follow native scrolling")
             panel.probeScrollInsights(0)
+            verify(panel.probeScrollerValue == 0 && panel.probeScrollerThumb.width == 3, "Returning to top must restore the native scroll value and resting appearance")
             let collapsed = panel.probeInsightsHeight
             panel.probeExpandModel(0)
             verify(panel.probeModelDetails == panel.probeBreakdown && panel.probeInsightsHeight > collapsed)
