@@ -3,6 +3,9 @@ import Foundation
 // Original Mac Thermal translations: English, Japanese, Simplified Chinese.
 extension L10n {
     static let codexTranslations: [String: [String]] = [
+        "계정 통계 연결": ["Account statistics", "アカウント統計に接続", "连接账号统计"],
+        "동의 후 계정 통계를 표시합니다": ["Enable account statistics to view the summary", "同意後にアカウント統計を表示します", "同意后显示账号统计"],
+        "자동 검토를 제외한 이 Mac의 오늘 사용량입니다. 계정 통계는 OpenAI가 제공한 전체 수치입니다.": ["Today's local usage excluding auto-review. Account statistics are the full values reported by OpenAI.", "自動レビューを除くこのMacの今日の使用量です。アカウント統計はOpenAIが提供する全体の数値です。", "此Mac今日用量不含自动审核。账号统计为OpenAI提供的完整数值。"],
         "최근 7일": ["Last 7 days", "直近7日", "最近7天"],
         "토큰 구성 · 이 Mac": ["Token mix · this Mac", "トークン構成 · このMac", "令牌构成 · 此Mac"],
         "입력 토큰": ["Input tokens", "入力トークン", "输入令牌"],
@@ -34,7 +37,7 @@ extension L10n {
         "기록 시각별 1분 증가량입니다. 실시간 생성 속도나 실제 작업 시간을 뜻하지 않으며 빈 구간은 정보 없음입니다.": ["One-minute increases by record timestamp. Not live generation speed or active-work duration. Empty intervals are unavailable.", "記録時刻ごとの1分間の増加量です。リアルタイム生成速度や実作業時間ではなく、空白は情報なしです。", "按记录时间划分的每分钟增量。并非实时生成速度或实际工作时长，空白时段表示未知。"],
         "서버가 제공한 날짜만 계산합니다. 오늘은 진행 중일 수 있고 빈 날짜는 0으로 계산하지 않습니다.": ["Only server-reported days are included. Today may be incomplete; missing dates are not zero.", "サーバー提供日のみ計算します。当日は途中の可能性があり、空白の日付を0として扱いません。", "仅计算服务器提供的日期。今日可能尚未结束，缺失日期不计为零。"],
         "OpenAI가 반환한 계정 요약입니다. 최장 턴은 실제 집중 작업 시간이 아니며 미제공 수치는 정보 없음입니다.": ["Account summary returned by OpenAI. Longest turn is not focused-work duration. Missing values are unavailable.", "OpenAIが返したアカウント要約です。最長ターンは集中作業時間ではなく、未提供の数値は情報なしです。", "OpenAI返回的账号摘要。最长轮次不等于专注工作时长，未提供数值显示未知。"],
-        "기존 OpenAI 응답에서 누적 토큰·하루 최고 토큰·현재 및 최장 연속 사용일·최장 턴 시간 5개를 추가로 표시합니다. 숫자만 이 Mac의 메모리에 보관하고 개발자 서버 전송이나 파일 저장은 하지 않습니다. 끄면 요약 숫자를 지우며 날짜별 그래프는 유지됩니다. 제공되지 않는 값은 정보 없음으로 표시합니다.": ["Display five more numbers from the existing OpenAI response: lifetime tokens, peak daily tokens, current/longest streak and longest turn. Numbers stay only in this Mac's memory, with no developer-server upload or file history. Disabling clears these numbers while keeping the daily graph. Missing values are unavailable.", "既存のOpenAI応答から累計トークン、1日の最多、現在・最長連続使用日数、最長ターンの5数値を追加表示します。このMacのメモリにのみ保持し、開発者サーバーへの送信やファイル保存はしません。オフで要約を消去し、日別グラフは維持します。未提供値は情報なしです。", "从现有OpenAI响应额外显示累计令牌、单日最高、当前及最长连续使用天数、最长轮次时间5项数值。仅保留在此Mac内存中，不发送至开发者服务器，不存储历史文件。关闭会清除摘要，保留每日图表，缺失数值显示未知。"],
+        "기존 OpenAI 응답에서 누적 토큰·하루 최고 토큰·현재 및 최장 연속 사용일·최장 턴 시간 5개를 추가로 표시합니다. 숫자만 이 Mac의 메모리에 보관하고 개발자 서버 전송이나 파일 저장은 하지 않습니다. 끄면 요약 숫자를 지우며 날짜별 숫자 요약은 유지됩니다. 제공되지 않는 값은 정보 없음으로 표시합니다.": ["Display five more numbers from the existing OpenAI response: lifetime tokens, peak daily tokens, current/longest streak and longest turn. Numbers stay only in this Mac's memory, with no developer-server upload or file history. Disabling clears these numbers while keeping the daily numeric summary. Missing values are unavailable.", "既存のOpenAI応答から累計トークン、1日の最多、現在・最長連続使用日数、最長ターンの5数値を追加表示します。このMacのメモリにのみ保持し、開発者サーバーへの送信やファイル保存はしません。オフで要約を消去し、日別の数値要約は維持します。未提供値は情報なしです。", "从现有OpenAI响应额外显示累计令牌、单日最高、当前及最长连续使用天数、最长轮次时间5项数值。仅保留在此Mac内存中，不发送至开发者服务器，不存储历史文件。关闭会清除摘要，保留每日数字摘要，缺失数值显示未知。"],
         "로그인 후 계정 토큰을 볼 수 있습니다": ["Sign in to view account tokens", "ログインするとアカウントのトークンを表示できます", "登录后可查看账号令牌"],
         "ChatGPT 로그인": ["Sign in with ChatGPT", "ChatGPTにログイン", "登录ChatGPT"],
         "계정 연결 확인 중": ["Checking account connection", "アカウント接続を確認中", "正在检查账号连接"],

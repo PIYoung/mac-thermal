@@ -145,7 +145,6 @@ struct CodexMonitorSnapshot {
     /// UTC-today totals from local records; not the whole account's usage.
     var dailyTokens: Int64?
     var models: [CodexModelUsage] = []
-    var recentMinutes: [CodexUsageMinute] = []
     var updatedAt: Date?
     /// An original localized UI key, never an upstream error message.
     var noticeKey: String?
@@ -171,10 +170,6 @@ struct CodexAccountSummary: Equatable {
         return Self(lifetimeTokens: number("lifetimeTokens"), peakDailyTokens: number("peakDailyTokens"),
             longestRunningTurnSec: number("longestRunningTurnSec"), currentStreakDays: number("currentStreakDays"), longestStreakDays: number("longestStreakDays"))
     }
-}
-struct CodexUsageMinute: Equatable {
-    let startedAt: Date
-    var tokens: Int64?
 }
 struct CodexTokenBreakdown: Equatable {
     let input: Int64

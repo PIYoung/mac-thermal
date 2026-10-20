@@ -26,7 +26,7 @@ final class CodexAccountPresenter: NSObject, NSWindowDelegate {
         guard client.latest.connection == .connected else { showAccount(); return }
         let enabled = client.latest.usage.state != .disabled
         let alert = NSAlert()
-        alert.messageText = L10n.text("사용량 그래프 연결")
+        alert.messageText = L10n.text("계정 통계 연결")
         alert.informativeText = L10n.text("기존 ChatGPT 로그인으로 OpenAI 계정의 날짜별 토큰 통계를 조회합니다. 한도 조회보다 통계 범위가 늘어나며, 날짜와 토큰 숫자만 메모리에 표시합니다. 대화 본문과 로컬 기록은 전송하지 않습니다.\n\n약 5분마다 갱신하고, 끄면 조회와 메모리 집계를 중지합니다. 기존 한도 조회는 유지됩니다. 연결하지 않아도 모델별 로컬 기록을 볼 수 있습니다.")
         alert.addButton(withTitle: L10n.text("취소"))
         alert.addButton(withTitle: L10n.text(enabled ? "지금 새로고침" : "동의하고 조회"))
@@ -44,7 +44,7 @@ final class CodexAccountPresenter: NSObject, NSWindowDelegate {
         let enabled = client.latest.usage.summaryEnabled
         let alert = NSAlert()
         alert.messageText = L10n.text("계정 요약 연결")
-        alert.informativeText = L10n.text("기존 OpenAI 응답에서 누적 토큰·하루 최고 토큰·현재 및 최장 연속 사용일·최장 턴 시간 5개를 추가로 표시합니다. 숫자만 이 Mac의 메모리에 보관하고 개발자 서버 전송이나 파일 저장은 하지 않습니다. 끄면 요약 숫자를 지우며 날짜별 그래프는 유지됩니다. 제공되지 않는 값은 정보 없음으로 표시합니다.")
+        alert.informativeText = L10n.text("기존 OpenAI 응답에서 누적 토큰·하루 최고 토큰·현재 및 최장 연속 사용일·최장 턴 시간 5개를 추가로 표시합니다. 숫자만 이 Mac의 메모리에 보관하고 개발자 서버 전송이나 파일 저장은 하지 않습니다. 끄면 요약 숫자를 지우며 날짜별 숫자 요약은 유지됩니다. 제공되지 않는 값은 정보 없음으로 표시합니다.")
         alert.addButton(withTitle: L10n.text("취소"))
         alert.addButton(withTitle: L10n.text(enabled ? "지금 새로고침" : "동의하고 조회"))
         if enabled { alert.addButton(withTitle: L10n.text("계정 요약 끄기")) }

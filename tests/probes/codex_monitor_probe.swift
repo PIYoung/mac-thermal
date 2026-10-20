@@ -79,8 +79,15 @@ struct CodexMonitorProbe {
         let recentPath = try recentFixture.write("2026/10/19/recent.jsonl", meta() + context() + line("event_msg", "2026-10-19T11:59:00Z", ["type": "token_count", "info": ["total_token_usage": numbers(100, cached: 60, output: 20, reasoning: 10), "last_token_usage": numbers(100, cached: 60, output: 20, reasoning: 10)]]))
         _ = recentPath
         let minuteSnapshot = CodexLocalRecordsReader(root: recentFixture.root).scan(now: now, cancellation: CodexRecordsCancellation())!
-        require(minuteSnapshot.recentMinutes.count == 10 && minuteSnapshot.recentMinutes.compactMap(\.tokens).reduce(0, +) == 100, "ten one-minute buckets use accepted record timestamps")
         require(minuteSnapshot.models.first?.cachedInputTokens == 60 && minuteSnapshot.models.first?.outputTokens == 20, "breakdown counters preserve subsets")
+        let reviewFixture = try Fixture(); defer { reviewFixture.remove() }
+        let reviewPath = try reviewFixture.write("2026/10/19/review.jsonl", meta() + context(model: "codex-auto-review") + token("2026-10-19T01:00:01Z", total: 500))
+        let reviewReader = CodexLocalRecordsReader(root: reviewFixture.root)
+        let reviewOnly = reviewReader.scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(reviewOnly.dailyTokens == 0 && reviewOnly.recordsCount == 0 && reviewOnly.models.isEmpty && reviewOnly.currentModel == nil && reviewOnly.lastRecordAt == nil, "auto-review-only records are absent from visible local totals, models, counts and current model")
+        try reviewFixture.append(reviewPath, context("2026-10-19T01:00:02Z", model: "gpt-6-astra", turn: turnB) + token("2026-10-19T01:00:03Z", total: 550, last: 50))
+        let withoutReview = reviewReader.scan(now: now, cancellation: CodexRecordsCancellation())!
+        require(withoutReview.dailyTokens == 50 && withoutReview.recordsCount == 1 && withoutReview.models.count == 1 && withoutReview.models.first?.totalTokens == 50 && withoutReview.currentModel == "gpt-6-astra", "review tokens never leak into following model deltas or shares")
         let previous = try Fixture(); defer { previous.remove() }
         let previousData = meta("2026-10-18T23:00:00Z") + context("2026-10-18T23:00:00Z") + token("2026-10-18T23:59:00Z", total: 1_000) + token("2026-10-19T00:00:01Z", total: 1_025, last: 25)
         try previous.write("2026/10/18/long-lived.jsonl", previousData)
@@ -248,7 +255,7 @@ struct CodexMonitorProbe {
         monitor.setRecordsEnabled(false)
         let until = Date().addingTimeInterval(0.3)
         while RunLoop.current.run(mode: .default, before: until), Date() < until {}
-        require(snapshots.last?.recordsEnabled == false && snapshots.last?.dailyTokens == nil && snapshots.last?.models.isEmpty == true && snapshots.last?.recentMinutes.isEmpty == true, "off clears counts and rejects in-flight enabled callbacks")
+        require(snapshots.last?.recordsEnabled == false && snapshots.last?.dailyTokens == nil && snapshots.last?.models.isEmpty == true, "off clears counts and rejects in-flight enabled callbacks")
         require(!defaults.bool(forKey: CodexMonitor.recordsEnabledKey), "explicit toggle persistence")
         monitor.stop(); let count = snapshots.count; monitor.refresh()
         require(snapshots.count == count, "stop has no late refresh delivery")

@@ -524,10 +524,8 @@ final class CodexLocalRecordsReader {
         }
         var models: [String: CodexModelUsage] = [:]
         var total: Int64 = 0
-        let minuteEnd = floor(now.timeIntervalSince1970 / 60) * 60 + 60
-        let minuteStart = minuteEnd - 600
-        var minuteTotals: [Int64?] = (0..<10).map { incomplete || minuteStart + Double($0) * 60 < dayStart.timeIntervalSince1970 ? nil : 0 }
-        for record in records.values {
+        let visibleRecords = records.values.filter { $0.model != "codex-auto-review" }
+        for record in visibleRecords {
             var usage = models[record.model] ?? CodexModelUsage(model: record.model)
             let values = [usage.inputTokens, usage.cachedInputTokens, usage.outputTokens, usage.reasoningOutputTokens, usage.totalTokens, total]
             let adds = [record.numbers.input, record.numbers.cached, record.numbers.output, record.numbers.reasoning, record.numbers.total, record.numbers.total]
@@ -536,24 +534,16 @@ final class CodexLocalRecordsReader {
             usage.outputTokens += record.numbers.output; usage.reasoningOutputTokens += record.numbers.reasoning
             usage.totalTokens += record.numbers.total; total += record.numbers.total
             models[record.model] = usage
-            let timestamp = record.key.timestamp.timeIntervalSince1970
-            if timestamp >= minuteStart, timestamp <= now.timeIntervalSince1970 {
-                let index = min(9, max(0, Int((timestamp - minuteStart) / 60)))
-                let before = minuteTotals[index] ?? 0
-                if before <= Int64.max - record.numbers.total { minuteTotals[index] = before + record.numbers.total }
-                else { incomplete = true; minuteTotals[index] = nil }
-            }
             if snapshot.lastRecordAt == nil || record.key.timestamp > snapshot.lastRecordAt! {
                 snapshot.lastRecordAt = record.key.timestamp; snapshot.currentModel = record.model
             }
         }
-        snapshot.recentMinutes = minuteTotals.enumerated().map { CodexUsageMinute(startedAt: Date(timeIntervalSince1970: minuteStart + Double($0.offset) * 60), tokens: incomplete && $0.element == 0 ? nil : $0.element) }
         snapshot.incomplete = incomplete
-        snapshot.recordsCount = records.isEmpty && incomplete ? nil : records.count
-        snapshot.dailyTokens = records.isEmpty && incomplete ? nil : total
+        snapshot.recordsCount = visibleRecords.isEmpty && incomplete ? nil : visibleRecords.count
+        snapshot.dailyTokens = visibleRecords.isEmpty && incomplete ? nil : total
         snapshot.models = models.values.sorted { $0.totalTokens == $1.totalTokens ? $0.model < $1.model : $0.totalTokens > $1.totalTokens }
         if incomplete { snapshot.noticeKey = "일부 로컬 기록만 집계했습니다" }
-        else if records.isEmpty { snapshot.noticeKey = "사용량이 기록된 로컬 항목이 없습니다" }
+        else if visibleRecords.isEmpty { snapshot.noticeKey = "사용량이 기록된 로컬 항목이 없습니다" }
         else { snapshot.noticeKey = "이 Mac의 로컬 기록을 UTC 날짜로 집계합니다" }
         return snapshot
     }
