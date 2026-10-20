@@ -176,6 +176,12 @@ private final class FakeWire: CodexQuotaWire {
         usageClock = now.addingTimeInterval(900); stats.refresh(manual: false)
         precondition(statsWire.methods.filter { $0 == "account/usage/read" }.count == statsCount)
         stats.stop()
+        defaults.set(true, forKey: CodexQuotaClient.usageKey)
+        let resumedWire = FakeWire()
+        let resumed = CodexQuotaClient(defaults: defaults, factory: { resumedWire }, erase: { true }, now: { now })
+        resumed.startSavedConnection(); resumedWire.reply("initialize", [:]); resumedWire.reply("account/read", ["account": ["type": "chatgpt"]])
+        precondition(resumedWire.methods.contains("account/usage/read") && !resumedWire.methods.contains("account/login/start"), "An explicitly approved saved statistics connection must resume without OAuth")
+        resumed.stop()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("quota-store-probe-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: root) }
