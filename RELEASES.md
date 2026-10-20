@@ -1,5 +1,15 @@
 # Releases
 
+## v2.14.3 — 2026-10-21
+
+Menu bar input caching and compact, centered AI help. Build 57.
+
+- Reuse prepared labels, signatures and per-appearance metric colors during status-item snapshots and animation; retain bounded frame-cache capacity between ticks. Preserve eight-fps motion, two-second sampling, independent warning colors and language/appearance invalidation.
+- Keep the original sparkle AI entry at 76×28pt and center its icon and label together using native content drawing. Retain four-language layout and fixed panel positions.
+- Verify identical pre/post menu PNGs and repeated-snapshot cache reuse. Record the paired synthetic benchmark, including sparse-frame results and the limits of app-wide CPU conclusions, in docs/PERFORMANCE.md.
+
+Apple Silicon · macOS 14+. Optional on-device AI requires supported macOS 26+ and ready Apple Intelligence. DMG, ZIP and SHA256SUMS are provided. Community builds are ad-hoc signed, without Developer ID signing or Apple notarization. MIT licensed; bundled notices are preserved. Made with OpenAI Codex and user feedback.
+
 ## v2.14.2 — 2026-10-20
 
 Readable sparkle AI entry and panel-reopening improvements. Build 54.

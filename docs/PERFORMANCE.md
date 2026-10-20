@@ -35,3 +35,39 @@ The measured timebase was 125/3. Omitting this conversion undercounts CPU by abo
 ## Validation
 
 The full project check suite passed after the initial cache changes. After the final frame-cache changes, the affected menu rendering probes were rerun successfully, the application was rebuilt and its signature verified. Native CPU/GPU tab switching and installed panel opening were checked. The installed executable was verified to match the final built executable.
+
+
+## Final menu input preparation — 2026-10-21 (v2.14.3)
+
+A five-second read-only sample of the installed app found menu snapshot callbacks
+re-entering label formatting and signature construction. Cache these inputs until
+a sample, metric visibility, language or forced accessibility invalidation changes
+them. Resolve each metric's CGColor with its appearance's text raster, then reuse
+those colors for animated frames. Retain the bounded frame dictionary's capacity
+between ticks. Keep sensor cadence, eight-fps animation, motion/sleep gates,
+independent warning colors, fixed positioning and the existing cache bounds.
+
+The original and updated renderers were run alternately three times with the same
+synthetic fixtures. The table gives median microseconds per operation; each run
+uses 1,000 animation frames per selection and 2,000 alternating cached appearances.
+
+| Operation | Before | After |
+| --- | ---: | ---: |
+| Four resource items, animation frame | 114.540 | 101.040 |
+| SSD + network, animation frame | 59.646 | 62.522 |
+| MT fallback, frame | 31.862 | 34.119 |
+| Alternating cached snapshot appearance | 12.917 | 0.482 |
+
+The repeated-snapshot path is about 96% faster in this microbenchmark. This is not
+an app-wide CPU reduction claim. Sparse/fallback frames did not show an improvement
+in these observations; small differences include runtime/system noise and the
+extra bounded cache state. Animation, sampling, parser and network query cadence
+are unchanged. The existing `run_menu_render_probe.sh --benchmark` now includes
+this snapshot measurement.
+
+All 35 generated menu PNGs matched the pre-change files byte for byte. Repeated
+snapshot checks verify no additional label/color preparation after warming, while
+fresh warning samples and forced language/contrast changes rebuild the inputs.
+Existing pixel, appearance, warning/recovery, visibility, motion and sleep probes
+remain in place. No external dependencies, sensors, permissions or data flow were
+added.

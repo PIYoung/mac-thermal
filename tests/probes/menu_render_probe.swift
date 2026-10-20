@@ -400,6 +400,23 @@ struct MenuRenderProbe {
         print("PASS appearance cache: 200 alternating snapshots reuse identical pixels and frame objects; light/dark contrast, data, warnings, recovery and forced appearance updates invalidate correctly")
     }
 
+    static func preparationReuseChecks() throws {
+        let painter = MenuBarContent.previewPreparationCounts(sample: sample())
+        _ = painter(false, nil, false)
+        let baseline = painter(true, nil, false)
+        for _ in 0..<100 {
+            _ = painter(false, nil, false)
+            let current = painter(true, nil, false)
+            try check(current.0 == baseline.0 && current.1 == baseline.1,
+                      "snapshot appearance repeated label formatting or color resolution")
+        }
+        let changed = painter(true, sample(temperature: 100), false)
+        try check(changed.0 > baseline.0 && changed.1 > baseline.1, "fresh warning sample did not refresh prepared inputs")
+        let forced = painter(true, nil, true)
+        try check(forced.0 > changed.0 && forced.1 > changed.1, "forced language/contrast invalidation retained prepared inputs")
+        print("PASS prepared inputs: 200 snapshot appearances reuse labels/signature/resolved colors; fresh samples and forced changes refresh them")
+    }
+
     static func isolatedWarningChecks() throws {
         for dark in [false, true] {
             for motion in [false, true] {
@@ -448,6 +465,12 @@ struct MenuRenderProbe {
             let micros = Double(DispatchTime.now().uptimeNanoseconds - start) / Double(frames) / 1_000
             print(String(format: "BENCH %d visible: %.3f us/frame (%d frames)", visible.count, micros, frames))
         }
+        let painter = MenuBarContent.previewAppearanceRenderer(sample: sample())
+        _ = painter(false, nil, false); _ = painter(true, nil, false)
+        let start = DispatchTime.now().uptimeNanoseconds
+        for index in 0..<2_000 { _ = painter(index.isMultiple(of: 2), nil, false) }
+        let micros = Double(DispatchTime.now().uptimeNanoseconds - start) / 2_000 / 1_000
+        print(String(format: "BENCH cached snapshot: %.3f us/appearance (2000 snapshots)", micros))
     }
     static func contactSheet(in directory: URL) throws {
         guard let context = CGContext(data: nil, width: 1500, height: 16 * 80, bitsPerComponent: 8, bytesPerRow: 0,
@@ -487,6 +510,7 @@ struct MenuRenderProbe {
             try codexChecks(in: directory)
             try quotaChecks(in: directory)
             try appearanceCacheChecks()
+            try preparationReuseChecks()
             try isolatedWarningChecks()
             if CommandLine.arguments.contains("--benchmark") { try benchmark() }
             try contactSheet(in: directory)
