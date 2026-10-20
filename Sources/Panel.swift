@@ -23,12 +23,11 @@ enum PanelColor {
 /// hit testing and accessibility. No timer or attention-seeking animation.
 private final class AdviceEntryButtonCell: NSButtonCell {
     override func drawBezel(withFrame frame: NSRect, in controlView: NSView) {
-        let path = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 1), xRadius: 10, yRadius: 10)
-        let blue = NSColor(calibratedRed: 0.18, green: 0.31, blue: 0.77, alpha: 1)
-        let purple = NSColor(calibratedRed: 0.46, green: 0.20, blue: 0.70, alpha: 1)
-        NSGradient(starting: blue, ending: purple)?.draw(in: path, angle: 0)
-        if isHighlighted { NSColor.black.withAlphaComponent(0.16).setFill(); path.fill() }
-        NSColor.white.withAlphaComponent(0.26).setStroke(); path.lineWidth = 1; path.stroke()
+        let path = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 1), xRadius: 8, yRadius: 8)
+        PanelColor.adaptive(.black.withAlphaComponent(isHighlighted ? 0.09 : 0.045),
+                            .white.withAlphaComponent(isHighlighted ? 0.14 : 0.075)).setFill()
+        path.fill()
+        PanelColor.divider.setStroke(); path.lineWidth = 0.75; path.stroke()
     }
 }
 
@@ -494,10 +493,10 @@ final class PanelController: NSViewController {
         let button = NSButton(frame: .zero)
         button.cell = AdviceEntryButtonCell(textCell: "")
         button.target = self; button.action = #selector(toggleAdvice)
-        button.bezelStyle = .rounded; button.controlSize = .regular
-        button.font = .systemFont(ofSize: 10, weight: .semibold)
+        button.bezelStyle = .rounded; button.controlSize = .small
+        button.font = .systemFont(ofSize: 10, weight: .medium)
         button.imagePosition = .imageLeft; button.imageHugsTitle = true
-        button.contentTintColor = .white
+        button.contentTintColor = .secondaryLabelColor
         return button
     }()
     var adviceActionRequested: ((AdviceAction) -> Void)?
@@ -784,7 +783,7 @@ final class PanelController: NSViewController {
         place(text("Mac Thermal", size: 15, weight: .semibold), in: canvas, 54, 11, 153, 20)
         place(uptimeLabel, in: canvas, 54, 32, 153, 14)
         localizedToolTip(uptimeLabel, "잠자기 시간을 포함한 부팅 후 경과 시간 · 1분 단위")
-        place(adviceButton, in: canvas, 211, 13, 82, 32)
+        place(adviceButton, in: canvas, 217, 15, 76, 28)
         place(menuBarSettingsButton, in: canvas, 300, 16, 24, 24)
         place(tabs, in: canvas, 16, 55, 308, 24)
         tabViews = Self.tabIdentifiers.map { _ in
@@ -1168,12 +1167,12 @@ final class PanelController: NSViewController {
     private func updateAdviceButton() {
         let title = L10n.text(showingAdvice ? "돌아가기" : "AI 설명")
         adviceButton.title = title
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .semibold), .foregroundColor: NSColor.white]
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: NSColor.labelColor]
         adviceButton.attributedTitle = NSAttributedString(string: title, attributes: attributes)
         adviceButton.attributedAlternateTitle = adviceButton.attributedTitle
         let symbol = NSImage(systemSymbolName: showingAdvice ? "chevron.left" : "sparkles", accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
-        adviceButton.image = symbol?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.white]))
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
+        adviceButton.image = symbol?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.secondaryLabelColor]))
         adviceButton.image?.isTemplate = false
         adviceButton.setAccessibilityLabel(L10n.text(showingAdvice ? "상태 안내 닫기" : "현재 탭의 AI 설명 열기"))
         adviceButton.toolTip = L10n.text("현재 상태와 해볼 일을 확인해요 · AI를 사용할 수 없으면 기본 안내를 표시해요")
@@ -1574,7 +1573,7 @@ extension PanelController {
     var probeAdviceView: HealthAdviceView { adviceContent }
     var probeAdviceButtonFits: Bool { (adviceButton.cell?.cellSize.width ?? 0) <= adviceButton.frame.width }
     var probeAdviceEntryIsProminent: Bool {
-        !adviceButton.isHidden && adviceButton.frame == NSRect(x: 211, y: 13, width: 82, height: 32) && adviceButton.image != nil
+        !adviceButton.isHidden && adviceButton.frame == NSRect(x: 217, y: 15, width: 76, height: 28) && adviceButton.image != nil
     }
     var probeAdviceHeaderFits: Bool {
         (uptimeLabel.stringValue as NSString).size(withAttributes: [.font: uptimeLabel.font!]).width <= uptimeLabel.frame.width
