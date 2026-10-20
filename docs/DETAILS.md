@@ -2,7 +2,7 @@
 
 [한국어 README](../README.md) · [English](../README.en.md) · [日本語](../README.ja.md) · [简体中文](../README.zh-CN.md)
 
-이 문서는 Mac Thermal v2.7.0 개발 버전의 표시 기준과 구현상 한계를 설명합니다. 소스 코드는 MIT 라이선스로 제공하며, 타사 고지는 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)를 따릅니다.
+이 문서는 Mac Thermal v2.7.1의 표시 기준과 구현상 한계를 설명합니다. 소스 코드는 MIT 라이선스로 제공하며, 타사 고지는 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)를 따릅니다.
 
 ## 실행 환경
 

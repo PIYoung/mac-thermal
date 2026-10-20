@@ -1,6 +1,6 @@
 # Releases
 
-## v2.7.1 — Unreleased
+## v2.7.1 — 2026-10-20
 
 Reduce menu bar rendering overhead. Build 29.
 
@@ -8,6 +8,7 @@ Reduce menu bar rendering overhead. Build 29.
 - Remove a redundant full-image crop and avoid setting the status-item width when it has not changed.
 - Preserve the eight-frame-per-second animation limit, monitoring cadence, motion gates and paired-panel layout.
 - Verify repeated appearance changes reuse cached text with identical pixels and fresh measurements invalidate the cache. No external dependencies or permissions are added.
+- Record local CPU observations and measurement units in [docs/PERFORMANCE.md](docs/PERFORMANCE.md); results depend on workload and are not a fixed performance guarantee.
 
 ## v2.7.0 — 2026-10-19
 
