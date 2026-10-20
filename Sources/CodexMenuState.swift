@@ -1,9 +1,11 @@
 import Foundation
 
-/// A new local usage record triggers a bounded activity gesture. Neither app runtime
-/// nor a recent timestamp is treated as evidence of a task's live state.
+/// App presence drives a slow idle pose cycle. A fresh local usage record drives
+/// a bounded faster cycle; neither is evidence of a task's live state.
 struct CodexMenuActivity {
     static let activityDuration: TimeInterval = 10
+    static let idleFrameInterval: TimeInterval = 0.75
+    static let activeFrameInterval: TimeInterval = 1.0 / 8
     private(set) var snapshot = CodexMonitorSnapshot.pending
     private(set) var gestureEndsAt: TimeInterval = 0
     private var hasBaseline = false
@@ -31,6 +33,13 @@ struct CodexMenuActivity {
     }
     func isAnimating(at uptime: TimeInterval) -> Bool {
         canShowUsage && uptime < gestureEndsAt
+    }
+    func frameInterval(at uptime: TimeInterval) -> TimeInterval {
+        isAnimating(at: uptime) ? Self.activeFrameInterval : Self.idleFrameInterval
+    }
+    func frame(at uptime: TimeInterval) -> Int {
+        guard isVisible, uptime.isFinite, uptime >= 0 else { return 0 }
+        return Int((uptime / frameInterval(at: uptime)).truncatingRemainder(dividingBy: 4))
     }
     mutating func cancelGesture() { gestureEndsAt = 0 }
     mutating func receive(_ next: CodexMonitorSnapshot, now: Date = Date(), uptime: TimeInterval = ProcessInfo.processInfo.systemUptime) {

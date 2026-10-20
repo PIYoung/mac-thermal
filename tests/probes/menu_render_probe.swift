@@ -243,10 +243,14 @@ struct MenuRenderProbe {
         var state = CodexMenuActivity()
         state.receive(record(), now: now, uptime: 10)
         try check(!state.isAnimating(at: 10), "initial scan animated as fresh activity")
+        try check(state.frameInterval(at: 10) == 0.75, "running app must idle slowly before a new record")
+        try check(state.frame(at: 12) == state.frame(at: 12.7) && state.frame(at: 12) != state.frame(at: 12.75), "idle pose cadence is not 0.75 seconds")
         var next = record(tokens: 123_457)
         next.lastRecordAt = now.addingTimeInterval(1)
         state.receive(next, now: now.addingTimeInterval(1), uptime: 11)
         try check(state.isAnimating(at: 11) && !state.isAnimating(at: 21), "activity must stop after 10s without another record")
+        try check(state.frameInterval(at: 11) == 0.125 && state.frameInterval(at: 21) == 0.75, "activity must speed up then return to idle")
+        try check(state.frame(at: 12) != state.frame(at: 12.125), "active poses must advance at eight fps")
         state.receive(next, now: now.addingTimeInterval(2), uptime: 12)
         try check(state.gestureEndsAt == 21, "duplicate snapshot restarted gesture")
         var newer = next
@@ -263,11 +267,19 @@ struct MenuRenderProbe {
         var off = record(); off.recordsEnabled = false
         state.receive(off, now: now, uptime: 100)
         try check(state.tokens == nil && !state.isAnimating(at: 100), "OFF exposes stale usage")
+        try check(state.isVisible && state.frame(at: 102) != state.frame(at: 102.75), "record reading OFF must retain the running-app idle cycle")
         state.receive(record(), now: now, uptime: 101)
         try check(!state.isAnimating(at: 101), "re-enable replayed catch-up gesture")
         var closed = record(); closed.appStartedAt = nil
         state.receive(closed, now: now, uptime: 102)
         try check(!state.isVisible && state.tokens == nil, "closed Codex must not retain a menu slot")
+        try check(state.frame(at: 102) == 0 && state.frame(at: 102.75) == 0, "closed app still changes poses")
+        let quiet = sample(cpu: 0, gpu: 0, read: 0, write: 0, upload: 0, download: 0)
+        let onlyCodex = MenuBarPreferences(visibleMetrics: [.codex])
+        let idleCadence = MenuBarContent.previewCodexCadence(sample: quiet, snapshot: off, preferences: onlyCodex)
+        try check(idleCadence.0 && idleCadence.1 == 0.75, "Codex-only idle must keep a low-frequency timer without reading records")
+        let stoppedCadence = MenuBarContent.previewCodexCadence(sample: quiet, snapshot: closed, preferences: onlyCodex)
+        try check(!stoppedCadence.0, "closed app must not keep the animation timer alive")
         var partial = record(tokens: 0); partial.incomplete = true
         state.receive(partial, now: now, uptime: 103)
         try check(state.tokens == nil, "partial zero presented as confirmed zero")
@@ -319,11 +331,16 @@ struct MenuRenderProbe {
                     let (image, layout, text) = MenuBarContent.previewCodex(sample: sample(), snapshot: fixture, preferences: MenuBarPreferences(), dark: dark)
                     try check(image != nil && (layout[.codex] != nil) == (fixture.appStartedAt != nil), "Codex runtime visibility fallback failed")
                     if !fixture.recordsEnabled { try check(!text.contains("123456"), "OFF tooltip leaked a stale token count") }
+                    if fixture.appStartedAt != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                        let a = MenuBarContent.previewCodex(sample: quiet, snapshot: fixture, preferences: onlyCodex, dark: dark, frame: 1).0!
+                        let b = MenuBarContent.previewCodex(sample: quiet, snapshot: fixture, preferences: onlyCodex, dark: dark, frame: 3).0!
+                        try check(try pixels(a) != pixels(b), "idle robot is static without fresh records")
+                    }
                 }
             }
         }
         L10n.setLanguage(.korean, defaults: isolated)
-        print("PASS Codex menu: 32 selections × four languages × two appearances, source states, finite fresh-record gesture, no catch-up/re-enable replay, OFF/sleep gates")
+        print("PASS Codex menu: 32 selections × four languages × two appearances, slow running-app idle, 8fps fresh-record burst/expiry, low idle-only timer cadence, no catch-up/re-enable burst, OFF/sleep gates")
     }
     static func quotaChecks(in directory: URL) throws {
         let time = sample().time

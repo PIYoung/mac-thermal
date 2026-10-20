@@ -899,7 +899,7 @@ final class PanelController: NSViewController {
             let origins: [CGFloat] = [11, 55, 99, 143, 224]
             let widths: [CGFloat] = [44, 44, 44, 81, 57]
             place(control, in: metrics, origins[index], 26, widths[index], 20)
-            if metric == .codex { localizedToolTip(control, "Codex 앱 실행 중에만 표시합니다. 새 토큰 기록이 들어오면 움직입니다.") }
+            if metric == .codex { localizedToolTip(control, "Codex 앱 실행 중에는 천천히, 새 토큰 기록이 들어오면 활발하게 움직입니다.") }
         }
 
         let style = GlassCard()

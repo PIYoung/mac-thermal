@@ -1,5 +1,10 @@
 # Releases
 
+## Unreleased — v2.14.1
+
+- Give the original Codex robot two speeds: a slow idle cycle while the desktop app is running, and an eight-fps activity cycle for ten seconds after fresh local token records. Return to idle without new records; retain motion-off, Reduce Motion, hidden-item and sleep gates.
+- Keep the same data scope and eight-second record polling. Run the shared timer at a lower cadence when only the idle robot is animating, reuse unchanged frames, and preserve menu width and fixed panel positions.
+
 ## Unreleased — v2.14.0
 
 - Add an AI help button for each resource tab, displaying current state, verified evidence and three fixed suggested actions within the existing panel. Reuse the shared slim scroller.

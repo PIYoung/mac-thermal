@@ -159,7 +159,7 @@ extension L10n {
         "%lld시간 전": ["%lldh ago", "%lld時間前", "%lld小时前"],
         "%lld일 전": ["%lldd ago", "%lld日前", "%lld天前"],
         "Codex · 오늘 토큰 (UTC) %@ · %@": ["Codex · UTC tokens today %@ · %@", "Codex · 今日のトークン (UTC) %@ · %@", "Codex · 今日令牌 (UTC) %@ · %@"],
-        "새 토큰 기록을 감지하면 움직이고 추가 기록이 없으면 10초 뒤 멈춥니다. 실시간 토큰 소비·작업 완료 여부는 확인할 수 없습니다.": ["Moves when a new token record is detected and stops after 10 seconds without another record. Live token consumption and task completion are unavailable.", "新しいトークン記録を検出すると動き、追加の記録がないと10秒後に止まります。リアルタイムのトークン消費や作業完了は確認できません。", "检测到新的令牌记录时播放动画，10秒内无新记录则停止。无法确认实时令牌消耗或任务完成状态。"],
-        "Codex 앱 실행 중에만 표시합니다. 새 토큰 기록이 들어오면 움직입니다.": ["Shown only while the Codex app is running. Animates when a new token record arrives.", "Codexアプリ実行中のみ表示します。新しいトークン記録が届くと動きます。", "仅在Codex应用运行时显示，收到新的令牌记录后播放动画。"],
+        "앱 실행 중에는 천천히 움직이고 새 토큰 기록을 감지하면 10초 동안 활발하게 움직입니다. 실시간 토큰 소비·작업 완료 여부는 확인할 수 없습니다.": ["Moves slowly while the app is running and actively for 10 seconds after a new token record. This does not indicate live token consumption or task completion.", "アプリ実行中はゆっくり動き、新しいトークン記録を検出すると10秒間活発に動きます。リアルタイムのトークン消費や作業完了を示すものではありません。", "应用运行时缓慢移动，检测到新令牌记录后活跃移动10秒。动画不代表实时令牌消耗或任务完成。"],
+        "Codex 앱 실행 중에는 천천히, 새 토큰 기록이 들어오면 활발하게 움직입니다.": ["Moves slowly while Codex is running and actively when new token records arrive.", "Codex実行中はゆっくり、新しいトークン記録が届くと活発に動きます。", "Codex运行时缓慢移动，收到新令牌记录后活跃移动。"],
     ]
 }

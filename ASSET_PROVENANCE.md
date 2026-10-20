@@ -41,3 +41,5 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 - GPU 온도 행·메모리 주변 온도 행은 자체 AppKit UI와 시스템 글꼴입니다. 확인된 M4 계열 SMC 키 또는 명시적으로 GPU로 이름 붙은 HID 센서만 읽고 PMU를 대체 온도로 쓰지 않습니다. 메모리 주변 온도는 메모리 칩 내부 온도로 표현하지 않습니다. 센서 매핑은 기존 Stats v3.0.21 values.swift 참고 범위이며 MIT 고지를 보존합니다.
 
 - 상태 안내·AI 설명 화면: 자체 AppKit 카드와 기존 GlassScroller를 재사용합니다. 외부 이미지·아이콘·모델·패키지를 추가하지 않습니다. Foundation Models는 macOS가 제공하는 선택형 시스템 프레임워크이며 SystemLanguageModel.default만 사용합니다. 생성 문구와 별도로 측정 근거·기본 안내·고정 행동 버튼을 표시합니다.
+
+Codex robot idle/active motion reuses the original four geometric typing poses at two cadences. No external animation, sprite, library or model is added.

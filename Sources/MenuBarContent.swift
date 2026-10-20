@@ -35,6 +35,7 @@ final class MenuBarContent: NSObject {
     private var ink = NSColor.labelColor.cgColor
     private var scale: CGFloat = 2
     private var timer: Timer?
+    private var timerInterval: TimeInterval?
     private var appearanceObservation: NSKeyValueObservation?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var systemSleeping = false
@@ -125,6 +126,7 @@ final class MenuBarContent: NSObject {
 
     func update(codex: CodexMonitorSnapshot) {
         codexActivity.receive(codex)
+        codexFrame = codexActivity.frame(at: ProcessInfo.processInfo.systemUptime)
         if !motionAllowed || systemSleeping || displaySleeping || !preferences.visibleMetrics.contains(.codex) {
             codexActivity.cancelGesture()
         }
@@ -150,6 +152,7 @@ final class MenuBarContent: NSObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        timerInterval = nil
         lastTick = nil
     }
 
@@ -157,12 +160,17 @@ final class MenuBarContent: NSObject {
         preferences.motionEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
-    private var hasActivity: Bool {
+    private var hasResourceActivity: Bool {
         (preferences.visibleMetrics.contains(.cpu) && (validPercentage(sample.cpuUsage) ?? 0) > 0) ||
         (preferences.visibleMetrics.contains(.gpu) && (validPercentage(sample.resources.gpu.utilizationPercent) ?? 0) > 0) ||
         (preferences.visibleMetrics.contains(.ssd) && [sample.resources.disk.readBytesPerSecond, sample.resources.disk.writeBytesPerSecond].contains { (validRate($0) ?? 0) > 0 }) ||
-        (preferences.visibleMetrics.contains(.network) && [sample.upload, sample.download].contains { (validRate($0) ?? 0) > 0 }) ||
-        (preferences.visibleMetrics.contains(.codex) && codexActivity.isAnimating(at: ProcessInfo.processInfo.systemUptime))
+        (preferences.visibleMetrics.contains(.network) && [sample.upload, sample.download].contains { (validRate($0) ?? 0) > 0 })
+    }
+    private var hasActivity: Bool {
+        hasResourceActivity || (preferences.visibleMetrics.contains(.codex) && codexActivity.isVisible)
+    }
+    private func animationInterval(at uptime: TimeInterval) -> TimeInterval {
+        hasResourceActivity ? CodexMenuActivity.activeFrameInterval : codexActivity.frameInterval(at: uptime)
     }
 
     private func configureAnimation() {
@@ -172,9 +180,12 @@ final class MenuBarContent: NSObject {
             displayFrame()
             return
         }
-        guard timer == nil else { return }
+        let interval = animationInterval(at: ProcessInfo.processInfo.systemUptime)
+        if timer != nil, timerInterval == interval { return }
+        stop()
+        timerInterval = interval
         lastTick = ProcessInfo.processInfo.systemUptime
-        let timer = Timer(timeInterval: 1.0 / 8, repeats: true) { [weak self] _ in self?.tick() }
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.tick() }
         timer.tolerance = 0.025
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
@@ -203,8 +214,10 @@ final class MenuBarContent: NSObject {
             let period = diskActivity < 100_000 ? 5.0 : diskActivity < 5_000_000 ? 3.0 : diskActivity < 50_000_000 ? 1.6 : 1.0
             diskPhase = (diskPhase + elapsed / max(0.9, period / sqrt(intensity))).truncatingRemainder(dividingBy: 1)
         }
-        codexFrame = Int(now * 8) % 4
-        frameRenderings.removeAll()
+        let nextCodexFrame = codexActivity.frame(at: now)
+        if hasResourceActivity || codexFrame != nextCodexFrame { frameRenderings.removeAll() }
+        codexFrame = nextCodexFrame
+        if timerInterval != animationInterval(at: now) { configureAnimation() }
         displayFrame()
     }
 
@@ -297,7 +310,7 @@ final class MenuBarContent: NSObject {
                 let state = codexActivity.tokens.map { L10n.format("%lld 토큰", $0) } ?? L10n.text("확인 불가")
                 return [L10n.format("Codex · 오늘 토큰 (UTC) %@ · %@", state, codexActivity.recentLabel(now: sample.time)),
                         L10n.text("이 Mac의 로컬 기록에 남은 UTC 오늘 토큰입니다. 계정 전체 사용량이 아닙니다."),
-                        L10n.text("새 토큰 기록을 감지하면 움직이고 추가 기록이 없으면 10초 뒤 멈춥니다. 실시간 토큰 소비·작업 완료 여부는 확인할 수 없습니다.")] +
+                        L10n.text("앱 실행 중에는 천천히 움직이고 새 토큰 기록을 감지하면 10초 동안 활발하게 움직입니다. 실시간 토큰 소비·작업 완료 여부는 확인할 수 없습니다.")] +
                         (codexActivity.snapshot.incomplete && codexActivity.canShowUsage ? [L10n.text("일부 로컬 기록만 집계했습니다")] : [])
             }
         }
@@ -417,7 +430,7 @@ final class MenuBarContent: NSObject {
         if baseImage == nil { rebuildBase() }
         guard let baseImage, let renderedAppearance else { return nil }
         let animated = motionAllowed && !systemSleeping && !displaySleeping && hasActivity
-        let codexPose = animated && codexActivity.isAnimating(at: ProcessInfo.processInfo.systemUptime) ? codexFrame : 0
+        let codexPose = animated && codexActivity.isVisible ? codexFrame : 0
         let key = FrameKey(appearance: renderedAppearance, animated: animated, codexPose: codexPose)
         if let cached = frameRenderings[key] { return cached }
         guard let context = context() else { return nil }
@@ -452,7 +465,7 @@ final class MenuBarContent: NSObject {
     }
 
     /// Original 26pt robot and keyboard, drawn entirely from basic shapes.
-    /// Four typing poses run for a bounded interval after a fresh usage record.
+    /// Four original typing poses cycle slowly at idle and quickly after a fresh record.
     private func drawCodex(in context: CGContext, frame: Int) {
         context.setStrokeColor(ink)
         context.setFillColor(ink)
@@ -605,6 +618,15 @@ final class MenuBarContent: NSObject {
     }
 
     #if MENU_RENDER_PROBE
+    static func previewCodexCadence(sample: Snapshot, snapshot: CodexMonitorSnapshot,
+                                    preferences: MenuBarPreferences) -> (Bool, TimeInterval) {
+        let content = MenuBarContent(frame: .zero)
+        content.sample = sample
+        content.preferences = preferences
+        content.codexActivity.receive(snapshot)
+        return (content.hasActivity, content.animationInterval(at: ProcessInfo.processInfo.systemUptime))
+    }
+
     static func previewCodexUpdater(sample: Snapshot) -> (CodexMonitorSnapshot) -> (NSImage?, [MenuBarMetric: CGRect]) {
         let content = MenuBarContent(frame: .zero)
         content.sample = sample
