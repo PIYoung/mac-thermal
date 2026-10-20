@@ -23,3 +23,26 @@ The account cards explicitly say sign-in is required when disconnected or awaiti
 Extended local insights reuse the already-approved model/counter/timestamp records. Input/output composition, cache reuse and reasoning shares use validated numeric subsets and are cleared when local record reading stops. There is no ten-minute activity chart or daily account graph. Account lifetime/peak/streak/longest-turn summaries have a separate default-off review. Turning summary off clears them immediately; daily-statistics off or disconnect clears the summary approval too. No additional recipient, endpoint, model call, record scope or on-disk usage history is introduced.
 
 Quota reset alerts are a separate default-off local setting with an explicit macOS notification permission request. They reuse approved numeric quota responses, keep at most two numeric reset baselines in memory, and do not add account polling or a remote recipient. The OS notification carries a generic localized reset message only, may appear on the lock screen, and uses a stable identifier so subsequent alerts replace the prior message. No sound, badge, remote-push registration, conversation, account identifier or token counter is included. The enable preference persists locally; detection history does not. Disabling clears only this feature's notification and in-memory state. Previously permitted launch only checks notification authorization; it never requests permission automatically.
+
+On-device health explanations are user-requested only and use Apple's explicit
+SystemLanguageModel.default on supported macOS versions. There is no cloud/PCC
+fallback, network client, custom provider, adapter, tool calling, prewarming,
+automatic Apple Intelligence setting change, or app-initiated model download.
+The user reviews/enables Apple Intelligence separately in system settings.
+Only sanitized numeric sensor/load/pressure/capacity/traffic measurements and
+trusted application guidance enter the model prompt. No process names or PIDs,
+device names, file candidates or paths, arbitrary user prompts, Codex records,
+account data or credentials are supplied. Nothing is uploaded or logged by the
+app. Brief trend observations are bounded to five minutes/151 in-memory points;
+sleep, missing readings and time reversals reset continuous-duration evidence.
+
+Threshold decisions, facts and three suggested actions are computed by app code.
+Generated prose is labeled as reference material and cannot define an executable
+action, URL, command, warning color or file selection. Invalid/unsupported/stale
+output and unavailable models fall back to basic guidance. Model requests are
+single-flight, time-limited, and cancelled on navigation, dismissal, sleep,
+language changes or newly observed heat/high-memory-pressure constraints; late
+results are ignored. Cancellation invalidates delivery immediately, while OS
+model shutdown may complete later. No new OS notifications, data source, disk
+cleanup permission, fan control, process termination or security-policy change
+is introduced by this feature.

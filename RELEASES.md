@@ -1,5 +1,12 @@
 # Releases
 
+## Unreleased — v2.14.0
+
+- Add an AI help button for each resource tab, displaying current state, verified evidence and three fixed suggested actions within the existing panel. Reuse the shared slim scroller.
+- Use Apple SystemLanguageModel.default only when explicitly requested, supported and ready. Supply sanitized numeric measurements and trusted app guidance; no process identities, file data, records, accounts, cloud fallback, tools or external packages.
+- Keep deterministic warning rules, gap-aware duration/trend evidence and fixed actions independent of generated prose. Pause inference for heat/high memory pressure; handle cancellation, time limits, stale/invalid output and unavailable models with basic guidance.
+- Preserve macOS 14+ monitoring using weak framework linking; on-device AI requires supported macOS 26+ and user-enabled Apple Intelligence. No automatic setting changes or notifications.
+
 ## v2.13.1 — 2026-10-20
 
 Independent temperature warnings, fan RPM and home-directory disk cleanup. Build 47.

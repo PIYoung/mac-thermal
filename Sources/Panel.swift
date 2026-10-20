@@ -473,6 +473,17 @@ final class PanelController: NSViewController {
     static let size = NSSize(width: surfaceSize.width + 2 * surfaceInset, height: surfaceSize.height + 2 * surfaceInset)
     static let cornerRadius: CGFloat = 22
 
+    private let adviceMonitor = HealthAdviceMonitor()
+    private let adviceEngine: OnDeviceAdviceGenerating
+    private var showingAdvice = false
+    private lazy var adviceContent = HealthAdviceView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), engine: adviceEngine)
+    private lazy var adviceButton: NSButton = {
+        let button = NSButton(title: L10n.text("AI 설명"), target: self, action: #selector(toggleAdvice))
+        button.bezelStyle = .rounded; button.controlSize = .small
+        button.font = .systemFont(ofSize: 10, weight: .medium)
+        return button
+    }()
+    var adviceActionRequested: ((AdviceAction) -> Void)?
     private let cpuTemp = text("—", size: 18, weight: .medium, digits: true)
     private let ssdThermalTitle = text("SSD 온도", size: 10, weight: .medium, color: PanelColor.secondary)
     private let ssdTemp = text("—", size: 18, weight: .medium, digits: true)
@@ -675,12 +686,14 @@ final class PanelController: NSViewController {
     private let tabDefaultsKey = "dashboardSelectedResourceTabV4"
     private static let tabIdentifiers = ["cpu", "gpu", "memory", "ssd", "network"]
     private static let tabLabels = ["CPU", "GPU", "메모리", "SSD", "통신"]
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, adviceEngine: OnDeviceAdviceGenerating = AppleOnDeviceAdvice()) {
+        self.adviceEngine = adviceEngine
         tabDefaults = defaults
         menuBarPreferences = .load(defaults: defaults)
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) {
+        adviceEngine = AppleOnDeviceAdvice()
         tabDefaults = .standard
         menuBarPreferences = .load()
         super.init(coder: coder)
@@ -768,6 +781,19 @@ final class PanelController: NSViewController {
         place(diskMonitorView, in: tabViews[3], 0, 0, 308, 277)
         buildDisk(in: diskMonitorView)
         buildNetwork(in: tabViews[4])
+        place(adviceContent, in: canvas, 16, 88, 308, 277)
+        adviceContent.requestLatest = { [weak self] in self?.openAdvice() }
+        adviceContent.performAction = { [weak self] action in
+            guard let self else { return }
+            if let handler = self.adviceActionRequested { handler(action); return }
+            switch action {
+            case .activityMonitor:
+                NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app"),
+                    configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+            case .diskCleanup:
+                self.suspendAdvice(); self.tabs.selectedSegment = 3; self.changeTab(); self.openDiskCleanup()
+            }
+        }
         settingsScroll.drawsBackground = false
         settingsScroll.hasVerticalScroller = true
         settingsScroll.autohidesScrollers = true
@@ -785,7 +811,8 @@ final class PanelController: NSViewController {
         let footerLine = NSBox()
         footerLine.boxType = .separator
         place(footerLine, in: canvas, 16, 379, 308, 1)
-        place(updated, in: canvas, 17, 388, 238, 15)
+        place(updated, in: canvas, 17, 388, 172, 15)
+        place(adviceButton, in: canvas, 197, 385, 61, 23)
         let refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: L10n.text("새로고침")) ?? NSImage(), target: self, action: #selector(refreshNow))
         let quitButton = NSButton(image: NSImage(systemSymbolName: "power", accessibilityDescription: L10n.text("종료")) ?? NSImage(), target: self, action: #selector(quitApp))
         for (button, title, x) in [(refreshButton, "지금 새로고침", CGFloat(267)), (quitButton, "Mac Thermal 종료", CGFloat(300))] {
@@ -809,6 +836,7 @@ final class PanelController: NSViewController {
 
     private func refreshLanguage() {
         guard isViewLoaded else { return }
+        suspendAdvice()
         refreshLocalizedViews(view)
         tabs.updateLabels(Self.tabLabels.map(L10n.text))
         animationStyleControl.removeAllItems()
@@ -938,6 +966,7 @@ final class PanelController: NSViewController {
     }
 
     @objc private func toggleMenuBarSettings() {
+        suspendAdvice()
         showingMenuBarSettings.toggle()
         if showingMenuBarSettings {
             menuBarPreferences = .load(defaults: tabDefaults)
@@ -1096,20 +1125,46 @@ final class PanelController: NSViewController {
     private func showSelectedTab() {
         tabs.isHidden = showingMenuBarSettings
         settingsScroll.isHidden = !showingMenuBarSettings
+        adviceContent.isHidden = showingMenuBarSettings || !showingAdvice
+        adviceButton.isHidden = showingMenuBarSettings
+        adviceButton.title = L10n.text(showingAdvice ? "돌아가기" : "AI 설명")
+        adviceButton.setAccessibilityLabel(L10n.text(showingAdvice ? "상태 안내 닫기" : "현재 탭의 AI 설명 열기"))
         menuBarSettingsButton.contentTintColor = showingMenuBarSettings ? PanelColor.blue : PanelColor.secondary
         localizedAccessibilityLabel(menuBarSettingsButton, showingMenuBarSettings ? "Mac Thermal 설정 닫기" : "Mac Thermal 설정 열기")
         for (index, content) in tabViews.enumerated() {
             content.layer?.removeAnimation(forKey: "tabContentReveal")
-            content.isHidden = showingMenuBarSettings || index != tabs.selectedSegment
+            content.isHidden = showingMenuBarSettings || showingAdvice || index != tabs.selectedSegment
         }
         if presentationIsVisible { presentLatestSnapshot() }
     }
 
     @objc private func changeTab() {
+        suspendAdvice()
         guard Self.tabIdentifiers.indices.contains(tabs.selectedSegment) else { return }
         tabDefaults.set(Self.tabIdentifiers[tabs.selectedSegment], forKey: tabDefaultsKey)
         showSelectedTab()
     }
+
+    @objc private func toggleAdvice() {
+        if showingAdvice { suspendAdvice(); showSelectedTab() }
+        else { openAdvice() }
+    }
+    private func openAdvice() {
+        guard !showingMenuBarSettings, let topic = AdviceTopic(rawValue: tabs.selectedSegment) else { return }
+        showingAdvice = true
+        showSelectedTab()
+        adviceContent.show(adviceMonitor.report(topic, sample: latestSnapshot))
+    }
+    func suspendAdvice() {
+        showingAdvice = false
+        if isViewLoaded {
+            adviceContent.suspend(); adviceContent.isHidden = true
+            adviceButton.title = L10n.text("AI 설명")
+            adviceButton.setAccessibilityLabel(L10n.text("현재 탭의 AI 설명 열기"))
+            for (index, content) in tabViews.enumerated() { content.isHidden = showingMenuBarSettings || index != tabs.selectedSegment }
+        }
+    }
+    func resetAdviceHistory() { suspendAdvice(); adviceMonitor.reset() }
 
     private func temperatureText(_ value: Double?) -> NSAttributedString {
         let number = value.map { String(format: "%.0f", $0) } ?? "—"
@@ -1163,6 +1218,7 @@ final class PanelController: NSViewController {
     func apply(_ sample: Snapshot, recordHistory: Bool = true) {
         latestSnapshot = sample
         if recordHistory {
+            adviceMonitor.observe(sample)
             cpuHistory.append(sample.cpuUsage, at: sample.uptime)
             gpuHistory.append(sample.resources.gpu.utilizationPercent, at: sample.uptime)
             uploadHistory.append(sample.upload, at: sample.time)
@@ -1187,6 +1243,7 @@ final class PanelController: NSViewController {
         uptimeLabel.stringValue = SystemUptime.label(sample.uptime)
         updated.stringValue = L10n.format("2초마다 갱신  ·  %@", timeFormatter.string(from: sample.time))
         guard !showingMenuBarSettings else { return }
+        if showingAdvice { adviceContent.receiveSafety(sample, monitor: adviceMonitor); return }
         switch tabs.selectedSegment {
         case 0: applyCPU(sample)
         case 1:
@@ -1482,6 +1539,13 @@ extension PanelController {
             ($0.stringValue as NSString).size(withAttributes: [.font: $0.font!]).width <= $0.bounds.width
         }
     }
+    #if HEALTH_ADVICE_PROBE
+    func probeOpenAdvice() { openAdvice() }
+    func probeCloseAdvice() { suspendAdvice(); showSelectedTab() }
+    var probeAdviceIsVisible: Bool { showingAdvice && !adviceContent.isHidden }
+    var probeAdviceView: HealthAdviceView { adviceContent }
+    var probeAdviceButtonFits: Bool { (adviceButton.cell?.cellSize.width ?? 0) <= adviceButton.frame.width }
+    #endif
     var probeSelectedTab: Int { tabs.selectedSegment }
     var probeTabLabels: [String] { Self.tabLabels.map(L10n.text) }
     var probeRankingTexts: [String: [String]] { ["cpu": cpuRanking.probeRows, "memory": memoryRanking.probeRows] }

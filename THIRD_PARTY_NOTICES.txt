@@ -54,3 +54,12 @@ client and quota UI are original project code. The installed OpenAI software and
 ChatGPT sign-in remain subject to their own licenses and service terms.
 Protocol reference: https://learn.chatgpt.com/docs/app-server
 Account integration details: docs/CODEX_ACCOUNT.md
+
+Optional system framework — Apple Foundation Models
+On-device explanations use SystemLanguageModel.default from the Apple-provided
+Foundation Models framework on supported macOS versions. Mac Thermal does not
+redistribute Apple model weights, framework binaries, an external model runtime,
+or a third-party AI SDK. The client, rule-based guidance, and UI are original
+project code under this repository's MIT License. Apple software and models
+remain subject to Apple's platform terms, not a relicense under MIT.
+Reference: https://developer.apple.com/documentation/foundationmodels

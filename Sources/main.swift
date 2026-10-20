@@ -212,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quotaClient.onDeviceLogin = { [weak self] url, code in self?.accountPresenter.showDeviceLogin(url: url, code: code) }
         quotaClient.onCredentialRemovalFailure = { [weak self] in self?.accountPresenter.showRemovalFailure() }
         let workspace = NSWorkspace.shared.notificationCenter
-        accountObservers.append(workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.suspend() })
+        accountObservers.append(workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.suspend(); self?.panel.resetAdviceHistory() })
         accountObservers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.startSavedConnection() })
         quotaClient.startSavedConnection()
         codexMonitor.start()
@@ -315,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hidePanel() {
         panelRequest.cancel()
+        panel.suspendAdvice()
         dashboard.orderOut(nil)
     }
 
@@ -336,6 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // status item and Escape dismiss the panel; losing key status alone does not.
 
     func applicationWillTerminate(_ notification: Notification) {
+        panel.suspendAdvice()
         menuContent.stop()
         codexMonitor.stop()
         resetNotifications.stop()

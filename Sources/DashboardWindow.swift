@@ -166,6 +166,9 @@ final class DashboardWindow: NSPanel {
     }
 
     override func orderOut(_ sender: Any?) {
+        // Escape and clicks in transparent margins dismiss the window directly.
+        // Cancel the explicit model request on these paths as well.
+        group.primary.suspendAdvice()
         super.orderOut(sender)
         removeOpeningAnimations()
     }

@@ -28,6 +28,6 @@ xcrun swiftc -O -target arm64-apple-macosx14.0 -module-cache-path "$preview_dir/
   "$source_dir/Localization.swift" "$source_dir/PanelTranslations.swift" "$source_dir/SystemTranslations.swift" "$source_dir/CleanupTranslations.swift" "$source_dir/CodexTranslations.swift" \
   "$preview_dir/DocModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/Uptime.swift" "$source_dir/CPUUsageHistory.swift" "$source_dir/LiquidTabs.swift" \
-  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/Panel.swift" "$project_dir/scripts/render-doc-preview.swift" \
-  -framework AppKit -framework QuartzCore -o "$helper_dir/Contents/MacOS/DocPreview"
+  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" "$source_dir/Panel.swift" "$project_dir/scripts/render-doc-preview.swift" \
+  -Xlinker -weak_framework -Xlinker FoundationModels -framework AppKit -framework QuartzCore -o "$helper_dir/Contents/MacOS/DocPreview"
 "$helper_dir/Contents/MacOS/DocPreview" "$project_dir/docs/images/mac-thermal-cpu.png" "$project_dir/build/panel-previews"

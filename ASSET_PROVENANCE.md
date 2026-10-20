@@ -39,3 +39,5 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 - CPU 팬 상태·회전수 행과 항목별 온도 경고는 자체 AppKit UI입니다. fanblades.fill은 앱 내부 팬 기능용 시스템 SF Symbol입니다. 팬은 기존 SMC 연결에서 FNum/FnAc만 읽고, 제어·속도 변경·관리자 helper·추가 라이브러리를 포함하지 않습니다. 키 매핑 참고 출처와 MIT 고지는 THIRD_PARTY_NOTICES.txt에 보존합니다.
 
 - GPU 온도 행·메모리 주변 온도 행은 자체 AppKit UI와 시스템 글꼴입니다. 확인된 M4 계열 SMC 키 또는 명시적으로 GPU로 이름 붙은 HID 센서만 읽고 PMU를 대체 온도로 쓰지 않습니다. 메모리 주변 온도는 메모리 칩 내부 온도로 표현하지 않습니다. 센서 매핑은 기존 Stats v3.0.21 values.swift 참고 범위이며 MIT 고지를 보존합니다.
+
+- 상태 안내·AI 설명 화면: 자체 AppKit 카드와 기존 GlassScroller를 재사용합니다. 외부 이미지·아이콘·모델·패키지를 추가하지 않습니다. Foundation Models는 macOS가 제공하는 선택형 시스템 프레임워크이며 SystemLanguageModel.default만 사용합니다. 생성 문구와 별도로 측정 근거·기본 안내·고정 행동 버튼을 표시합니다.
