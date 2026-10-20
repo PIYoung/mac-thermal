@@ -53,6 +53,8 @@ Codex record reading is **OFF by default**. When enabled, only model names, toke
 
 Usage covers **this Mac’s records for today (UTC)**, not account totals or billing. Optional [official sign-in](docs/CODEX_ACCOUNT.md) adds remaining account quota and reset countdowns after separate consent. Daily numeric summaries and lifetime/streak account summaries each require additional opt-in. There is no developer collection server, analytics SDK or remote log upload. The robot stops after 10 seconds without another new record; it does not indicate live token consumption or task completion.
 
+Quota-reset notifications are optional in Settings (OFF by default). While the app is running and account quota is connected, a confirmed server reset triggers one local alert. macOS notification permission is required; no additional polling or data collection is added.
+
 ---
 
 [Technical details](docs/DETAILS.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.txt)

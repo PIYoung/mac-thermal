@@ -1,5 +1,17 @@
 # Releases
 
+## v2.11.1 — 2026-10-20
+
+Optional Codex quota-reset notifications and matching settings scrolling. Build 44.
+
+- Add a default-off “Quota reset notifications” switch below local record reading in Settings. Request macOS alert permission only when explicitly enabled; preserve the choice across launches.
+- Reuse existing quota responses to notify once when the server confirms a new quota window. Countdown expiry alone, startup, sign-in, duplicate/stale responses and long sleep do not trigger catch-up alerts. Simultaneous window resets produce one notification.
+- Show only “Mac Thermal” and a localized “Codex quota has refreshed” message, without account names or token counts. Alerts may appear on the lock screen depending on macOS settings. The app must be running and account quota connected; macOS Focus and notification preferences control presentation. Switching off stops delivery and clears this feature’s pending/delivered alerts.
+- Use the same original slim blue-to-teal scrollbar in Settings and the Codex companion, with interaction emphasis and native drag, paging and accessibility. Keep panel dimensions and position fixed.
+- No new server, extra quota requests, model calls, developer telemetry or external packages. Reset detection retains only numeric window baselines in memory. Verify with synthetic quota/notification transport checks, four-language panel/layout checks and the full build suite; actual future resets are not part of the local test.
+
+Apple Silicon · macOS 14+. DMG, ZIP and SHA256SUMS are provided. Community builds are ad-hoc signed, without Developer ID signing or Apple notarization. MIT licensed; bundled notices are preserved. Made with OpenAI Codex and user feedback.
+
 ## v2.10.5 — 2026-10-20
 
 Codex account insights and a refined scrolling companion. Build 42.
