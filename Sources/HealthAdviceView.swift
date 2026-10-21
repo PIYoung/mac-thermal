@@ -35,10 +35,18 @@ final class HealthAdviceView: FlippedView {
         controller.onState = { [weak self] state in
             guard let self, self.active else { return }
             switch state {
-            case .generating: self.status.stringValue = L10n.text("기기 내에서 짧은 설명을 만드는 중이에요")
-            case .basic(let message): self.status.stringValue = message; self.explanation = nil; self.render()
+            case .generating:
+                self.retry.isEnabled = false
+                self.status.stringValue = L10n.text("기기 내에서 짧은 설명을 만드는 중이에요")
+            case .retrying:
+                self.retry.isEnabled = false
+                self.status.stringValue = L10n.text("AI 모델이 사용 중이라 한 번 다시 시도해요")
+            case .basic(let message): self.retry.isEnabled = true; self.status.stringValue = message; self.explanation = nil; self.render()
             case .explained(let response):
-                self.explanation = response; self.status.stringValue = L10n.text("온디바이스 AI 설명 · 측정 근거와 기본 안내를 함께 확인하세요"); self.render()
+                self.retry.isEnabled = true
+                self.explanation = response
+                self.status.stringValue = L10n.text(response.wasFiltered ? "응답 일부를 제외하고 검증된 설명을 표시해요" : "온디바이스 AI 설명 · 측정 근거와 기본 안내를 함께 확인하세요")
+                self.render()
             }
         }
     }
@@ -57,7 +65,7 @@ final class HealthAdviceView: FlippedView {
         document.subviews.forEach { $0.removeFromSuperview() }; status.stringValue = ""; title.stringValue = ""
     }
     func receiveSafety(_ sample: Snapshot, monitor: HealthAdviceMonitor) {
-        guard active, let report, !report.inferenceBlocked, HealthAdviceMonitor.inferenceBlocked(sample) else { return }
+        guard active, let report, !report.inferenceBlocked, monitor.pauseReason(for: sample) != nil else { return }
         // A new safety constraint supersedes both the old report and its AI text.
         show(monitor.report(report.topic, sample: sample))
     }
@@ -103,6 +111,7 @@ final class HealthAdviceView: FlippedView {
     }
     #if HEALTH_ADVICE_PROBE
     var probeReport: HealthAdviceReport? { report }
+    var probeRetryEnabled: Bool { retry.isEnabled }
     var probeStatus: String { status.stringValue }
     var probeExplanation: OnDeviceAdviceText? { explanation }
     var probeDocumentText: String {

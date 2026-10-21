@@ -21,10 +21,10 @@
 - **Menu bar:** CPU temperature and usage, GPU usage, SSD read/write rates, network speeds and animated indicators.
 - **Click-open panel:** CPU, GPU, memory, SSD and network tabs, recent graphs, top three CPU/memory processes and system uptime.
 - **Temperatures and fans:** CPU/GPU/SSD temperatures, memory **proximity temperature**, independent warning colors, and fan status with actual RPM in the CPU panel. Sensor availability varies by device.
-- **Guidance and AI help:** Review evidence and suggested actions for each resource tab. Supported macOS 26+ devices can generate short explanations with the Apple on-device model on request; unavailable or hot systems use basic guidance.
+- **Guidance and AI help:** Review evidence and suggested actions for each resource tab. Supported macOS 26+ devices can generate short explanations with the Apple on-device model on request; unsupported models, sustained heat or generation errors show a reason and basic guidance.
 - **Codex:** A left companion shows local tokens today, input/output, cache reuse and model TOP 3. Optional account quota and activity summaries share a scrolling card layout with an original slim scrollbar.
 - **Disk cleanup:** Start a home scan without choosing a folder. Select candidates yourself, then confirm before moving them to Trash. Optional one-folder scanning remains available.
-- **Settings:** Choose metrics, motion and startup at login. Korean by default; English, Japanese and Simplified Chinese supported.
+- **Settings:** Choose metrics, ten CPU animation styles, motion and startup at login. Korean by default; English, Japanese and Simplified Chinese supported.
 
 ## Install
 

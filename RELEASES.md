@@ -1,9 +1,17 @@
 # Releases
 
-## Unreleased — v2.15.0
+## v2.15.0 — 2026-10-21
 
+More reliable on-device AI guidance and ten CPU motion choices. Build 59.
+
+- Ignore isolated sensor peaks when deciding whether to pause AI. Pause after ten seconds of continuously observed serious macOS thermal pressure or sixty seconds of CPU/GPU hot readings; critical macOS thermal or memory pressure still stops inference immediately. Observation gaps reset sustained conditions. SSD and memory proximity warnings remain visible without globally blocking the model.
+- Accept numeric prose only when it quotes a complete cited measurement fact, including label and units. Remove unsupported numeric sentences while retaining usable prose and deterministic fallback sections; disclose partial filtering. Keep whole-response rejection for commands, URLs, paths and unsafe instructions.
+- Constrain generated citations to app-owned evidence IDs and one to three entries, then validate them against the current report.
+- Distinguish model preparation, busy/rate limiting, refusal, response-format, verification, input-limit and generation errors. Retry an explicit OS busy response once within the same request. Use a forty-five-second overall deadline; keep cancellation, single-flight and stale-language/result protections. Disable repeated Analyze clicks while generating.
 - Add eight original geometric CPU motion styles for ten choices in Settings: rhythm bars, orbiting dots, wave, pinwheel, bouncing balls, radar, pistons, conveyor, hourglass and pendulum. Preserve the rhythm default and existing saved identifiers.
 - Keep the fixed menu width, shared eight-fps timer, load-driven speed, warning colors, off/reduced-motion/sleep gates and four-language settings. No new assets, dependencies or permissions.
+
+Apple Silicon · macOS 14+. Optional on-device AI requires supported macOS 26+ and ready Apple Intelligence. DMG, ZIP and SHA256SUMS are provided. Community builds are ad-hoc signed, without Developer ID signing or Apple notarization. MIT licensed; bundled notices are preserved. Made with OpenAI Codex and user feedback.
 
 ## v2.14.3 — 2026-10-21
 

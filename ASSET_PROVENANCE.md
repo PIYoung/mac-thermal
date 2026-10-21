@@ -47,3 +47,5 @@ Codex robot idle/active motion reuses the original four geometric typing poses a
 The AI header button uses an original blue-to-purple gradient with high-contrast white lettering and system sparkles/back symbols inside the app. No external artwork, package or repeating animation is added.
 
 CPU animation styles (wave, pinwheel, bouncing balls, radar, pistons, conveyor, hourglass and pendulum) are original Core Graphics geometry and trigonometric motion authored in this project. They add no external assets, copied runner sprites, fonts, packages, timer or sensor access. Existing rhythm bars and orbiting dots retain their saved identifiers.
+
+AI reliability updates use original duration tracking, Foundation sentence segmentation and the existing Apple Foundation Models error types. They add no model, external package, data recipient, permission or telemetry. The model remains on-device and receives only the existing numeric report and trusted guidance.

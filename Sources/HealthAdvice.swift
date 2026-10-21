@@ -8,6 +8,17 @@ enum AdviceTopic: Int, CaseIterable {
 }
 
 enum AdviceAction: Equatable { case activityMonitor, diskCleanup }
+enum AdvicePauseReason: Equatable {
+    case criticalThermal, sustainedThermal, sustainedProcessorHeat, criticalMemory
+    var message: String {
+        switch self {
+        case .criticalThermal: return L10n.text("macOS가 위급한 열 압박을 보고해 AI를 중단했어요")
+        case .sustainedThermal: return L10n.text("macOS의 심각한 열 압박이 10초 이어져 AI를 쉬고 있어요")
+        case .sustainedProcessorHeat: return L10n.text("CPU 또는 GPU의 고온이 60초 지속돼 AI를 쉬고 있어요")
+        case .criticalMemory: return L10n.text("macOS가 높은 메모리 압박을 보고해 AI를 중단했어요")
+        }
+    }
+}
 struct AdviceFact: Equatable {
     let id: String
     let text: String
@@ -21,7 +32,8 @@ struct HealthAdviceReport {
     let facts: [AdviceFact]
     let steps: [String]
     let action: AdviceAction
-    let inferenceBlocked: Bool
+    let pauseReason: AdvicePauseReason?
+    var inferenceBlocked: Bool { pauseReason != nil }
     let numericInput: [String: Double]
     var sourceIDs: Set<String> { Set(facts.map(\.id)) }
     // All strings here are trusted app text; raw/user-controlled names are never
@@ -39,7 +51,7 @@ struct HealthAdviceReport {
 /// Monotonic, bounded, in-memory observation. Gaps, invalid samples and clock
 /// reversals never count as a continuously observed condition.
 final class HealthAdviceMonitor {
-    private enum Condition: CaseIterable { case cpuHeat, gpuHeat, memoryHeat, ssdHeat, pressure, diskLow }
+    private enum Condition: CaseIterable { case cpuHeat, gpuHeat, memoryHeat, ssdHeat, pressure, diskLow, seriousThermal, cpuHot, gpuHot }
     private struct Point { let time: Double; let cpu: Double?; let gpu: Double? }
     private var durations: [Condition: Double] = [:]
     private var lastTime: Double?
@@ -51,6 +63,9 @@ final class HealthAdviceMonitor {
         let continuous = delta.map { $0 >= 0 && $0 <= 6 } ?? false
         if !continuous { durations.removeAll(); points.removeAll() }
         let active: [Condition: Bool] = [
+            .seriousThermal: sample.thermal.level >= 2,
+            .cpuHot: sample.cpuWarning == .hot,
+            .gpuHot: sample.gpuWarning == .hot,
             .cpuHeat: TemperatureWarning.cpu(sample.cpuTemperature) != .normal,
             .gpuHeat: TemperatureWarning.gpu(sample.gpuTemperature) != .normal,
             .memoryHeat: TemperatureWarning.memoryProximity(sample.memoryProximityTemperature) != .normal,
@@ -76,9 +91,17 @@ final class HealthAdviceMonitor {
               let free = disk.availableBytes, free.isFinite, free >= 0, free <= total else { return nil }
         return free / total
     }
-    static func inferenceBlocked(_ sample: Snapshot) -> Bool {
-        sample.thermal.level >= 2 || sample.cpuWarning == .hot || sample.gpuWarning == .hot ||
-            sample.ssdWarning == .hot || sample.memoryProximityWarning == .hot || sample.resources.memory.pressureLevel == 2
+    func pauseReason(for sample: Snapshot) -> AdvicePauseReason? {
+        if sample.thermal.level >= 3 { return .criticalThermal }
+        if sample.resources.memory.pressureLevel == 2 { return .criticalMemory }
+        // Durations are monotonic observations, never wall-clock catch-up. A stale
+        // sample or a reset cannot carry a previous sustained constraint forward.
+        guard let time = sample.uptime, let lastTime, time.isFinite,
+              time >= lastTime, time - lastTime <= 6 else { return nil }
+        if sample.thermal.level >= 2, (durations[.seriousThermal] ?? 0) >= 10 { return .sustainedThermal }
+        if (sample.cpuWarning == .hot && (durations[.cpuHot] ?? 0) >= 60) ||
+           (sample.gpuWarning == .hot && (durations[.gpuHot] ?? 0) >= 60) { return .sustainedProcessorHeat }
+        return nil
     }
     func report(_ topic: AdviceTopic, sample: Snapshot) -> HealthAdviceReport {
         var facts: [AdviceFact] = []
@@ -166,7 +189,7 @@ final class HealthAdviceMonitor {
         }
         return HealthAdviceReport(topic: topic, date: sample.time, language: L10n.language,
             summary: L10n.text(summary), explanation: L10n.text(explanation), facts: facts,
-            steps: steps.map(L10n.text), action: action, inferenceBlocked: Self.inferenceBlocked(sample), numericInput: numeric)
+            steps: steps.map(L10n.text), action: action, pauseReason: pauseReason(for: sample), numericInput: numeric)
     }
     #if HEALTH_ADVICE_PROBE
     var probePointCount: Int { points.count }
@@ -178,15 +201,46 @@ struct OnDeviceAdviceText: Equatable {
     let summary: String
     let explanation: String
     let supportingFacts: [String]
+    var wasFiltered = false
+
     func validated(for report: HealthAdviceReport) -> Self? {
-        let parts = [summary.trimmingCharacters(in: .whitespacesAndNewlines), explanation.trimmingCharacters(in: .whitespacesAndNewlines)]
-        guard !parts.contains(where: { $0.isEmpty }), parts[0].count <= 100, parts[1].count <= 220,
-              (1...3).contains(supportingFacts.count), Set(supportingFacts).count == supportingFacts.count,
-              Set(supportingFacts).isSubset(of: report.sourceIDs) else { return nil }
-        let text = parts.joined(separator: " ").lowercased()
+        guard summary.utf8.count <= 4096, explanation.utf8.count <= 8192 else { return nil }
+        let raw = summary + " " + explanation
         let forbidden = ["http", "www.", "```", "sudo", "kill ", "rm ", "chmod", "systemextensionsctl", "/users/", "disable", "uninstall", "비활성", "보안 해제", "강제 종료", "고장 확정", "恶意软件", "無効化"]
-        guard !text.unicodeScalars.contains(where: { CharacterSet.decimalDigits.contains($0) || (CharacterSet.controlCharacters.contains($0) && $0 != "\n") }),
-              !forbidden.contains(where: text.contains) else { return nil }
-        return Self(summary: parts[0], explanation: parts[1], supportingFacts: supportingFacts)
+        // Executable/unsafe output fails as a whole; never salvage a fragment of
+        // a command, URL, path or security instruction by sentence splitting.
+        guard !raw.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) && $0 != "\n" }),
+              !forbidden.contains(where: raw.lowercased().contains) else { return nil }
+        var seen = Set<String>()
+        let evidence = Array(supportingFacts.filter { report.sourceIDs.contains($0) && seen.insert($0).inserted }.prefix(3))
+        guard !evidence.isEmpty else { return nil }
+        func normalized(_ text: String) -> String {
+            text.lowercased().components(separatedBy: .whitespacesAndNewlines).joined()
+        }
+        let quotes = report.facts.filter { evidence.contains($0.id) && $0.text.unicodeScalars.contains(where: CharacterSet.decimalDigits.contains) }
+            .map { normalized($0.text) }.sorted { $0.count > $1.count }
+        func safeText(_ text: String, limit: Int) -> String {
+            var accepted: [String] = []
+            text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .bySentences) { part, _, _, _ in
+                guard let part else { return }
+                let sentence = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                var remainder = normalized(sentence)
+                // Numbers are accepted only inside a complete verbatim cited fact,
+                // including its label and units. Matching a bare value is insufficient.
+                for quote in quotes { remainder = remainder.replacingOccurrences(of: quote, with: "") }
+                guard !sentence.isEmpty,
+                      !remainder.unicodeScalars.contains(where: CharacterSet.decimalDigits.contains),
+                      (accepted + [sentence]).joined(separator: " ").count <= limit else { return }
+                accepted.append(sentence)
+            }
+            return accepted.joined(separator: " ")
+        }
+        let cleanSummary = safeText(summary, limit: 100)
+        let cleanExplanation = safeText(explanation, limit: 220)
+        guard !cleanSummary.isEmpty || !cleanExplanation.isEmpty else { return nil }
+        let resultSummary = cleanSummary.isEmpty ? report.summary : cleanSummary
+        let resultExplanation = cleanExplanation.isEmpty ? report.explanation : cleanExplanation
+        return Self(summary: resultSummary, explanation: resultExplanation, supportingFacts: evidence,
+                    wasFiltered: wasFiltered || normalized(resultSummary) != normalized(summary) || normalized(resultExplanation) != normalized(explanation) || evidence != supportingFacts)
     }
 }

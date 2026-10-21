@@ -3,6 +3,20 @@ import Foundation
 // Original translations for Mac Thermal. Entries are English, Japanese, Simplified Chinese.
 extension L10n {
     static let panelTranslations: [String: [String]] = [
+        "macOS가 위급한 열 압박을 보고해 AI를 중단했어요": ["AI paused: macOS reports critical thermal pressure", "macOSの危険な熱負荷によりAIを停止しました", "macOS报告严重热压力，已停止AI"],
+        "macOS의 심각한 열 압박이 10초 이어져 AI를 쉬고 있어요": ["AI paused: serious macOS thermal pressure persisted for 10s", "macOSの高い熱負荷が10秒続いたためAIを休止しています", "macOS高热压力持续10秒，已暂停AI"],
+        "CPU 또는 GPU의 고온이 60초 지속돼 AI를 쉬고 있어요": ["AI paused: CPU or GPU stayed hot for 60s", "CPUまたはGPUの高温が60秒続いたためAIを休止しています", "CPU或GPU高温持续60秒，已暂停AI"],
+        "macOS가 높은 메모리 압박을 보고해 AI를 중단했어요": ["AI paused: macOS reports critical memory pressure", "macOSの高いメモリプレッシャーによりAIを停止しました", "macOS报告高内存压力，已停止AI"],
+        "AI 모델이 준비되지 않아 기본 안내를 표시해요": ["AI model is not ready. Showing basic guidance", "AIモデルは準備中です。基本案内を表示します", "AI模型尚未就绪，显示基本指引"],
+        "AI 응답을 측정 근거와 대조하지 못해 기본 안내를 표시해요": ["AI response could not be verified. Showing basic guidance", "AI応答を測定根拠と照合できないため基本案内を表示します", "AI响应无法与测量依据核对，显示基本指引"],
+        "AI 응답 형식을 읽지 못해 기본 안내를 표시해요": ["AI response format could not be read. Showing basic guidance", "AI応答形式を読み取れないため基本案内を表示します", "无法读取AI响应格式，显示基本指引"],
+        "AI 모델이 다른 요청을 처리 중이에요. 잠시 후 다시 분석하세요": ["AI model is busy. Try analyzing again shortly", "AIモデルは別の処理中です。しばらくして再分析してください", "AI模型正在处理其他请求，请稍后重新分析"],
+        "기기 내 모델이 이 요청의 생성을 제한해 기본 안내를 표시해요": ["The on-device model declined this request. Showing basic guidance", "端末内モデルが生成を制限したため基本案内を表示します", "设备端模型限制了此请求的生成，显示基本指引"],
+        "AI 모델의 입력 한도를 초과해 기본 안내를 표시해요": ["AI input exceeded the model limit. Showing basic guidance", "AIモデルの入力上限を超えたため基本案内を表示します", "超出AI模型输入限制，显示基本指引"],
+        "AI 모델이 이 언어 또는 응답 형식을 지원하지 않아요": ["The AI model does not support this language or response format", "AIモデルはこの言語または応答形式に対応していません", "AI模型不支持此语言或响应格式"],
+        "기기 내 AI 생성 오류로 기본 안내를 표시해요": ["On-device AI generation failed. Showing basic guidance", "端末内AIの生成エラーにより基本案内を表示します", "设备端AI生成出错，显示基本指引"],
+        "AI 모델이 사용 중이라 한 번 다시 시도해요": ["AI model is busy. Retrying once", "AIモデルは使用中です。一度だけ再試行します", "AI模型繁忙，正在重试一次"],
+        "응답 일부를 제외하고 검증된 설명을 표시해요": ["Some response text was filtered. Showing verified explanations", "応答の一部を除外し、検証できた説明を表示します", "已过滤部分响应，显示通过核验的说明"],
         "현재 상태와 해볼 일을 확인해요 · AI를 사용할 수 없으면 기본 안내를 표시해요": ["Review your status and next steps · basic guidance is available without AI", "状態と対処方法を確認 · AIが利用できない場合は基本案内を表示します", "查看状态和建议操作 · AI不可用时显示基本指引"],
         "기기 내 AI · 요청할 때만 실행": ["On-device AI · only on request", "端末内AI · リクエスト時のみ", "设备端AI · 仅按需运行"],
         "macOS 26 이상에서 AI를 사용할 수 있어요": ["AI requires macOS 26 or later", "AIはmacOS 26以降で利用できます", "AI需要macOS 26或更高版本"],
