@@ -1,5 +1,10 @@
 # Releases
 
+## Unreleased — v2.15.0
+
+- Add eight original geometric CPU motion styles for ten choices in Settings: rhythm bars, orbiting dots, wave, pinwheel, bouncing balls, radar, pistons, conveyor, hourglass and pendulum. Preserve the rhythm default and existing saved identifiers.
+- Keep the fixed menu width, shared eight-fps timer, load-driven speed, warning colors, off/reduced-motion/sleep gates and four-language settings. No new assets, dependencies or permissions.
+
 ## v2.14.3 — 2026-10-21
 
 Menu bar input caching and compact, centered AI help. Build 57.

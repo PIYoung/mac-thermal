@@ -3,8 +3,18 @@ import Foundation
 enum MenuBarAnimationStyle: Int, CaseIterable {
     case rhythm = 0
     case orbit = 1
+    case wave = 2
+    case pinwheel = 3
+    case bounce = 4
+    case radar = 5
+    case piston = 6
+    case conveyor = 7
+    case hourglass = 8
+    case pendulum = 9
 
-    var title: String { L10n.text(self == .rhythm ? "리듬 막대" : "순환 점") }
+    var title: String {
+        L10n.text(["리듬 막대", "순환 점", "웨이브", "바람개비", "통통 공", "레이더", "피스톤", "컨베이어", "모래시계", "진자"][rawValue])
+    }
 }
 
 enum MenuBarMetric: String, CaseIterable {

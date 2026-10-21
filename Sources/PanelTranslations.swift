@@ -131,7 +131,7 @@ extension L10n {
         "Mac Thermal 설정 열기": ["Open Mac Thermal settings", "Mac Thermalの設定を開く", "打开Mac Thermal设置"],
         "Mac Thermal 설정 닫기": ["Close Mac Thermal settings", "Mac Thermalの設定を閉じる", "关闭Mac Thermal设置"],
         "CPU 애니메이션 스타일": ["CPU animation style", "CPUアニメーション", "CPU动画样式"],
-        "리듬 막대 또는 순환 점으로 CPU가 바쁜 정도를 표시합니다": ["Show CPU activity with rhythmic bars or orbiting dots", "リズムバーまたは回る点でCPUの稼働状況を表示します", "用节奏条或环绕圆点显示CPU繁忙程度"],
+        "CPU 사용률에 따라 움직일 모양을 선택합니다": ["Choose a shape that moves with CPU activity", "CPU使用率に応じて動く形を選びます", "选择随CPU使用率变化的动画形状"],
         "메뉴바 움직임": ["Menu bar motion", "メニューバーの動き", "菜单栏动画"],
         "끄면 메뉴바 아이콘을 정지된 상태로 표시합니다": ["Turn off to keep menu bar icons still", "オフにするとメニューバーのアイコンを静止します", "关闭后，菜单栏图标保持静止"],
         "메뉴바 움직임 강도": ["Menu bar motion intensity", "メニューバーの動きの強さ", "菜单栏动画强度"],

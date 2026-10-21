@@ -662,12 +662,12 @@ final class PanelController: NSViewController {
     }()
     private lazy var animationStyleControl: NSPopUpButton = {
         let control = NSPopUpButton(frame: .zero, pullsDown: false)
-        control.addItems(withTitles: [MenuBarAnimationStyle.rhythm.title, MenuBarAnimationStyle.orbit.title])
+        control.addItems(withTitles: MenuBarAnimationStyle.allCases.map(\.title))
         control.target = self
         control.action = #selector(changeMenuBarPreferences)
         control.controlSize = .regular
         localizedAccessibilityLabel(control, "CPU 애니메이션 스타일")
-        localizedToolTip(control, "리듬 막대 또는 순환 점으로 CPU가 바쁜 정도를 표시합니다")
+        localizedToolTip(control, "CPU 사용률에 따라 움직일 모양을 선택합니다")
         return control
     }()
     private lazy var metricControls: [MenuBarMetric: NSButton] = {
@@ -865,7 +865,7 @@ final class PanelController: NSViewController {
         refreshLocalizedViews(view)
         tabs.updateLabels(Self.tabLabels.map(L10n.text))
         animationStyleControl.removeAllItems()
-        animationStyleControl.addItems(withTitles: [MenuBarAnimationStyle.rhythm.title, MenuBarAnimationStyle.orbit.title])
+        animationStyleControl.addItems(withTitles: MenuBarAnimationStyle.allCases.map(\.title))
         for metric in MenuBarMetric.allCases { metricControls[metric]?.title = metric.title }
         diskCleanupButton.title = L10n.text("디스크 정리")
         diskCleanupView?.refreshLanguage()
@@ -1544,6 +1544,11 @@ extension PanelController {
         metricControls.values.allSatisfy { ($0.cell?.cellSize.width ?? 0) <= $0.frame.width }
     }
     var probeCPUStyleEnabled: Bool { animationStyleControl.isEnabled }
+    var probeCPUStyleTitles: [String] { animationStyleControl.itemTitles }
+    func probeSelectCPUStyle(_ style: MenuBarAnimationStyle) {
+        animationStyleControl.selectItem(at: style.rawValue)
+        animationStyleControl.sendAction(animationStyleControl.action, to: animationStyleControl.target)
+    }
     var probeMotionControlEnabled: Bool { menuBarMotionSwitch.isEnabled }
     var probeIntensityControlEnabled: Bool { motionIntensitySlider.isEnabled }
     func probeOpenDiskCleanup() { diskCleanupButton.performClick(nil) }

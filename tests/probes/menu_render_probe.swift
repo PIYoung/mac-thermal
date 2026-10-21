@@ -456,6 +456,34 @@ struct MenuRenderProbe {
         print("PASS isolated warnings: only affected CPU/GPU/SSD text and shapes change; sibling metrics remain byte identical in light/dark and motion on/off")
     }
 
+    static func cpuStyleChecks(in directory: URL) throws {
+        try check(MenuBarAnimationStyle.rhythm.rawValue == 0 && MenuBarAnimationStyle.orbit.rawValue == 1,
+                  "existing saved style identifiers changed")
+        try check(MenuBarAnimationStyle.allCases.count == 10, "expected ten CPU styles")
+        for dark in [false, true] {
+            var shapes = Set<Data>()
+            let fixture = sample(cpu: 55)
+            let baseline = try render(fixture, dark: dark, phase: 0.23)
+            let layout = MenuBarContent.previewLayout(sample: fixture, preferences: MenuBarPreferences())
+            for style in MenuBarAnimationStyle.allCases {
+                let image = try render(fixture, style: style, dark: dark, phase: 0.23,
+                    output: directory.appendingPathComponent("cpu-style-\(style.rawValue)-\(dark ? "dark" : "light").png"))
+                shapes.insert(try pixels(image, region: CGRect(x: 2, y: 0, width: 29, height: 22)))
+                for metric in [MenuBarMetric.gpu, .ssd, .network] {
+                    try check(try pixels(image, region: layout[metric]!) == pixels(baseline, region: layout[metric]!),
+                              "CPU style changed a sibling metric")
+                }
+                for load: Double? in [nil, 0] {
+                    let a = try render(sample(cpu: load), visible: [.cpu], style: style, dark: dark, phase: 0.08)
+                    let b = try render(sample(cpu: load), visible: [.cpu], style: style, dark: dark, phase: 0.39)
+                    try check(try pixels(a) == pixels(b), "idle/unknown CPU style kept moving")
+                }
+            }
+            try check(shapes.count == 10, "CPU styles are not visually distinct")
+        }
+        print("PASS ten CPU styles: distinct shapes in both appearances, unchanged sibling pixels, stable identifiers, idle/unknown frozen")
+    }
+
     static func benchmark() throws {
         let frames = 1_000
         for visible in [all, Set<MenuBarMetric>([.ssd, .network]), []] {
@@ -512,6 +540,7 @@ struct MenuRenderProbe {
             try appearanceCacheChecks()
             try preparationReuseChecks()
             try isolatedWarningChecks()
+            try cpuStyleChecks(in: directory)
             if CommandLine.arguments.contains("--benchmark") { try benchmark() }
             try contactSheet(in: directory)
             print("OUTPUT \(directory.path)")

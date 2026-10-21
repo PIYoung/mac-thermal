@@ -421,6 +421,27 @@ enum PanelUpdatesProbe {
         print("Moved Codex record setting passed: pre-load state, four-language privacy, native switch callbacks, no consent change on render/navigation")
     }
 
+    private static func cpuStyleChecks(defaults: UserDefaults) {
+        let panel = PanelController(defaults: defaults)
+        let window = DashboardWindow(controller: panel)
+        let frame = window.frame
+        panel.probeToggleSettings()
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults)
+            precondition(panel.probeCPUStyleTitles == MenuBarAnimationStyle.allCases.map(\.title))
+            precondition(panel.probeCPUStyleTitles.count == 10)
+            for style in MenuBarAnimationStyle.allCases {
+                panel.probeSelectCPUStyle(style)
+                precondition(panel.probeMenuBarPreferences.style == style)
+                precondition(MenuBarPreferences.load(defaults: defaults).style == style)
+                panel.probeToggleSettings(); panel.probeToggleSettings()
+                precondition(panel.probeMenuBarPreferences.style == style)
+                precondition(window.frame == frame)
+            }
+        }
+        print("CPU styles passed: ten localized options, real native actions, persistence/reopen and fixed panel bounds in four languages")
+    }
+
     private static func menuMetricChecks(defaults: UserDefaults) {
         let all = Set(MenuBarMetric.allCases)
         precondition(MenuBarPreferences.load(defaults: defaults).visibleMetrics == all,
@@ -630,6 +651,7 @@ enum PanelUpdatesProbe {
             codexRecordsSettingsChecks(defaults: defaults)
         menuMetricChecks(defaults: defaults)
         }
+        withDefaults { defaults in cpuStyleChecks(defaults: defaults) }
         withDefaults { defaults in
             L10n.setLanguage(.korean, defaults: defaults)
             regressionChecks(defaults: defaults)

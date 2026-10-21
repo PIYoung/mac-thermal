@@ -523,7 +523,8 @@ final class MenuBarContent: NSObject {
         let load = validPercentage(sample.cpuUsage) ?? 0
         let phase = load > 0 ? phase : 0
         context.setFillColor(ink)
-        if preferences.style == .rhythm {
+        switch preferences.style {
+        case .rhythm:
             let amplitude = min(0.48, 0.025 + load * 0.0034 * preferences.intensity)
             let ratios = [0.74, 0.94, 0.83, 1.0]
             for index in 0..<4 {
@@ -534,7 +535,7 @@ final class MenuBarContent: NSObject {
                 context.addPath(CGPath(roundedRect: rect, cornerWidth: 1.5, cornerHeight: 1.5, transform: nil))
                 context.fillPath()
             }
-        } else {
+        case .orbit:
             let active = Int(ceil(load / 12.5))
             for index in 0..<8 {
                 let angle = (Double(index) / 8 + phase) * .pi * 2
@@ -542,6 +543,101 @@ final class MenuBarContent: NSObject {
                 context.setFillColor(ink.copy(alpha: alpha) ?? ink)
                 context.fillEllipse(in: CGRect(x: 12 + cos(angle) * 7.5 - 1.6, y: 11 + sin(angle) * 7.5 - 1.6, width: 3.2, height: 3.2))
             }
+        case .wave:
+            context.setStrokeColor(ink); context.setLineWidth(1.7); context.setLineCap(.round)
+            let path = CGMutablePath()
+            for index in 0...24 {
+                let x = Double(index) + 1
+                let y = 11 + sin((Double(index) / 24 - phase) * .pi * 2) * (1.2 + load * 0.055)
+                if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.addPath(path); context.strokePath()
+        case .pinwheel:
+            context.saveGState(); context.translateBy(x: 13, y: 11)
+            context.rotate(by: phase * .pi * 2)
+            let reach = 5.5 + load * 0.025
+            for _ in 0..<5 {
+                let blade = CGMutablePath()
+                blade.move(to: CGPoint(x: 1.3, y: 0))
+                blade.addQuadCurve(to: CGPoint(x: 0.4, y: reach), control: CGPoint(x: -1, y: reach * 0.65))
+                blade.addQuadCurve(to: CGPoint(x: 3.4, y: reach - 1), control: CGPoint(x: 2.4, y: reach + 0.6))
+                blade.addQuadCurve(to: CGPoint(x: 1.3, y: 0), control: CGPoint(x: 4, y: 2.8))
+                context.addPath(blade); context.fillPath(); context.rotate(by: .pi * 2 / 5)
+            }
+            context.fillEllipse(in: CGRect(x: -1.4, y: -1.4, width: 2.8, height: 2.8))
+            context.restoreGState()
+        case .bounce:
+            context.setFillColor(ink.copy(alpha: 0.18) ?? ink)
+            context.fill(CGRect(x: 2, y: 2, width: 24, height: 0.7))
+            context.setFillColor(ink)
+            for index in 0..<3 {
+                let height = abs(sin(phase * .pi * 2 + Double(index) * 0.9)) * (1.5 + load * 0.11)
+                context.fillEllipse(in: CGRect(x: 3.2 + Double(index) * 8, y: 3.8 + height, width: 3.6, height: 3.6))
+            }
+        case .radar:
+            let center = CGPoint(x: 13, y: 11), angle = phase * .pi * 2
+            context.setStrokeColor(ink.copy(alpha: 0.3) ?? ink); context.setLineWidth(0.8)
+            for radius in [4.0, 8.5] {
+                context.strokeEllipse(in: CGRect(x: 13 - radius, y: 11 - radius, width: radius * 2, height: radius * 2))
+            }
+            context.setFillColor(ink.copy(alpha: 0.2 + load * 0.002) ?? ink)
+            context.move(to: center)
+            context.addArc(center: center, radius: 8.5, startAngle: angle - 0.8, endAngle: angle, clockwise: false)
+            context.closePath(); context.fillPath()
+            context.setStrokeColor(ink); context.move(to: center)
+            context.addLine(to: CGPoint(x: 13 + cos(angle) * 8.5, y: 11 + sin(angle) * 8.5)); context.strokePath()
+            context.setFillColor(ink); context.fillEllipse(in: CGRect(x: 15.7, y: 13, width: 2, height: 2))
+        case .piston:
+            context.setLineWidth(1); context.setStrokeColor(ink.copy(alpha: 0.3) ?? ink)
+            for index in 0..<3 {
+                let x = 2.5 + Double(index) * 8
+                context.stroke(CGRect(x: x, y: 3, width: 5.5, height: 16))
+                let y = 9 + sin(phase * .pi * 2 + Double(index) * .pi * 2 / 3) * (1.5 + load * 0.04)
+                context.setFillColor(ink)
+                context.fill(CGRect(x: x + 0.7, y: y, width: 4.1, height: 3))
+                context.fill(CGRect(x: x + 2.2, y: 3, width: 1.1, height: y - 3))
+            }
+        case .conveyor:
+            context.setStrokeColor(ink.copy(alpha: 0.3) ?? ink); context.setLineWidth(1)
+            context.addPath(CGPath(roundedRect: CGRect(x: 2.5, y: 5, width: 22, height: 12), cornerWidth: 5, cornerHeight: 5, transform: nil))
+            context.strokePath()
+            let count = 2 + Int(load / 50)
+            for index in 0..<count {
+                let travel = (phase + Double(index) / Double(count)).truncatingRemainder(dividingBy: 1) * 58
+                let point: CGPoint
+                if travel < 20 { point = CGPoint(x: 3.5 + travel, y: 6) }
+                else if travel < 29 { point = CGPoint(x: 23.5, y: 6 + travel - 20) }
+                else if travel < 49 { point = CGPoint(x: 23.5 - (travel - 29), y: 15) }
+                else { point = CGPoint(x: 3.5, y: 15 - (travel - 49)) }
+                context.setFillColor(ink)
+                context.fill(CGRect(x: point.x - 1.5, y: point.y - 1.5, width: 3, height: 3))
+            }
+        case .hourglass:
+            let progress = phase.truncatingRemainder(dividingBy: 1)
+            context.setStrokeColor(ink); context.setLineWidth(1); context.setLineJoin(.round)
+            context.move(to: CGPoint(x: 6, y: 19)); context.addLine(to: CGPoint(x: 20, y: 19))
+            context.addLine(to: CGPoint(x: 13, y: 11)); context.addLine(to: CGPoint(x: 20, y: 3))
+            context.addLine(to: CGPoint(x: 6, y: 3)); context.addLine(to: CGPoint(x: 13, y: 11))
+            context.closePath(); context.strokePath()
+            let topHeight = 6 * sqrt(1 - progress), bottomHeight = 6 * sqrt(progress)
+            context.move(to: CGPoint(x: 13, y: 12))
+            context.addLine(to: CGPoint(x: 13 - topHeight * 0.7, y: 12 + topHeight))
+            context.addLine(to: CGPoint(x: 13 + topHeight * 0.7, y: 12 + topHeight))
+            context.closePath(); context.fillPath()
+            context.move(to: CGPoint(x: 7, y: 4)); context.addLine(to: CGPoint(x: 19, y: 4))
+            context.addLine(to: CGPoint(x: 13, y: 4 + bottomHeight)); context.closePath(); context.fillPath()
+            if load > 0 {
+                context.setFillColor(ink.copy(alpha: 0.65) ?? ink)
+                context.fill(CGRect(x: 12.6, y: 7 + (1 - progress) * 3, width: 0.8, height: 1.6))
+            }
+        case .pendulum:
+            let angle = sin(phase * .pi * 2) * (0.15 + load * 0.006)
+            let bob = CGPoint(x: 13 + sin(angle) * 12, y: 18 - cos(angle) * 12)
+            context.setStrokeColor(ink); context.setLineWidth(1.2); context.setLineCap(.round)
+            context.move(to: CGPoint(x: 6, y: 19.5)); context.addLine(to: CGPoint(x: 20, y: 19.5)); context.strokePath()
+            context.move(to: CGPoint(x: 13, y: 18)); context.addLine(to: bob); context.strokePath()
+            context.fillEllipse(in: CGRect(x: bob.x - 2.4, y: bob.y - 2.4, width: 4.8, height: 4.8))
         }
     }
 

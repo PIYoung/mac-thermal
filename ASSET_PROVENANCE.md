@@ -45,3 +45,5 @@ Apple의 SF Symbols 지침은 앱 아이콘·로고·상표 용도에 심볼이�
 Codex robot idle/active motion reuses the original four geometric typing poses at two cadences. No external animation, sprite, library or model is added.
 
 The AI header button uses an original blue-to-purple gradient with high-contrast white lettering and system sparkles/back symbols inside the app. No external artwork, package or repeating animation is added.
+
+CPU animation styles (wave, pinwheel, bouncing balls, radar, pistons, conveyor, hourglass and pendulum) are original Core Graphics geometry and trigonometric motion authored in this project. They add no external assets, copied runner sprites, fonts, packages, timer or sensor access. Existing rhythm bars and orbiting dots retain their saved identifiers.
