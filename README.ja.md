@@ -4,6 +4,8 @@
 <p align="center"><a href="README.md">한국어</a> · <a href="README.en.md">English</a> · <strong>日本語</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ ダウンロード</strong></a> · <a href="RELEASES.md">更新履歴</a></p>
 
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.15.0"><strong>v2.15.0</strong></a> · 10種類のCPUアニメーション · 端末内AIの安定性を改善</p>
+
 ## メニューバーとパネル
 
 <p align="center"><img src="docs/images/menubar.png" alt="CodexロボットとCPU・GPU・SSD・ネットワークのメニューバー" width="460"></p>
@@ -25,6 +27,16 @@
 - **Codex:** 左の補助パネルに今日のローカルトークン・入出力・キャッシュ再利用率・モデルTOP 3を表示。任意のアカウント上限と活動要約を追加でき、細い独自スクロールバーでカードをまとめて移動します。
 - **ディスク整理:** フォルダ指定なしでホームを自動検査。候補を手動で選び、最終確認後にゴミ箱へ移動。特定フォルダのみの検査も可能。
 - **設定:** 表示項目・10種類のCPUアニメーション・動き・ログイン時の起動を変更。韓国語が既定で、英語・日本語・簡体字中国語にも対応。
+
+<details>
+<summary>v2.15.0 — CPUの動きとAI説明の改善</summary>
+
+- **CPUの動き:** 設定でリズムバー・回転ドット・ウェーブ・風車・バウンドボール・レーダー・ピストン・コンベア・砂時計・振り子を選べます。CPU使用率に応じて速度が変わり、動きの無効化とmacOSの「視差効果を減らす」に対応します。
+- **AI説明:** 一時的な温度上昇による中断を減らしました。継続的な高温や深刻な熱・メモリ負荷では理由と基本案内を表示します。モデル使用中のエラーは1回だけ再試行し、応答待ちは全体で最大45秒です。根拠IDの形式を固定し、検証できない数値の文を除外します。
+
+対応するmacOS 26以降と準備済みのApple Intelligenceが必要です。既存の測定数値とアプリの案内文のみを端末内モデルへ渡し、クラウドへの切り替えは行いません。
+
+</details>
 
 ## インストール
 

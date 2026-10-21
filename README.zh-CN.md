@@ -4,6 +4,8 @@
 <p align="center"><a href="README.md">한국어</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <strong>简体中文</strong></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ 下载</strong></a> · <a href="RELEASES.md">更新记录</a></p>
 
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.15.0"><strong>v2.15.0</strong></a> · 10种CPU动画 · 更稳定的设备端AI</p>
+
 ## 菜单栏与面板
 
 <p align="center"><img src="docs/images/menubar.png" alt="Codex机器人及CPU、GPU、SSD和网络菜单栏" width="460"></p>
@@ -25,6 +27,16 @@
 - **Codex：** 左侧辅助面板显示今日本地令牌、输入/输出、缓存复用率和模型TOP 3。可选连接账号额度和活动摘要，通过纤细的原创滚动条一起浏览卡片。
 - **磁盘清理：** 无需指定文件夹即可扫描主文件夹。自行选择候选文件，最终确认后移到废纸篓。也支持仅扫描指定文件夹。
 - **设置：** 自选指标、10种CPU动画、动画效果及登录时启动。默认韩语，支持英语、日语及简体中文。
+
+<details>
+<summary>v2.15.0 — CPU动画与AI说明改进</summary>
+
+- **CPU动画：** 在设置中选择律动条、环绕圆点、波浪、风车、弹跳小球、雷达、活塞、传送带、沙漏或钟摆。速度随CPU使用率变化，并遵循动画开关和macOS的“减弱动态效果”设置。
+- **AI说明：** 减少短暂温度升高导致的中断。持续高温或严重的热量、内存压力下会显示原因与基本指引。模型忙碌错误仅重试1次，整体等待时间最长45秒。引用使用固定的依据ID，并过滤无法核实的数字语句。
+
+需要受支持的macOS 26及以上设备与已就绪的Apple Intelligence。仅将现有测量数字和应用指引传给设备端模型，不提供云端替代路径。
+
+</details>
 
 ## 安装
 

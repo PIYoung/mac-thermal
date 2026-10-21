@@ -4,6 +4,8 @@
 <p align="center"><strong>한국어</strong> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ 다운로드</strong></a> · <a href="RELEASES.md">업데이트</a></p>
 
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.15.0"><strong>v2.15.0</strong></a> · CPU 애니메이션 10종 · 더 안정적인 온디바이스 AI</p>
+
 ## 메뉴바와 패널
 
 <p align="center"><img src="docs/images/menubar.png" alt="Codex 로봇과 CPU·GPU·SSD·네트워크 메뉴바" width="460"></p>
@@ -25,6 +27,16 @@
 - **Codex:** 왼쪽 보조 패널에 오늘 로컬 토큰·입력/출력·캐시 재사용·모델 TOP 3. 선택적으로 계정 한도와 활동 요약을 연결하며, 얇은 커스텀 스크롤바로 카드를 함께 탐색합니다.
 - **디스크 정리:** 폴더 지정 없이 홈 폴더를 자동 검사. 후보를 직접 선택하고 최종 확인 후 휴지통으로 이동. 특정 폴더 검사도 지원.
 - **설정:** 표시 항목·CPU 애니메이션 10종·움직임·로그인 시 자동 실행. 한국어 기본, 영어·일본어·중국어 간체 지원.
+
+<details>
+<summary>v2.15.0 — 애니메이션과 AI 설명 개선</summary>
+
+- **CPU 움직임:** 설정에서 리듬 막대·순환 점·웨이브·바람개비·통통 공·레이더·피스톤·컨베이어·모래시계·진자를 고릅니다. CPU 사용률에 따라 속도가 달라지며, 움직임 끄기와 macOS 동작 줄이기를 따릅니다.
+- **AI 설명:** 순간적인 온도 상승으로 중단되는 경우를 줄이고, 지속 고온이나 위급한 열·메모리 압박에서는 이유와 기본 안내를 표시합니다. 모델 사용 중 오류는 한 번 재시도하고, 응답은 최대 45초 기다립니다. 근거 ID 형식을 고정하고 검증되지 않은 숫자 문장은 제외합니다.
+
+지원되는 macOS 26+와 준비된 Apple Intelligence가 필요합니다. 기존 측정 숫자와 앱 안내문만 기기 내 모델에 전달하며, 클라우드 대체 경로는 없습니다.
+
+</details>
 
 ## 설치
 

@@ -4,6 +4,8 @@
 <p align="center"><a href="README.md">한국어</a> · <strong>English</strong> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ Download</strong></a> · <a href="RELEASES.md">Changelog</a></p>
 
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.15.0"><strong>v2.15.0</strong></a> · Ten CPU animations · More reliable on-device AI</p>
+
 ## Menu bar and panels
 
 <p align="center"><img src="docs/images/menubar.png" alt="Codex robot and CPU, GPU, SSD and network menu bar" width="460"></p>
@@ -25,6 +27,16 @@
 - **Codex:** A left companion shows local tokens today, input/output, cache reuse and model TOP 3. Optional account quota and activity summaries share a scrolling card layout with an original slim scrollbar.
 - **Disk cleanup:** Start a home scan without choosing a folder. Select candidates yourself, then confirm before moving them to Trash. Optional one-folder scanning remains available.
 - **Settings:** Choose metrics, ten CPU animation styles, motion and startup at login. Korean by default; English, Japanese and Simplified Chinese supported.
+
+<details>
+<summary>v2.15.0 — CPU motion and more reliable AI help</summary>
+
+- **CPU motion:** Choose Rhythm bars, Orbiting dots, Wave, Pinwheel, Bouncing balls, Radar, Pistons, Conveyor, Hourglass or Pendulum in Settings. Speed follows CPU usage; the motion toggle and macOS Reduce Motion are respected.
+- **AI help:** Brief temperature peaks no longer immediately stop a request. Sustained heat or critical thermal/memory pressure shows a reason and basic guidance. Explicit model-busy errors are retried once within a 45-second overall deadline. Citations use fixed evidence IDs; unsupported numeric sentences are filtered out.
+
+Requires supported macOS 26+ and ready Apple Intelligence. Only existing numeric measurements and app guidance reach the on-device model. There is no cloud fallback.
+
+</details>
 
 ## Install
 
