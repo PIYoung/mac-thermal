@@ -20,6 +20,13 @@ final class AdviceFixtureEngine: OnDeviceAdviceGenerating {
     var available: AdviceModelAvailability = .ready
     var delay: UInt64 = 1_000_000
     var ignoresCancellation = false
+    var suspendCompletion = false
+    private var completion: CheckedContinuation<Void, Never>?
+    var isSuspended: Bool { lock.lock(); defer { lock.unlock() }; return completion != nil }
+    func resumeCompletion() {
+        lock.lock(); let pending = completion; completion = nil; lock.unlock()
+        pending?.resume()
+    }
     var invalid = false
     var fails = false
     var failure: AdviceModelError?
@@ -32,7 +39,12 @@ final class AdviceFixtureEngine: OnDeviceAdviceGenerating {
         if busyFailures > 0 { busyFailures -= 1; throw AdviceModelError.modelBusy }
         if let failure { throw failure }
         if fails { throw CocoaError(.featureUnsupported) }
-        if ignoresCancellation { await withCheckedContinuation { continuation in
+        if suspendCompletion {
+            await withCheckedContinuation { continuation in
+                lock.lock(); completion = continuation; lock.unlock()
+            }
+        }
+        else if ignoresCancellation { await withCheckedContinuation { continuation in
             DispatchQueue.global().asyncAfter(deadline: .now() + Double(delay) / 1_000_000_000) { continuation.resume() }
         } }
         else { try await Task.sleep(nanoseconds: delay) }
@@ -160,7 +172,10 @@ struct HealthAdviceProbe {
     }
     @MainActor static func wait(_ milliseconds: UInt64 = 25) async { try? await Task.sleep(nanoseconds: milliseconds * 1_000_000) }
     @MainActor static func eventually(_ predicate: () -> Bool) async {
-        for _ in 0..<300 { if predicate() { return }; await wait(10) }
+        for _ in 0..<1000 { if predicate() { return }; await wait(10) }
+    }
+    @MainActor static func sessionExpect(_ value: @autoclosure () -> Bool, _ message: String = "Session assertion", line: UInt = #line) {
+        guard value() else { print("FAIL advice session line \(line): \(message)"); exit(1) }
     }
     @MainActor static func sessionChecks() async {
         let monitor = HealthAdviceMonitor(); monitor.observe(sample())
@@ -168,59 +183,71 @@ struct HealthAdviceProbe {
         let engine = AdviceFixtureEngine(); let session = AdviceSessionController(engine: engine)
         var delivered = 0
         session.onState = { if case .explained = $0 { delivered += 1 } }
-        precondition(engine.calls == 0)
-        session.start(base); await wait(); precondition(engine.calls == 1 && delivered == 1)
-        session.start(monitor.report(.cpu, sample: sample(thermal: .critical))); await wait(); precondition(engine.calls == 1)
+        sessionExpect(engine.calls == 0)
+        print("SESSION baseline")
+        session.start(base); await eventually { delivered == 1 }; sessionExpect(engine.calls == 1 && delivered == 1, "Initial response was not delivered")
+        session.start(monitor.report(.cpu, sample: sample(thermal: .critical))); await wait(); sessionExpect(engine.calls == 1)
         for availability: AdviceModelAvailability in [.requiresOS, .notEnabled, .preparing, .unsupportedDevice, .unsupportedLanguage, .unavailable] {
             engine.available = availability
             var message: String?
             session.onState = { if case .basic(let text) = $0 { message = text } }
             session.start(base); await wait()
-            precondition(engine.calls == 1 && message == availability.message)
+            sessionExpect(engine.calls == 1 && message == availability.message)
         }
         session.onState = { if case .explained = $0 { delivered += 1 } }
-        engine.available = .ready; engine.invalid = true; session.start(base); await wait(); precondition(delivered == 1)
-        engine.invalid = false; engine.delay = 80_000_000; engine.ignoresCancellation = true
-        session.start(base); await wait(5); session.cancel(); await wait(); precondition(delivered == 1)
-        await wait(90); precondition(!session.probeBusy)
+        engine.available = .ready; engine.invalid = true; session.start(base); await eventually { !session.probeBusy }; sessionExpect(delivered == 1, "Unsafe response must be rejected")
+        print("SESSION cancellation")
+        engine.invalid = false; engine.suspendCompletion = true
+        session.start(base); await eventually { engine.isSuspended }
+        sessionExpect(engine.isSuspended, "Cancellation fixture did not start")
+        session.cancel(); engine.resumeCompletion(); await eventually { !session.probeBusy }
+        sessionExpect(delivered == 1 && !session.probeBusy, "Cancelled response was delivered or remained busy")
+        engine.suspendCompletion = false
         engine.fails = true
         var failureMessage: String?
         session.onState = { if case .basic(let text) = $0 { failureMessage = text } }
         session.start(base); await eventually { failureMessage != nil }
-        precondition(failureMessage == AdviceModelError.generationFailed.message)
+        sessionExpect(failureMessage == AdviceModelError.generationFailed.message)
         engine.fails = false
-        let timeoutEngine = AdviceFixtureEngine(); timeoutEngine.delay = 80_000_000
+        print("SESSION timeout")
+        let timeoutEngine = AdviceFixtureEngine(); timeoutEngine.suspendCompletion = true
         let timeoutSession = AdviceSessionController(engine: timeoutEngine, timeoutNanoseconds: 5_000_000)
         var timedOut = false
         timeoutSession.onState = { if case .basic(let text) = $0 { timedOut = text == L10n.text("AI 응답을 기다리다 중단했어요. 기본 안내를 표시해요") } }
-        timeoutSession.start(base); await wait(); precondition(timedOut)
-        precondition(timeoutEngine.calls == 1)
+        timeoutSession.start(base); await eventually { timedOut && timeoutEngine.isSuspended }
+        sessionExpect(timedOut && timeoutEngine.calls == 1, "Deadline must stop a pending response")
+        timeoutEngine.resumeCompletion(); await eventually { !timeoutSession.probeBusy }
+        sessionExpect(!timeoutSession.probeBusy, "Timed-out worker must release the single-flight gate")
+        print("SESSION error mapping")
         for failure: AdviceModelError in [.unavailable, .invalidOutput, .responseFormat, .refused, .contextLimit, .unsupported, .generationFailed] {
             let failing = AdviceFixtureEngine(); failing.failure = failure
             let controller = AdviceSessionController(engine: failing, retryDelayNanoseconds: 1_000_000)
             var text: String?
             controller.onState = { if case .basic(let message) = $0 { text = message } }
             controller.start(base); await eventually { text != nil }
-            precondition(text == failure.message && failing.calls == 1)
+            sessionExpect(text == failure.message && failing.calls == 1)
         }
+        print("SESSION busy retry")
         let busy = AdviceFixtureEngine(); busy.busyFailures = 1
         let retrying = AdviceSessionController(engine: busy, retryDelayNanoseconds: 1_000_000)
         var retried = 0, finished = false
         retrying.onState = { if case .retrying = $0 { retried += 1 }; if case .explained = $0 { finished = true } }
         retrying.start(base); await eventually { finished }
-        precondition(finished && busy.calls == 2 && retried == 1)
+        sessionExpect(finished && busy.calls == 2 && retried == 1)
         let alwaysBusy = AdviceFixtureEngine(); alwaysBusy.busyFailures = 3
         let limited = AdviceSessionController(engine: alwaysBusy, retryDelayNanoseconds: 1_000_000)
         var limitedMessage: String?
         limited.onState = { if case .basic(let message) = $0 { limitedMessage = message } }
         limited.start(base); await eventually { limitedMessage != nil }
-        precondition(limitedMessage == AdviceModelError.modelBusy.message && alwaysBusy.calls == 2)
+        sessionExpect(limitedMessage == AdviceModelError.modelBusy.message && alwaysBusy.calls == 2)
+        print("SESSION retry cancellation")
         let delayed = AdviceFixtureEngine(); delayed.busyFailures = 1
         let cancelled = AdviceSessionController(engine: delayed, retryDelayNanoseconds: 100_000_000)
         var waitingRetry = false, unwantedDelivery = false
         cancelled.onState = { if case .retrying = $0 { waitingRetry = true }; if case .explained = $0 { unwantedDelivery = true } }
         cancelled.start(base); await eventually { waitingRetry }; cancelled.cancel(); await wait(150)
-        precondition(delayed.calls == 1 && !unwantedDelivery && !cancelled.probeBusy)
+        sessionExpect(delayed.calls == 1 && !unwantedDelivery && !cancelled.probeBusy)
+        print("SESSION freshness")
         var clock = Date()
         let dated = monitor.report(.cpu, sample: sample(date: clock))
         let slow = AdviceFixtureEngine(); slow.delay = 10_000_000
@@ -228,19 +255,20 @@ struct HealthAdviceProbe {
         var accepted = false
         fresh.onState = { if case .explained = $0 { accepted = true } }
         fresh.start(dated); clock.addTimeInterval(40); await eventually { accepted }
-        precondition(accepted, "A result within the extended request deadline must remain usable")
+        sessionExpect(accepted, "A result within the extended request deadline must remain usable")
         var oldMessage: String?
         fresh.onState = { if case .basic(let message) = $0 { oldMessage = message } }
-        fresh.start(dated); precondition(oldMessage == L10n.text("기준 시각이 오래됐어요. 다시 분석하세요"))
+        fresh.start(dated); sessionExpect(oldMessage == L10n.text("기준 시각이 오래됐어요. 다시 분석하세요"))
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
+            print("SESSION SDK errors")
             let context = LanguageModelSession.GenerationError.Context(debugDescription: "Synthetic fixture only")
             for (error, expected) in [
                 (LanguageModelSession.GenerationError.concurrentRequests(context), AdviceModelError.modelBusy),
                 (.rateLimited(context), .modelBusy), (.assetsUnavailable(context), .unavailable),
                 (.decodingFailure(context), .responseFormat), (.guardrailViolation(context), .refused),
                 (.exceededContextWindowSize(context), .contextLimit), (.unsupportedLanguageOrLocale(context), .unsupported)
-            ] { precondition(AdviceModelError.classify(error) == expected) }
+            ] { sessionExpect(AdviceModelError.classify(error) == expected) }
         }
         #endif
         print("PASS advice sessions: reason-specific errors, one busy retry, bounded retry exhaustion/cancellation, extended freshness, explicit requests, timeout and stale delivery suppression")
