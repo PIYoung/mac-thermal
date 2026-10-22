@@ -41,6 +41,13 @@ final class FanServiceCore {
     private var record: FanRecoveryRecord?
     private var rpm: Int?
     private var mayHaveWritten = false
+    private var submittedAt: Double?
+    private var restoringSince: Double?
+    private var automaticSince: Double?
+    private var lastRestoreWrite: Double?
+    private var automaticSamples = 0
+    private var lastAutomaticObservation: Double?
+    static let automaticSettlement: Double = 10
     private var corruptRecovery = false
     private var issue: FanControlWire.Issue = .none
     private var sleeping = false
@@ -95,9 +102,9 @@ final class FanServiceCore {
         do { try storage.save(record!) }
         catch { issue = .recovery; policy.restorationFailed(lease: lease); return }
         mayHaveWritten = true // Journal is durable before the first possible write.
-        guard hardware.start(rpm: selected), let confirmedAt = clock() else { issue = .unsupported; restore(); return }
-        if policy.confirmBoost(lease: lease, at: confirmedAt) != nil { restore(); return }
-        issue = .none
+        submittedAt = now
+        guard hardware.start(rpm: selected) else { issue = .unsupported; restore(); return }
+        issue = .none // Acknowledges queued writes, not verified cooling.
     }
 
     func tick() {
@@ -107,25 +114,61 @@ final class FanServiceCore {
         guard let now = clock() else { issue = .unavailable; restore(); return }
         if policy.tick(at: now) != nil { restore(); return }
         let state = hardware.read()
-        guard state.safeToCool, !state.automatic, state.fans.count == record?.fanCount,
-              let rpm, state.targets.count == state.fans.count,
-              state.targets.allSatisfy({ $0.isFinite && abs($0 - Double(rpm)) <= 1 }) else {
+        guard state.safeToCool, state.fans.count == record?.fanCount else {
             issue = .thermal; restore(); return
         }
+        let matching = !state.automatic && state.targets.count == state.fans.count &&
+            rpm.map { target in state.targets.allSatisfy { $0.isFinite && abs($0 - Double(target)) <= 1 } } == true
+        if policy.phase == .starting {
+            // A same-call read can still show the mode from before a queued write.
+            if matching, let submittedAt, now > submittedAt, let lease = record?.lease {
+                if policy.confirmBoost(lease: lease, at: now) != nil { restore() }
+            }
+            return // The policy enforces the independent eight-second deadline.
+        }
+        if !matching { issue = .thermal; restore() }
     }
 
     private func restore() {
         guard let record else { return }
         _ = policy.restore()
-        let restored = mayHaveWritten ? hardware.restore(count: record.fanCount) : hardware.read().automatic
-        guard restored else { issue = .recovery; policy.restorationFailed(lease: record.lease); return }
+        guard let now = clock() else {
+            // Best effort restoration still runs when the clock is unavailable.
+            if mayHaveWritten { _ = hardware.restore(count: record.fanCount) }
+            issue = .recovery; policy.restorationFailed(lease: record.lease); return
+        }
+        if restoringSince == nil { restoringSince = now }
+        if mayHaveWritten, lastRestoreWrite == nil || now - lastRestoreWrite! >= 2 {
+            // Always enqueue automatic, including when the initial read says auto:
+            // an earlier mode write may not have appeared yet.
+            let restored = hardware.restore(count: record.fanCount)
+            lastRestoreWrite = now
+            if !restored { automaticSince = nil; automaticSamples = 0; lastAutomaticObservation = nil }
+        }
+        let state = hardware.read()
+        guard state.supported, state.automatic, state.fans.count == record.fanCount else {
+            automaticSince = nil; automaticSamples = 0; lastAutomaticObservation = nil
+            if now - (restoringSince ?? now) >= Self.automaticSettlement {
+                issue = .recovery; policy.restorationFailed(lease: record.lease)
+            }
+            return
+        }
+        if automaticSince == nil {
+            automaticSince = now; automaticSamples = 1; lastAutomaticObservation = now
+        } else if let lastAutomaticObservation, now - lastAutomaticObservation >= 1 {
+            automaticSamples += 1; self.lastAutomaticObservation = now
+        }
+        // Retain the durable journal across delayed write/read visibility and
+        // repeat observations on independent ticks before reporting success.
+        guard !mayHaveWritten || (automaticSamples >= 6 && now - automaticSince! >= Self.automaticSettlement &&
+              now - restoringSince! >= Self.automaticSettlement) else { return }
         do { try storage.clear() }
         catch { issue = .recovery; policy.restorationFailed(lease: record.lease); return }
-        // Keep a failed clock from falsely reporting that a lease was cleared.
-        guard let now = clock() else { issue = .recovery; policy.restorationFailed(lease: record.lease); return }
         policy.confirmAutomatic(at: now, lease: record.lease)
         guard !policy.ownsLease else { issue = .recovery; return }
         self.record = nil; owner = nil; rpm = nil; mayHaveWritten = false
+        submittedAt = nil; restoringSince = nil; automaticSince = nil; lastRestoreWrite = nil
+        automaticSamples = 0; lastAutomaticObservation = nil
     }
 
     func disconnected(_ peer: UUID) { if peer == owner { restore(); owner = nil } }
@@ -145,7 +188,8 @@ final class FanServiceCore {
         else if policy.ownsLease {
             if policy.phase == .recoveryFailed { visibleState = .failed }
             else if policy.phase == .restoring { visibleState = .restoring }
-            else { visibleState = owner == peer ? .active : .external }
+            else if owner != peer { visibleState = .external }
+            else { visibleState = policy.phase == .starting ? .starting : .active }
         } else if !state.supported || fans.isEmpty { visibleState = .unavailable }
         else { visibleState = state.automatic ? .automatic : .external }
         let remaining = clock().flatMap { policy.remaining(at: $0) }

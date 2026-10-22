@@ -72,14 +72,15 @@ final class FanControlView: FlippedView {
         boost.title = L10n.text("10분 냉각 강화")
         policy.stringValue = L10n.text("10분 후 자동 복귀 · 잠자기·연결 끊김에도 복귀")
         let state = reply?.state ?? .setup
-        let active = state == .active
-        if active, let remaining = reply?.remaining {
+        let active = state == .active || state == .starting
+        if state == .active, let remaining = reply?.remaining {
             let seconds = Int(ceil(remaining))
             status.stringValue = L10n.format("냉각 강화 중 · %02d:%02d", seconds / 60, seconds % 60)
         } else {
             let key: String
             switch state {
             case .setup: key = "팬 제어 준비 중 · 회전수 읽기 전용"
+            case .starting: key = "목표 회전수 적용 확인 중"
             case .connecting: key = "팬 제어 도우미 연결 중"
             case .automatic: key = "Apple 자동 제어 중"
             case .external: key = "다른 연결에서 팬을 제어하고 있어요"
@@ -114,7 +115,7 @@ final class FanControlView: FlippedView {
         targetValue.stringValue = selectedRPM.map { "\($0) RPM" } ?? "— RPM"
         slider.isEnabled = canStart && !active && availableRange.map { $0.lowerBound < $0.upperBound } == true
         boost.isEnabled = canStart && !active
-        automatic.isEnabled = reply?.lease != nil && [.active, .restoring, .failed].contains(state)
+        automatic.isEnabled = reply?.lease != nil && [.starting, .active, .restoring, .failed].contains(state)
         let key: String
         switch reply?.issue ?? .none {
         case .restoring: key = "Apple 자동 제어 복귀 확인 중"
@@ -123,7 +124,7 @@ final class FanControlView: FlippedView {
         case .busy: key = "다른 팬 제어를 종료한 뒤 다시 확인해 주세요"
         case .recovery: key = "자동 복귀를 확인하지 못했어요. 도우미를 종료하지 말아 주세요"
         case .maintenance: key = "도우미 점검 중에는 냉각 강화를 시작하지 않아요"
-        case .unsupported, .unavailable, .protocolError: key = "지원 여부를 확인하지 못해 팬 설정을 변경하지 않아요"
+        case .unsupported, .unavailable, .protocolError: key = "팬 제어 지원 여부를 확인하지 못했어요"
         case .connection: key = "도우미 연결이 끊겼어요. 자동 복귀 확인을 기다려 주세요"
         case .none:
             key = state == .setup ? "팬을 조절할 전용 관리자 도우미가 아직 연결되지 않았어요" : "낮은 RPM은 냉각이 부족할 수 있어요. 열 상태가 높으면 자동 복귀해요"

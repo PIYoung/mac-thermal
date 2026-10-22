@@ -2,8 +2,15 @@
 
 The AppKit controls, authenticated XPC client, root helper, bounded SMC adapter,
 recovery journal and local installation/uninstallation scripts are implemented.
-**Administrator installation and physical fan tests have not been performed.**
-This remains a local development feature, not a verified fan-control release.
+Administrator installation and authenticated app-to-root-service status were
+verified on 2026-10-22. An attended 3,000-RPM test exposed delayed SMC visibility:
+the first immediate read still showed automatic, while a later independent read
+showed manual mode and approximately 3,000 RPM. The original helper incorrectly
+cleared recovery too early. A user-run one-shot mode-0 recovery restored Apple
+automatic; independent later reads confirmed mode 0 at approximately 1,000 RPM.
+The app was stopped. The fix below is covered by delayed-state fixtures but has
+not yet been installed or physically retested. This remains a local development
+feature, not a verified fan-control release.
 
 The CPU entry opens a fixed 308×277 body inside the existing 340×420 panel.
 There is no repeated page title. The borderless blue `‹ CPU` back control matches
@@ -36,6 +43,15 @@ starting a fixed 10-minute cooling session; use Apple automatic to end it early.
   serious/critical macOS thermal pressure, missing hardware data, changed target
   readback or maintenance ends the session. These are conservative app policy
   checks, not manufacturer temperature limits or an overheating diagnosis.
+- Queued startup writes are distinct from verified active cooling. The service
+  shows a starting state and checks mode/target on a later tick, with an independent
+  eight-second startup deadline. It never clears ownership after a same-call
+  automatic read when a start may still be in flight.
+- Owned recovery always sends per-fan mode 0, even when an immediate read already
+  says automatic. It repeats at the existing two-second cadence and retains the
+  durable journal until all fans remain automatic over at least ten seconds.
+  A late manual read resets that interval. Ten seconds is a conservative local
+  policy, not a documented firmware guarantee; actual tests remain necessary.
 - Automatic mode must be read back on every fan before recovery is reported.
   Restoration does not depend on actual RPM/temperature reads remaining available.
   Failed restoration retains ownership and its recovery journal and retries.
@@ -105,7 +121,7 @@ Authentication secrets must be entered directly in the system/terminal prompt,
 never sent through chat. No automatic sudo, permission-prompt handling or security
 setting changes are included. The first test should be short and attended.
 
-RPM noise and power use may increase. Before release, actual control/readback,
+RPM noise and power use may increase. Before release, the corrected actual control/readback,
 partial failure, cancellation, full timeout, app/helper termination, helper crash
 restart and sleep/wake recovery need physical verification on supported hardware.
 Passing builds/mocks or reading fan keys does not prove these behaviors.

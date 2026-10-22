@@ -58,5 +58,6 @@ The separately built helper reuses the existing attributed SMC decoder; protocol
 investigation used Stats revision d31a662624eec1fd59239ecb4142cfbac1a37d72 under
 its verified MIT license. No upstream writer or helper code is incorporated.
 The app and helper use macOS public XPC/code-signing/power APIs and hardened-runtime
-signatures. Actual administrator installation and hardware testing require the
-separate review documented in docs/FAN_CONTROL.md. Existing notices remain intact.
+signatures. Administrator installation and the attended test were separately approved.
+The delayed-readback correction uses original state-machine code and fixtures;
+physical retesting remains pending as documented in docs/FAN_CONTROL.md. Existing notices remain intact.

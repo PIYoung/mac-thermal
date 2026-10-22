@@ -37,7 +37,7 @@ final class FanControlClient {
     /// Reuses the app's existing 2-second resource tick. No UI or polling timer.
     func tick(visible: Bool) {
         if let pendingSince, let now = SystemUptime.seconds(), now - pendingSince > 4 { disconnect(); return }
-        if latest.state == .active, let lease = latest.lease { send(.init(operation: .heartbeat, lease: lease)) }
+        if [.starting, .active].contains(latest.state), let lease = latest.lease { send(.init(operation: .heartbeat, lease: lease)) }
         else if visible || recoveryUnconfirmed { refresh() }
     }
     func suspend() {
@@ -103,7 +103,7 @@ final class FanControlClient {
             if self.serviceID == reply.serviceID, reply.revision <= self.revision { return }
             self.serviceID = reply.serviceID; self.revision = reply.revision
             self.latest = reply; self.lastReplyAt = SystemUptime.seconds()
-            self.recoveryUnconfirmed = [.active, .restoring, .failed].contains(reply.state)
+            self.recoveryUnconfirmed = [.starting, .active, .restoring, .failed].contains(reply.state)
             self.onChange?()
             if let intent = self.queuedIntent {
                 self.queuedIntent = nil
@@ -112,7 +112,7 @@ final class FanControlClient {
         }
     }
     private func disconnect() {
-        recoveryUnconfirmed = recoveryUnconfirmed || [.active, .restoring, .failed].contains(latest.state)
+        recoveryUnconfirmed = recoveryUnconfirmed || [.starting, .active, .restoring, .failed].contains(latest.state)
         close(); publish(state: .disconnected)
     }
     private func publish(state: FanControlWire.State) {

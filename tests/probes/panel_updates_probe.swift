@@ -663,6 +663,13 @@ enum PanelUpdatesProbe {
                 fans: [.init(actual: 2501, minimum: 1000, maximum: 4900)], lease: UUID(), rpm: 2500, remaining: 372)
             panel.probeFanControlView.update(rpms: [2501], reply: active)
             precondition(panel.probeFanControlView.probeTarget == 2500 && panel.probeFanControlView.probeTextFits)
+            for state: FanControlWire.State in [.starting, .restoring, .failed] {
+                let pending = FanControlWire.Reply(serviceID: UUID(), revision: 3, state: state, issue: .none,
+                    fans: active.fans, lease: active.lease, rpm: 2500, remaining: 372)
+                precondition(pending.valid)
+                panel.probeFanControlView.update(rpms: [2501], reply: pending)
+                precondition(panel.probeFanControlView.probeTextFits, "Pending/recovery text must fit in all languages")
+            }
             panel.probeFanControlView.update(rpms: [1540])
             checkContentBounds(panel.view)
             for values: [Double?]? in [nil, [], [nil], [1000], [1000, 1200]] {

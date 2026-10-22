@@ -5,7 +5,7 @@ enum FanControlWire {
     static let version = 1
     static let maxPayload = 8_192
     enum Operation: String, Codable { case status, boost, heartbeat, restore }
-    enum State: String, Codable { case setup, connecting, automatic, external, active, restoring, failed, unavailable, disconnected }
+    enum State: String, Codable { case setup, connecting, automatic, external, starting, active, restoring, failed, unavailable, disconnected }
     enum Issue: String, Codable {
         case none, unsupported, busy, invalidRPM, thermal, unavailable, restoring, recovery, maintenance, protocolError, connection
     }
@@ -46,7 +46,7 @@ enum FanControlWire {
             version == FanControlWire.version && fans.count <= 8 && fans.allSatisfy(\.valid) &&
             (rpm.map { (100...30_000).contains($0) } ?? true) &&
             (remaining.map { $0.isFinite && (0...600).contains($0) } ?? true) &&
-            (state != .active || (lease != nil && rpm != nil && remaining != nil && !fans.isEmpty))
+            (![State.active, .starting].contains(state) || (lease != nil && rpm != nil && remaining != nil && !fans.isEmpty))
         }
     }
     static func range(_ fans: [Fan]) -> ClosedRange<Int>? {

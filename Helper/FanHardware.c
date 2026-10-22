@@ -70,7 +70,8 @@ int mtfc_restore(int expected_count) {
         double mode;
         if (!smc_read_number(key, &mode)) { key[2] = 'M'; if (!smc_read_number(key, &mode)) { ok = false; continue; } }
         if (mode != 0 && mode != 1) { ok = false; continue; }
-        if (mode == 1 && !write_number(key, 0)) { ok = false; continue; }
+        // Always enqueue automatic for an owned lease, even if a stale read says 0.
+        if (!write_number(key, 0)) { ok = false; continue; }
         double confirmed;
         if (!smc_read_number(key, &confirmed) || confirmed != 0) ok = false;
     }
@@ -89,9 +90,8 @@ int mtfc_start(int rpm) {
         key[2] = 'T'; key[3] = 'g';
         if (!write_number(key, rpm)) return 0;
     }
-    r = mtfc_read();
-    if (r.count <= 0 || r.valid_mask != (1u << r.count) - 1u || r.gate > 0) return 0;
-    for (int i = 0; i < r.count; ++i) if (r.mode[i] != 1 || fabs(r.target[i] - rpm) > 1) return 0;
+    // Writes may become visible later. The service retains its journal and
+    // confirms mode/target on later ticks within the bounded startup deadline.
     return 1;
 }
 

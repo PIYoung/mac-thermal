@@ -49,7 +49,7 @@ def uninstall():
         finally: os.close(fd)
     # New starts are inhibited before requesting service shutdown/restoration.
     subprocess.run(["/bin/launchctl", "kill", "SIGTERM", "system/" + LABEL], check=False, capture_output=True)
-    end = time.monotonic() + 10
+    end = time.monotonic() + 40
     verified = False
     while time.monotonic() < end:
         if not (FOLDER / "lease.json").exists():

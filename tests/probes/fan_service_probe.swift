@@ -19,20 +19,21 @@ private final class MemoryRecovery: FanRecoveryStore {
 private final class SimulatedHardware: FanServiceHardware {
     var state = FanHardwareState(fans: [.init(actual: 1540, minimum: 1000, maximum: 4900)], automatic: true,
         supported: true, cpuTemperature: 75, thermalPressureSafe: true, targets: [1540])
-    var failStart = false, failRestore = false
+    var failStart = false, failRestore = false, delayStart = false, delayRestore = false
     var starts = 0, restores = 0
     let events: Events
     init(_ events: Events) { self.events = events }
     func read() -> FanHardwareState { state }
     func start(rpm: Int) -> Bool {
         starts += 1; events.values.append("write")
-        state.automatic = false; state.targets = [Double(rpm)]
+        if !delayStart { state.automatic = false; state.targets = [Double(rpm)] }
         return !failStart
     }
     func restore(count: Int) -> Bool {
         restores += 1; events.values.append("restore")
         if failRestore { return false }
-        state.automatic = true; return count == state.fans.count
+        if !delayRestore { state.automatic = true }
+        return state.automatic && count == state.fans.count
     }
 }
 private final class Fixture {
@@ -44,6 +45,19 @@ private final class Fixture {
     let peer = UUID()
     func request(_ op: FanControlWire.Operation, rpm: Int? = nil, lease: UUID? = nil, peer: UUID? = nil) -> FanControlWire.Reply {
         core.handle(.init(operation: op, rpm: rpm, lease: lease), peer: peer ?? self.peer)
+    }
+    @discardableResult func start() -> FanControlWire.Reply {
+        let pending = request(.boost, rpm: 3000)
+        precondition(pending.state == .starting && pending.lease != nil)
+        now = 101
+        let active = request(.heartbeat, lease: pending.lease)
+        precondition(active.state == .active)
+        return active
+    }
+    func settle() {
+        let start = now!
+        for offset in stride(from: 2.0, through: 12.0, by: 2) { now = start + offset; core.tick() }
+        precondition(storage.record == nil && hardware.state.automatic)
     }
 }
 
@@ -63,12 +77,14 @@ enum FanServiceProbe {
             precondition(fixture.hardware.starts == 0 && fixture.storage.record == nil)
         }
         let started = fixture.request(.boost, rpm: 3000)
-        precondition(started.valid && started.state == .active && started.rpm == 3000 && started.remaining == 600)
+        precondition(started.valid && started.state == .starting && started.remaining == 600)
         precondition(fixture.events.values.prefix(2).elementsEqual(["persist", "write"]))
         let lease = started.lease!
+        fixture.now = 101
+        precondition(fixture.request(.heartbeat, lease: lease).state == .active)
         _ = fixture.request(.restore, lease: lease, peer: UUID())
         _ = fixture.request(.heartbeat, lease: lease, peer: UUID())
-        precondition(!fixture.hardware.state.automatic, "Other connections cannot control an owned lease")
+        precondition(!fixture.hardware.state.automatic)
         for value in stride(from: 102.0, through: 698.0, by: 2) {
             fixture.now = value
             let report = fixture.request(.heartbeat, lease: lease)
@@ -77,49 +93,83 @@ enum FanServiceProbe {
             precondition(fixture.hardware.starts == 1)
         }
         fixture.now = 700
-        precondition(fixture.request(.heartbeat, lease: lease).state == .automatic)
-        precondition(fixture.storage.record == nil && fixture.hardware.restores == 1)
-        precondition(fixture.events.values.suffix(2).elementsEqual(["restore", "clear"]))
+        precondition(fixture.request(.heartbeat, lease: lease).state == .restoring)
+        precondition(fixture.storage.record != nil, "An immediate automatic read cannot clear recovery")
+        fixture.settle()
+        precondition(fixture.request(.status).state == .automatic)
 
         let failedJournal = Fixture(); failedJournal.storage.failSave = true
         _ = failedJournal.request(.boost, rpm: 3000)
         precondition(failedJournal.hardware.starts == 0 && failedJournal.hardware.restores == 0)
 
         let partialWrite = Fixture(); partialWrite.hardware.failStart = true
-        _ = partialWrite.request(.boost, rpm: 3000)
-        precondition(partialWrite.hardware.state.automatic && partialWrite.storage.record == nil)
+        precondition(partialWrite.request(.boost, rpm: 3000).state == .restoring)
+        precondition(partialWrite.storage.record != nil)
+        partialWrite.settle()
 
-        let failedRestore = Fixture()
-        let active = failedRestore.request(.boost, rpm: 3000)
+        // Regression for actual hardware: an initial auto read is stale, and the
+        // preceding manual write becomes visible after restoration was requested.
+        let delayed = Fixture(); delayed.hardware.delayStart = true
+        let pending = delayed.request(.boost, rpm: 3000)
+        precondition(pending.state == .starting && delayed.storage.record != nil)
+        delayed.now = 102
+        precondition(delayed.request(.heartbeat, lease: pending.lease).state == .starting)
+        _ = delayed.request(.restore, lease: pending.lease)
+        precondition(delayed.storage.record != nil && delayed.hardware.restores > 0)
+        delayed.hardware.state.automatic = false; delayed.hardware.state.targets = [3000]
+        delayed.hardware.delayRestore = true
+        delayed.now = 104; delayed.core.tick()
+        precondition(delayed.storage.record != nil)
+        delayed.now = 106; delayed.hardware.delayRestore = false; delayed.core.tick()
+        for value in [108.0, 110, 112, 114] { delayed.now = value; delayed.core.tick() }
+        precondition(delayed.storage.record != nil, "Stable interval restarts after late manual visibility")
+        delayed.now = 116; delayed.core.tick()
+        precondition(delayed.storage.record == nil)
+
+        let startupTimeout = Fixture(); startupTimeout.hardware.delayStart = true
+        let wait = startupTimeout.request(.boost, rpm: 3000)
+        for value in [102.0, 104, 106, 108] {
+            startupTimeout.now = value; _ = startupTimeout.request(.heartbeat, lease: wait.lease)
+        }
+        precondition(startupTimeout.request(.status).state == .restoring && startupTimeout.storage.record != nil)
+        startupTimeout.settle()
+
+        let failedRestore = Fixture(); let active = failedRestore.start()
         failedRestore.hardware.failRestore = true
-        precondition(failedRestore.request(.restore, lease: active.lease).state == .failed)
+        _ = failedRestore.request(.restore, lease: active.lease)
+        failedRestore.now = 113; failedRestore.core.tick()
+        precondition(failedRestore.request(.status).state == .failed)
         precondition(failedRestore.storage.record != nil && !failedRestore.core.prepareTermination())
-        failedRestore.hardware.failRestore = false; failedRestore.core.tick()
-        precondition(failedRestore.storage.record == nil && failedRestore.hardware.state.automatic)
+        failedRestore.hardware.failRestore = false; failedRestore.now = 115; failedRestore.core.tick()
+        failedRestore.settle()
 
         for reason in ["sleep", "disconnect", "heartbeat", "thermal", "missing temperature", "pressure", "maintenance"] {
-            let f = Fixture(); _ = f.request(.boost, rpm: 3000)
+            let f = Fixture(); _ = f.start()
             switch reason {
             case "sleep": f.core.sleep()
             case "disconnect": f.core.disconnected(f.peer)
-            case "heartbeat": f.now = 107; f.core.tick()
+            case "heartbeat": f.now = 108; f.core.tick()
             case "thermal": f.hardware.state.cpuTemperature = 100; f.core.tick()
             case "missing temperature": f.hardware.state.cpuTemperature = nil; f.core.tick()
             case "pressure": f.hardware.state.thermalPressureSafe = false; f.core.tick()
             default: f.core.inhibited = true; f.core.tick()
             }
-            precondition(f.hardware.state.automatic && f.storage.record == nil, reason)
+            precondition(f.storage.record != nil, reason + " must retain journal during settlement")
+            f.settle()
         }
-        let crash = Fixture(); _ = crash.request(.boost, rpm: 3000)
-        let restarted = FanServiceCore(hardware: crash.hardware, storage: crash.storage, clock: { 105 })
-        precondition(crash.hardware.state.automatic && crash.storage.record == nil)
-        precondition(restarted.handle(.init(operation: .status), peer: UUID()).state == .automatic)
+        let crash = Fixture(); _ = crash.start()
+        var restartClock = 105.0
+        let restarted = FanServiceCore(hardware: crash.hardware, storage: crash.storage, clock: { restartClock })
+        precondition(crash.hardware.state.automatic && crash.storage.record != nil)
+        precondition(restarted.handle(.init(operation: .status), peer: UUID()).state == .restoring)
+        for value in [107.0, 109, 111, 113, 115] { restartClock = value; restarted.tick() }
+        precondition(crash.storage.record == nil)
 
         let external = Fixture(); external.hardware.state.automatic = false
         precondition(external.request(.boost, rpm: 3000).state == .external)
         precondition(external.hardware.starts == 0 && external.hardware.restores == 0)
         let corrupt = Fixture(); corrupt.storage.corrupt = true
         precondition(corrupt.request(.boost, rpm: 3000).state == .failed && corrupt.hardware.starts == 0)
-        print("PASS fan service: journal-before-write, custom RPM bounds, exact 600s lease, ownership, partial write/recovery failure, sleep/disconnect/heartbeat/thermal/maintenance, simulated restart; no hardware or root service execution")
+        print("PASS fan service: async startup confirmation, delayed manual/auto readback regression, ten-second stable recovery with durable journal, bounded startup/600s deadline, ownership, failures, sleep/disconnect/thermal and simulated restart; no live hardware")
     }
 }

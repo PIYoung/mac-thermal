@@ -51,6 +51,8 @@ int main(void) {
     missing_actual = true; /* Restore cannot depend on RPM/temperature availability. */
     assert(mtfc_restore(2) == 1 && modes[0] == 0 && modes[1] == 0);
     missing_actual = false;
+    writes = 0;
+    assert(mtfc_restore(2) == 1 && writes == 2); /* Auto reads may be stale: always write 0 for owned recovery. */
     writes = 0; fail_write_at = 4;
     assert(mtfc_start(3000) == 0 && writes == 4);
     fail_write_at = -1;
