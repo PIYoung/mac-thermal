@@ -496,6 +496,7 @@ final class PanelController: NSViewController {
     private let adviceMonitor = HealthAdviceMonitor()
     private let adviceEngine: OnDeviceAdviceGenerating
     private var showingAdvice = false
+    private let fanClient = FanControlClient()
     private var showingFanControl = false
     private let fanControlContent = FanControlView(frame: NSRect(x: 0, y: 0, width: 308, height: 277))
     private lazy var fanControlButton: NSButton = {
@@ -817,6 +818,9 @@ final class PanelController: NSViewController {
         buildNetwork(in: tabViews[4])
         place(fanControlContent, in: canvas, 16, 88, 308, 277)
         fanControlContent.close = { [weak self] in self?.closeFanControl() }
+        fanControlContent.onBoost = { [weak self] rpm in self?.fanClient.start(rpm: rpm) }
+        fanControlContent.onRestore = { [weak self] in self?.fanClient.restore() }
+        fanClient.onChange = { [weak self] in self?.renderFanControl() }
         place(adviceContent, in: canvas, 16, 88, 308, 277)
         adviceContent.requestLatest = { [weak self] in self?.openAdvice() }
         adviceContent.performAction = { [weak self] action in
@@ -1187,9 +1191,16 @@ final class PanelController: NSViewController {
     @objc private func openFanControl() {
         guard !showingMenuBarSettings, tabs.selectedSegment == 0 else { return }
         suspendAdvice(); showingFanControl = true
-        fanControlContent.update(rpms: latestSnapshot.fans.rpms)
+        fanClient.refresh()
+        renderFanControl()
         showSelectedTab()
     }
+    private func renderFanControl() {
+        guard isViewLoaded, showingFanControl else { return }
+        fanControlContent.update(rpms: latestSnapshot.fans.rpms, reply: fanClient.latest, canStart: fanClient.canStart)
+    }
+    func suspendFanControl() { fanClient.suspend() }
+    func closeFanControlConnection() { fanClient.close() }
     private func closeFanControl() {
         showingFanControl = false; showSelectedTab()
     }
@@ -1279,6 +1290,7 @@ final class PanelController: NSViewController {
 
     func apply(_ sample: Snapshot, recordHistory: Bool = true) {
         latestSnapshot = sample
+        fanClient.tick(visible: presentationIsVisible && showingFanControl && !showingMenuBarSettings)
         if recordHistory {
             adviceMonitor.observe(sample)
             cpuHistory.append(sample.cpuUsage, at: sample.uptime)
@@ -1305,7 +1317,7 @@ final class PanelController: NSViewController {
         uptimeLabel.stringValue = SystemUptime.label(sample.uptime)
         updated.stringValue = L10n.format("2초마다 갱신  ·  %@", timeFormatter.string(from: sample.time))
         guard !showingMenuBarSettings else { return }
-        if showingFanControl { fanControlContent.update(rpms: sample.fans.rpms); return }
+        if showingFanControl { renderFanControl(); return }
         if showingAdvice { adviceContent.receiveSafety(sample, monitor: adviceMonitor); return }
         switch tabs.selectedSegment {
         case 0: applyCPU(sample)

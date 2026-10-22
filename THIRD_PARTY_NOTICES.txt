@@ -19,9 +19,10 @@ Additional fan-control protocol investigation (2026-10-22):
 https://github.com/exelban/stats/blob/d31a662624eec1fd59239ecb4142cfbac1a37d72/SMC/smc.swift
 MIT license reverified at the same pinned revision; license file unchanged:
 https://github.com/exelban/stats/blob/d31a662624eec1fd59239ecb4142cfbac1a37d72/LICENSE
-The developer-only numeric preflight reuses our existing SMC decoder. The new
-UI and lease policy are original code. No upstream fan writer or privileged
-helper code is incorporated or bundled in this checkpoint.
+The developer-only numeric preflight and separately built fan helper reuse our
+existing SMC decoder. The new bounded writer, service, IPC client, installer,
+UI and lease policy are original project code. No upstream fan writer or
+privileged helper implementation is incorporated or bundled.
 
 Additional copyright notices preserved from the referenced source files:
 SMC/smc.swift:

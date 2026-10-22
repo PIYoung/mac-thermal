@@ -50,11 +50,13 @@ CPU animation styles (wave, pinwheel, bouncing balls, radar, pistons, conveyor, 
 
 AI reliability updates use original duration tracking, Foundation sentence segmentation and the existing Apple Foundation Models error types. They add no model, external package, data recipient, permission or telemetry. The model remains on-device and receives only the existing numeric report and trusted guidance.
 
-Fan-control preparation (2026-10-22): the compact entry, fixed-size setup view,
-four-language text and deterministic lease policy are original AppKit/Foundation
-code. They add no icons, external assets, package, timer, administrator helper or
-fan writer. Buttons remain disabled pending the separate security review in
-docs/FAN_CONTROL.md. The optional developer-only read-only preflight reuses the
-existing attributed SMC decoder; protocol investigation used Stats revision
-d31a662624eec1fd59239ecb4142cfbac1a37d72 under its verified MIT license. Existing
-copyright and MIT notices remain intact.
+Fan control (2026-10-22): the title-free page, blue ‹ CPU navigation,
+100-RPM target picker, four-language text, XPC client/service, original bounded
+fan writer, journal/lease policy and local installer are project-authored code.
+No external icons, packages, UI assets, network endpoint or telemetry are added.
+The separately built helper reuses the existing attributed SMC decoder; protocol
+investigation used Stats revision d31a662624eec1fd59239ecb4142cfbac1a37d72 under
+its verified MIT license. No upstream writer or helper code is incorporated.
+The app and helper use macOS public XPC/code-signing/power APIs and hardened-runtime
+signatures. Actual administrator installation and hardware testing require the
+separate review documented in docs/FAN_CONTROL.md. Existing notices remain intact.

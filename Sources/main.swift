@@ -213,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quotaClient.onDeviceLogin = { [weak self] url, code in self?.accountPresenter.showDeviceLogin(url: url, code: code) }
         quotaClient.onCredentialRemovalFailure = { [weak self] in self?.accountPresenter.showRemovalFailure() }
         let workspace = NSWorkspace.shared.notificationCenter
-        accountObservers.append(workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.suspend(); self?.panel.resetAdviceHistory() })
+        accountObservers.append(workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.suspend(); self?.panel.resetAdviceHistory(); self?.panel.suspendFanControl() })
         accountObservers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.quotaClient.startSavedConnection() })
         quotaClient.startSavedConnection()
         codexMonitor.start()
@@ -339,6 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         panel.suspendAdvice()
+        panel.closeFanControlConnection()
         menuContent.stop()
         codexMonitor.stop()
         resetNotifications.stop()

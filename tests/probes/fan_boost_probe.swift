@@ -11,7 +11,7 @@ enum FanBoostProbe {
         session.confirmAutomatic(at: 110)
         precondition(session.start(at: 117) == nil, "Stale automatic evidence must not enable a boost")
         session.confirmAutomatic(at: 120)
-        guard case .boostToHardwareMaximum(let id) = session.start(at: 120) else { fatalError("Expected one lease") }
+        guard case .beginCooling(let id) = session.start(at: 120) else { fatalError("Expected one lease") }
         precondition(session.start(at: 121) == nil && session.deadline == 720)
         precondition(session.confirmBoost(lease: UUID(), at: 121) == nil && session.phase == .starting)
         precondition(session.confirmBoost(lease: id, at: 121) == nil && session.phase == .boosting)
@@ -34,7 +34,7 @@ enum FanBoostProbe {
         for reason in ["cancel", "sleep", "app exit", "connection loss", "hardware error"] {
             var fixture = FanBoostSession()
             fixture.confirmAutomatic(at: 10)
-            guard case .boostToHardwareMaximum(let lease) = fixture.start(at: 10) else { fatalError(reason) }
+            guard case .beginCooling(let lease) = fixture.start(at: 10) else { fatalError(reason) }
             precondition(fixture.restore() == .restoreAppleAutomatic(lease), reason)
             precondition(fixture.confirmBoost(lease: lease, at: 11) == .restoreAppleAutomatic(lease), "Late startup after \(reason)")
             precondition(fixture.phase == .restoring && fixture.start(at: 12) == nil)
@@ -42,12 +42,12 @@ enum FanBoostProbe {
         for invalidTime in [Double.nan, .infinity, -1, 9, 16.01] {
             var fixture = FanBoostSession()
             fixture.confirmAutomatic(at: 10)
-            guard case .boostToHardwareMaximum(let lease) = fixture.start(at: 10) else { fatalError() }
+            guard case .beginCooling(let lease) = fixture.start(at: 10) else { fatalError() }
             precondition(fixture.heartbeat(lease: lease, at: invalidTime) == .restoreAppleAutomatic(lease), "Invalid clock or expired heartbeat must restore")
         }
         var pending = FanBoostSession()
         pending.confirmAutomatic(at: 10)
-        guard case .boostToHardwareMaximum(let pendingID) = pending.start(at: 10) else { fatalError() }
+        guard case .beginCooling(let pendingID) = pending.start(at: 10) else { fatalError() }
         precondition(pending.heartbeat(lease: pendingID, at: 16) == nil)
         precondition(pending.confirmBoost(lease: pendingID, at: 18) == .restoreAppleAutomatic(pendingID), "Startup timeout")
         print("PASS fan boost policy (synthetic): fixed 600s lease, fresh auto evidence, external-owner refusal, heartbeat/start timeout, cancel/sleep/disconnect intents, stale replies, confirmed recovery. No hardware writes or crash-recovery proof.")

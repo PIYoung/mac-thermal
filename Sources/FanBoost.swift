@@ -2,15 +2,15 @@ import Foundation
 
 /// Safety policy for the proposed privileged service. This type performs no I/O.
 /// A future service must enforce this policy independently of the UI process.
-/// The shipping app remains unconfigured until a separately reviewed transport
-/// and installation path are implemented. No permission is inferred from RPM.
+/// No permission is inferred from RPM. Installation and hardware tests require
+/// their own explicit review.
 struct FanBoostSession {
     enum Phase: Equatable {
         case unconfigured, automatic, externalControl
         case starting, boosting, restoring, recoveryFailed
     }
     enum Command: Equatable {
-        case boostToHardwareMaximum(UUID)
+        case beginCooling(UUID)
         case restoreAppleAutomatic(UUID)
     }
     static let maximumDuration: TimeInterval = 600
@@ -24,6 +24,11 @@ struct FanBoostSession {
     private var automaticConfirmedAt: TimeInterval?
 
     var ownsLease: Bool { leaseID != nil }
+
+    mutating func recoverOwnedLease(_ id: UUID) {
+        phase = .restoring; leaseID = id; deadline = nil
+        lastHeartbeat = nil; startDeadline = nil; automaticConfirmedAt = nil
+    }
 
     /// Call only after an authenticated service reports all fans in automatic
     /// mode and valid hardware limits. Unknown or partial data cannot enable it.
@@ -44,7 +49,7 @@ struct FanBoostSession {
         return now >= confirmed && now - confirmed <= Self.heartbeatTimeout
     }
 
-    /// No RPM or duration is accepted from the client. Repeated requests cannot
+    /// Hardware validates the separately selected RPM. Repeated requests cannot
     /// extend the lease. The deadline starts before the first hardware write.
     mutating func start(at now: TimeInterval) -> Command? {
         guard canStart(at: now) else { return nil }
@@ -52,7 +57,7 @@ struct FanBoostSession {
         leaseID = id; deadline = now + Self.maximumDuration
         startDeadline = now + 8; lastHeartbeat = now; lastTime = now
         phase = .starting; automaticConfirmedAt = nil
-        return .boostToHardwareMaximum(id)
+        return .beginCooling(id)
     }
 
     /// Only a matching lease may acknowledge startup. Late replies cannot

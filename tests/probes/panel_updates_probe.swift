@@ -645,7 +645,25 @@ enum PanelUpdatesProbe {
             precondition(panel.probeFanControlIsVisible)
             precondition(panel.probeFanControlButtonFits, "Fan entry must fit in all languages")
             precondition(panel.probeFanControlView.probeControlsDisabled, "No hardware commands before helper approval")
-            precondition(panel.probeFanControlView.probeTextFits, "Fan control translations must fit")
+            precondition(panel.probeFanControlView.probeTextFits, "Fan control translations must fit: \(language) \(panel.probeFanControlView.probeTextOverflows)")
+            precondition(panel.probeFanControlView.probeBackMatchesCleanup, "Back must match Disk cleanup as ‹ CPU")
+            var chosen: [Int] = []
+            panel.probeFanControlView.onBoost = { chosen.append($0) }
+            let ready = FanControlWire.Reply(serviceID: UUID(), revision: 1, state: .automatic, issue: .none,
+                fans: [.init(actual: 1540, minimum: 1000, maximum: 4900)])
+            panel.probeFanControlView.update(rpms: [1540], reply: ready, canStart: true)
+            precondition(panel.probeFanControlView.probeTarget == 4900)
+            panel.probeFanControlView.probeChooseRPM(1500)
+            precondition(panel.probeFanControlView.probeTarget == 1600)
+            panel.probeFanControlView.probeChooseRPM(2500)
+            panel.probeFanControlView.probeStart()
+            precondition(chosen == [2500], "Selected RPM must reach the callback")
+            precondition(panel.probeFanControlView.probeTextFits)
+            let active = FanControlWire.Reply(serviceID: UUID(), revision: 2, state: .active, issue: .none,
+                fans: [.init(actual: 2501, minimum: 1000, maximum: 4900)], lease: UUID(), rpm: 2500, remaining: 372)
+            panel.probeFanControlView.update(rpms: [2501], reply: active)
+            precondition(panel.probeFanControlView.probeTarget == 2500 && panel.probeFanControlView.probeTextFits)
+            panel.probeFanControlView.update(rpms: [1540])
             checkContentBounds(panel.view)
             for values: [Double?]? in [nil, [], [nil], [1000], [1000, 1200]] {
                 panel.probeFanControlView.update(rpms: values)
