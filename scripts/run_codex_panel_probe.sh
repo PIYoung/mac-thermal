@@ -22,7 +22,7 @@ xcrun swiftc -O -D PANEL_UPDATES_PROBE -target arm64-apple-macosx14.0 \
   "$check_dir/ProbeModels.swift" "$source_dir/MenuBarPreferences.swift" \
   "$source_dir/Uptime.swift" "$source_dir/CPUUsageHistory.swift" "$source_dir/LiquidTabs.swift" \
   "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" \
-  "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" "$source_dir/Panel.swift" "$source_dir/CodexModels.swift" "$source_dir/CodexPanel.swift" \
+  "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" "$source_dir/FanControlView.swift" "$source_dir/Panel.swift" "$source_dir/CodexModels.swift" "$source_dir/CodexPanel.swift" \
   "$project_dir/tests/probes/codex_panel_probe.swift" \
   -Xlinker -weak_framework -Xlinker FoundationModels -framework AppKit -framework QuartzCore -o "$check_dir/codex-panel-probe"
 "$check_dir/codex-panel-probe" "$@"

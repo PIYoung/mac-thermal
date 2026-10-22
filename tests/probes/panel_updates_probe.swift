@@ -633,12 +633,84 @@ enum PanelUpdatesProbe {
         print("Fan UI passed: unavailable/absent/stopped/partial/running, four languages, fixed bounds, selected-tab updates")
     }
 
+    #if PANEL_UPDATES_PROBE
+    private static func fanControlChecks(defaults: UserDefaults) {
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults)
+            let panel = PanelController(defaults: defaults)
+            panel.probeSetVisible(true)
+            panel.probeSelectTab(0)
+            panel.apply(sample(10))
+            panel.probeOpenFanControl()
+            precondition(panel.probeFanControlIsVisible)
+            precondition(panel.probeFanControlButtonFits, "Fan entry must fit in all languages")
+            precondition(panel.probeFanControlView.probeControlsDisabled, "No hardware commands before helper approval")
+            precondition(panel.probeFanControlView.probeTextFits, "Fan control translations must fit")
+            checkContentBounds(panel.view)
+            for values: [Double?]? in [nil, [], [nil], [1000], [1000, 1200]] {
+                panel.probeFanControlView.update(rpms: values)
+                precondition(!panel.probeFanControlView.probeRPM.isEmpty)
+            }
+            panel.probeCloseFanControl()
+            precondition(!panel.probeFanControlIsVisible)
+            checkContentBounds(panel.view)
+            panel.probeOpenFanControl()
+            panel.probeToggleSettings()
+            precondition(!panel.probeFanControlIsVisible)
+            panel.probeToggleSettings()
+            panel.probeOpenFanControl()
+            panel.probeSelectTab(1)
+            precondition(!panel.probeFanControlIsVisible)
+            checkContentBounds(panel.view)
+        }
+        L10n.setLanguage(.korean, defaults: defaults)
+        if let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--fan-preview=") }) {
+            let folder = URL(fileURLWithPath: String(argument.dropFirst("--fan-preview=".count)))
+            try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for language in AppLanguage.allCases {
+                for name in [NSAppearance.Name.aqua, .darkAqua] {
+                    L10n.setLanguage(language, defaults: defaults)
+                    let panel = PanelController(defaults: defaults)
+                    panel.probeSetVisible(true); panel.probeSelectTab(0)
+                    var reading = sample(20); reading.fans = FanSnapshot(rpms: [1540])
+                    panel.apply(reading); panel.probeOpenFanControl()
+                    let host = panel.view
+                    let canvas: NSView
+                    if #available(macOS 26.0, *),
+                       let glass = host.subviews.first(where: { $0 is NSGlassEffectView }) as? NSGlassEffectView,
+                       let content = glass.contentView {
+                        glass.contentView = nil; content.removeFromSuperview(); canvas = content
+                    } else { canvas = host }
+                    let appearance = NSAppearance(named: name)!
+                    let backdrop = NSVisualEffectView(frame: NSRect(origin: .zero, size: PanelController.surfaceSize))
+                    backdrop.material = .popover; backdrop.blendingMode = .withinWindow; backdrop.state = .active
+                    canvas.frame = backdrop.bounds; backdrop.addSubview(canvas)
+                    let window = NSWindow(contentRect: backdrop.bounds, styleMask: .borderless, backing: .buffered, defer: false)
+                    window.isReleasedWhenClosed = false
+                    window.appearance = appearance; backdrop.appearance = appearance; window.contentView = backdrop
+                    backdrop.layoutSubtreeIfNeeded(); backdrop.displayIfNeeded()
+                    let image = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 340, pixelsHigh: 420, bitsPerSample: 8,
+                        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+                    image.size = backdrop.bounds.size
+                    backdrop.cacheDisplay(in: backdrop.bounds, to: image)
+                    let suffix = name == .aqua ? "light" : "dark"
+                    try! image.representation(using: .png, properties: [:])!.write(to: folder.appendingPathComponent("fan-\(language.rawValue)-\(suffix).png"))
+                    window.close()
+                }
+            }
+            L10n.setLanguage(.korean, defaults: defaults)
+        }
+        print("PASS fan UI: four languages, unchanged panel bounds, unconfigured controls disabled, navigation, unknown/fanless/RPM states; synthetic fixtures only")
+    }
+    #endif
+
     static func main() {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         #if PANEL_UPDATES_PROBE
         withDefaults { defaults in componentTemperatureChecks(defaults: defaults) }
         withDefaults { defaults in fanChecks(defaults: defaults) }
+        withDefaults { defaults in fanControlChecks(defaults: defaults) }
         selectionChecks()
         surfaceHitChecks()
         withDefaults { defaults in groupedWindowChecks(defaults: defaults) }

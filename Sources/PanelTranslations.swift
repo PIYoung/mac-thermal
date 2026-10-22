@@ -3,6 +3,13 @@ import Foundation
 // Original translations for Mac Thermal. Entries are English, Japanese, Simplified Chinese.
 extension L10n {
     static let panelTranslations: [String: [String]] = [
+        "팬 제어": ["Fan control", "ファン制御", "风扇控制"],
+        "설정 전 · 팬 상태 읽기 전용": ["Not set up · RPM monitoring only", "未設定 · 回転数の読み取りのみ", "未设置 · 仅读取转速"],
+        "Apple 자동": ["Apple automatic", "Apple 自動", "Apple 自动"],
+        "10분 냉각 강화": ["Boost cooling for 10 min", "10分間の冷却強化", "增强散热 10 分钟"],
+        "최대 RPM · 10분 후 자동 복귀": ["Maximum RPM · restore auto after 10 min", "最大RPM · 10分後に自動制御へ復帰", "最高转速 · 10分钟后恢复自动"],
+        "실제 제어는 관리자 도우미 설치 승인 후 연결해요. 현재 제어 모드는 확인되지 않았어요.": ["Control needs an approved administrator helper. The current control mode is unverified.", "制御には承認済みの管理者ヘルパーが必要です。現在の制御モードは未確認です。", "控制需先批准安装管理员辅助程序。当前控制模式尚未确认。"],
+        "관리자 도우미 연결 전에는 팬 설정을 바꾸지 않아요": ["Fan settings stay untouched until a helper is connected", "ヘルパー接続前はファン設定を変更しません", "连接辅助程序前不会更改风扇设置"],
         "macOS가 위급한 열 압박을 보고해 AI를 중단했어요": ["AI paused: macOS reports critical thermal pressure", "macOSの危険な熱負荷によりAIを停止しました", "macOS报告严重热压力，已停止AI"],
         "macOS의 심각한 열 압박이 10초 이어져 AI를 쉬고 있어요": ["AI paused: serious macOS thermal pressure persisted for 10s", "macOSの高い熱負荷が10秒続いたためAIを休止しています", "macOS高热压力持续10秒，已暂停AI"],
         "CPU 또는 GPU의 고온이 60초 지속돼 AI를 쉬고 있어요": ["AI paused: CPU or GPU stayed hot for 60s", "CPUまたはGPUの高温が60秒続いたためAIを休止しています", "CPU或GPU高温持续60秒，已暂停AI"],

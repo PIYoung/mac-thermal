@@ -15,6 +15,14 @@ License verified 2026-10-15:
 https://github.com/exelban/stats/blob/v3.0.21/LICENSE
 License file revision: 81af45661c05278f2c2495f5a07d6f8ee0db7443
 
+Additional fan-control protocol investigation (2026-10-22):
+https://github.com/exelban/stats/blob/d31a662624eec1fd59239ecb4142cfbac1a37d72/SMC/smc.swift
+MIT license reverified at the same pinned revision; license file unchanged:
+https://github.com/exelban/stats/blob/d31a662624eec1fd59239ecb4142cfbac1a37d72/LICENSE
+The developer-only numeric preflight reuses our existing SMC decoder. The new
+UI and lease policy are original code. No upstream fan writer or privileged
+helper code is incorporated or bundled in this checkpoint.
+
 Additional copyright notices preserved from the referenced source files:
 SMC/smc.swift:
 Copyright © 2021 Serhiy Mytrovtsiy. All rights reserved.

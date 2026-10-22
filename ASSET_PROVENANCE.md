@@ -49,3 +49,12 @@ The AI header button uses an original blue-to-purple gradient with high-contrast
 CPU animation styles (wave, pinwheel, bouncing balls, radar, pistons, conveyor, hourglass and pendulum) are original Core Graphics geometry and trigonometric motion authored in this project. They add no external assets, copied runner sprites, fonts, packages, timer or sensor access. Existing rhythm bars and orbiting dots retain their saved identifiers.
 
 AI reliability updates use original duration tracking, Foundation sentence segmentation and the existing Apple Foundation Models error types. They add no model, external package, data recipient, permission or telemetry. The model remains on-device and receives only the existing numeric report and trusted guidance.
+
+Fan-control preparation (2026-10-22): the compact entry, fixed-size setup view,
+four-language text and deterministic lease policy are original AppKit/Foundation
+code. They add no icons, external assets, package, timer, administrator helper or
+fan writer. Buttons remain disabled pending the separate security review in
+docs/FAN_CONTROL.md. The optional developer-only read-only preflight reuses the
+existing attributed SMC decoder; protocol investigation used Stats revision
+d31a662624eec1fd59239ecb4142cfbac1a37d72 under its verified MIT license. Existing
+copyright and MIT notices remain intact.

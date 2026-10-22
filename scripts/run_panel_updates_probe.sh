@@ -5,13 +5,15 @@ source_dir="$project_dir/Sources"
 build_dir="$project_dir/build/panel-updates-check"
 benchmark=false
 baseline_panel=""
+fan_preview=""
 while (( $# )); do
   case "$1" in
     --benchmark) benchmark=true; shift ;;
+    --fan-preview=*) fan_preview="$1"; shift ;;
     --baseline-panel)
       (( $# >= 2 )) || { print -u2 -- "--baseline-panel requires a local Panel.swift path"; exit 2; }
       baseline_panel="$2"; shift 2 ;;
-    *) print -u2 -- "Usage: $0 [--benchmark [--baseline-panel /path/to/Panel.swift]]"; exit 2 ;;
+    *) print -u2 -- "Usage: $0 [--benchmark [--baseline-panel /path/to/Panel.swift]] [--fan-preview=/output/folder]"; exit 2 ;;
   esac
 done
 if [[ -n "$baseline_panel" && "$benchmark" != true ]]; then
@@ -40,7 +42,7 @@ common_sources=(
 )
 xcrun swiftc -O -D PANEL_UPDATES_PROBE -target arm64-apple-macosx14.0 \
   -module-cache-path "$build_dir/module-cache" "${common_sources[@]}" \
-  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" "$source_dir/Panel.swift" "$source_dir/DashboardLayout.swift" "$source_dir/DashboardWindow.swift" "$source_dir/PanelPresentationRequest.swift" \
+  "$source_dir/DiskCleanup.swift" "$source_dir/DiskCleanupView.swift" "$source_dir/HealthAdvice.swift" "$source_dir/OnDeviceAdvice.swift" "$source_dir/HealthAdviceView.swift" "$source_dir/FanControlView.swift" "$source_dir/Panel.swift" "$source_dir/DashboardLayout.swift" "$source_dir/DashboardWindow.swift" "$source_dir/PanelPresentationRequest.swift" \
   -Xlinker -weak_framework -Xlinker FoundationModels -framework AppKit -framework QuartzCore -o "$build_dir/panel-updates-probe"
 if [[ "$benchmark" == true ]]; then
   if [[ -n "$baseline_panel" ]]; then
@@ -52,5 +54,5 @@ if [[ "$benchmark" == true ]]; then
   fi
   "$build_dir/panel-updates-probe" --benchmark
 else
-  "$build_dir/panel-updates-probe"
+  "$build_dir/panel-updates-probe" ${fan_preview:+"$fan_preview"}
 fi

@@ -496,6 +496,14 @@ final class PanelController: NSViewController {
     private let adviceMonitor = HealthAdviceMonitor()
     private let adviceEngine: OnDeviceAdviceGenerating
     private var showingAdvice = false
+    private var showingFanControl = false
+    private let fanControlContent = FanControlView(frame: NSRect(x: 0, y: 0, width: 308, height: 277))
+    private lazy var fanControlButton: NSButton = {
+        let button = NSButton(title: L10n.text("팬 제어"), target: self, action: #selector(openFanControl))
+        button.bezelStyle = .rounded; button.controlSize = .small
+        button.font = .systemFont(ofSize: 9, weight: .medium)
+        return button
+    }()
     private lazy var adviceContent = HealthAdviceView(frame: NSRect(x: 0, y: 0, width: 308, height: 277), engine: adviceEngine)
     private lazy var adviceButton: NSButton = {
         let button = NSButton(frame: .zero)
@@ -807,6 +815,8 @@ final class PanelController: NSViewController {
         place(diskMonitorView, in: tabViews[3], 0, 0, 308, 277)
         buildDisk(in: diskMonitorView)
         buildNetwork(in: tabViews[4])
+        place(fanControlContent, in: canvas, 16, 88, 308, 277)
+        fanControlContent.close = { [weak self] in self?.closeFanControl() }
         place(adviceContent, in: canvas, 16, 88, 308, 277)
         adviceContent.requestLatest = { [weak self] in self?.openAdvice() }
         adviceContent.performAction = { [weak self] action in
@@ -992,6 +1002,7 @@ final class PanelController: NSViewController {
 
     @objc private func toggleMenuBarSettings() {
         suspendAdvice()
+        showingFanControl = false
         showingMenuBarSettings.toggle()
         if showingMenuBarSettings {
             menuBarPreferences = .load(defaults: tabDefaults)
@@ -1018,7 +1029,9 @@ final class PanelController: NSViewController {
         thermalDetail.alignment = .right
         place(thermalDetail, in: thermal, 133, 10, 161, 16)
         place(fanIcon, in: thermal, 13, 32, 12, 12)
-        place(fanDetail, in: thermal, 33, 29, 261, 17)
+        fanDetail.lineBreakMode = .byTruncatingTail
+        place(fanDetail, in: thermal, 33, 29, 181, 17)
+        place(fanControlButton, in: thermal, 219, 26, 78, 22)
         place(cpuRanking, in: content, 0, 157, 308, 120)
     }
 
@@ -1151,22 +1164,34 @@ final class PanelController: NSViewController {
         tabs.isHidden = showingMenuBarSettings
         settingsScroll.isHidden = !showingMenuBarSettings
         adviceContent.isHidden = showingMenuBarSettings || !showingAdvice
-        adviceButton.isHidden = showingMenuBarSettings
+        adviceButton.isHidden = showingMenuBarSettings || showingFanControl
+        fanControlContent.isHidden = showingMenuBarSettings || !showingFanControl
         updateAdviceButton()
         menuBarSettingsButton.contentTintColor = showingMenuBarSettings ? PanelColor.blue : PanelColor.secondary
         localizedAccessibilityLabel(menuBarSettingsButton, showingMenuBarSettings ? "Mac Thermal 설정 닫기" : "Mac Thermal 설정 열기")
         for (index, content) in tabViews.enumerated() {
             content.layer?.removeAnimation(forKey: "tabContentReveal")
-            content.isHidden = showingMenuBarSettings || showingAdvice || index != tabs.selectedSegment
+            content.isHidden = showingMenuBarSettings || showingAdvice || showingFanControl || index != tabs.selectedSegment
         }
         if presentationIsVisible { presentLatestSnapshot() }
     }
 
     @objc private func changeTab() {
+        showingFanControl = false
         suspendAdvice()
         guard Self.tabIdentifiers.indices.contains(tabs.selectedSegment) else { return }
         tabDefaults.set(Self.tabIdentifiers[tabs.selectedSegment], forKey: tabDefaultsKey)
         showSelectedTab()
+    }
+
+    @objc private func openFanControl() {
+        guard !showingMenuBarSettings, tabs.selectedSegment == 0 else { return }
+        suspendAdvice(); showingFanControl = true
+        fanControlContent.update(rpms: latestSnapshot.fans.rpms)
+        showSelectedTab()
+    }
+    private func closeFanControl() {
+        showingFanControl = false; showSelectedTab()
     }
 
     @objc private func toggleAdvice() {
@@ -1188,6 +1213,7 @@ final class PanelController: NSViewController {
     }
     private func openAdvice() {
         guard !showingMenuBarSettings, let topic = AdviceTopic(rawValue: tabs.selectedSegment) else { return }
+        showingFanControl = false
         showingAdvice = true
         showSelectedTab()
         adviceContent.show(adviceMonitor.report(topic, sample: latestSnapshot))
@@ -1197,7 +1223,7 @@ final class PanelController: NSViewController {
         if isViewLoaded {
             adviceContent.suspend(); adviceContent.isHidden = true
             updateAdviceButton()
-            for (index, content) in tabViews.enumerated() { content.isHidden = showingMenuBarSettings || index != tabs.selectedSegment }
+            for (index, content) in tabViews.enumerated() { content.isHidden = showingMenuBarSettings || showingFanControl || index != tabs.selectedSegment }
         }
     }
     func resetAdviceHistory() { suspendAdvice(); adviceMonitor.reset() }
@@ -1279,6 +1305,7 @@ final class PanelController: NSViewController {
         uptimeLabel.stringValue = SystemUptime.label(sample.uptime)
         updated.stringValue = L10n.format("2초마다 갱신  ·  %@", timeFormatter.string(from: sample.time))
         guard !showingMenuBarSettings else { return }
+        if showingFanControl { fanControlContent.update(rpms: sample.fans.rpms); return }
         if showingAdvice { adviceContent.receiveSafety(sample, monitor: adviceMonitor); return }
         switch tabs.selectedSegment {
         case 0: applyCPU(sample)
@@ -1311,6 +1338,7 @@ final class PanelController: NSViewController {
         thermalDetail.toolTip = thermalDetail.stringValue + "\n" + sample.thermal.detail + "\n" + (cpuTemp.toolTip ?? "")
         thermalDetail.setAccessibilityLabel(thermalDetail.toolTip)
         thermalDetail.textColor = sample.cpuWarning == .normal ? PanelColor.secondary : sample.cpuWarning.color
+        fanControlButton.title = L10n.text("팬 제어")
         fanDetail.stringValue = sample.fans.compact
         fanDetail.toolTip = sample.fans.detail + "\n" + L10n.text("SMC가 보고한 실제 팬 회전수 · 읽기 전용 · 미지원 값은 추정하지 않습니다")
         fanDetail.setAccessibilityLabel(fanDetail.toolTip)
@@ -1551,6 +1579,11 @@ extension PanelController {
     }
     var probeMotionControlEnabled: Bool { menuBarMotionSwitch.isEnabled }
     var probeIntensityControlEnabled: Bool { motionIntensitySlider.isEnabled }
+    func probeOpenFanControl() { fanControlButton.performClick(nil) }
+    func probeCloseFanControl() { closeFanControl() }
+    var probeFanControlIsVisible: Bool { showingFanControl && !fanControlContent.isHidden }
+    var probeFanControlView: FanControlView { fanControlContent }
+    var probeFanControlButtonFits: Bool { (fanControlButton.cell?.cellSize.width ?? 0) <= fanControlButton.frame.width }
     func probeOpenDiskCleanup() { diskCleanupButton.performClick(nil) }
     func probeCloseDiskCleanup() { closeDiskCleanup() }
     var probeDiskCleanupView: DiskCleanupView? { diskCleanupView }
