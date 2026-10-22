@@ -8,9 +8,13 @@ the first immediate read still showed automatic, while a later independent read
 showed manual mode and approximately 3,000 RPM. The original helper incorrectly
 cleared recovery too early. A user-run one-shot mode-0 recovery restored Apple
 automatic; independent later reads confirmed mode 0 at approximately 1,000 RPM.
-The app was stopped. The fix below is covered by delayed-state fixtures but has
-not yet been installed or physically retested. This remains a local development
-feature, not a verified fan-control release.
+After separately approved reinstallation, the corrected build passed physical
+3,000-RPM start/readback, explicit cancellation, normal app termination recovery,
+hidden-panel operation and the full ten-minute timeout on Mac16,11 / macOS 26.5.2.
+Automatic mode was independently confirmed and the app left running. See
+[the attended test report](FAN_CONTROL_TESTS.md) for times, exact build hashes and
+remaining untested paths. This remains a local development build; these tests do
+not establish compatibility across Macs or distribution readiness.
 
 The CPU entry opens a fixed 308×277 body inside the existing 340×420 panel.
 There is no repeated page title. The borderless blue `‹ CPU` back control matches
@@ -49,7 +53,8 @@ starting a fixed 10-minute cooling session; use Apple automatic to end it early.
   automatic read when a start may still be in flight.
 - Owned recovery always sends per-fan mode 0, even when an immediate read already
   says automatic. It repeats at the existing two-second cadence and retains the
-  durable journal until all fans remain automatic over at least ten seconds.
+  durable journal until at least six separated observations show all fans
+  automatic over at least ten seconds.
   A late manual read resets that interval. Ten seconds is a conservative local
   policy, not a documented firmware guarantee; actual tests remain necessary.
 - Automatic mode must be read back on every fan before recovery is reported.
