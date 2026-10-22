@@ -1,5 +1,20 @@
 # Releases
 
+## v2.16.0 — 2026-10-22
+
+Optional experimental ten-minute fan control. Build 60.
+
+- Add a compact CPU fan page with a 100-RPM picker, hardware/current-speed bounds and Disk cleanup-style `‹ CPU` navigation. Select a target before starting; Apple automatic ends the session early.
+- Add a separately reviewed, manually installed root helper authenticated with exact hardened app/helper code hashes and UID. Basic monitoring needs no helper. Downloading or launching the app never installs it or starts cooling.
+- Keep a fixed 600-second lease, independent watchdog and durable owned recovery record before writes. Confirm startup on later samples; always request per-fan automatic mode during owned recovery and retain the journal until at least six separated automatic observations span ten seconds. No global SMC test/unlock writes.
+- Include versioned, generic Fan Tools in the DMG and a separate ZIP. Prepare pins locally for the exact chosen app; no personal manifest, recovery record or credential is distributed. Keep matching old tools and uninstall the old helper before changing the app. No automatic privileged update is added.
+- On one Mac16,11 / macOS 26.5.2, physically verify 3,000-RPM control, manual cancellation, app termination recovery, hidden-panel operation and the full ten-minute timeout. The observed implementation build and exact hashes are recorded in docs/FAN_CONTROL_TESTS.md; build 60 changes release metadata, documentation and packaging without changing fan-control source. Physical sleep/wake, helper crash/restart and other Macs remain unverified.
+- Refresh all four READMEs and setup/security documentation. Preserve menus, compact panels, independent warnings, AI privacy, optional Codex integration and MIT notices. New fan/tool code is project-authored; no dependency or developer data collection is added.
+
+Fixed RPM can provide too little cooling if load later rises and can increase noise or power use. Thermal/pressure/temperature/sleep/disconnect software safeguards are not hardware guarantees. Unsupported devices remain read only.
+
+Apple Silicon · macOS 14+. DMG, app ZIP, optional fan-tools ZIP and SHA256SUMS. Community ad-hoc signatures; no Developer ID signing or Apple notarization. Made with OpenAI Codex and user feedback.
+
 ## v2.15.0 — 2026-10-21
 
 More reliable on-device AI guidance and ten CPU motion choices. Build 59.

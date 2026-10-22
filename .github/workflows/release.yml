@@ -52,6 +52,7 @@ jobs:
           path: |
             dist/Mac-Thermal-${{ inputs.tag }}-arm64.dmg
             dist/Mac-Thermal-${{ inputs.tag }}-arm64.zip
+            dist/Mac-Thermal-${{ inputs.tag }}-fan-tools.zip
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 14

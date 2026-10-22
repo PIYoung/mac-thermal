@@ -6,7 +6,7 @@ case "${1:-}" in
   --skip-build) ;;
   --help|-h)
     print -- "Usage: zsh scripts/package-release.sh [--skip-build]"
-    print -- "Create an Apple Silicon DMG, ZIP, and SHA256SUMS in dist/."
+    print -- "Create an Apple Silicon DMG, app ZIP, optional fan-tools ZIP, and SHA256SUMS in dist/."
     exit 0 ;;
   *) print -u2 -- "Unknown option: $1"; exit 2 ;;
 esac
@@ -31,6 +31,49 @@ trap 'rm -rf -- "$stage_dir"' EXIT
 /usr/bin/ditto "$app_dir" "$stage_dir/Mac Thermal.app"
 ln -s /Applications "$stage_dir/Applications"
 cp "$project_dir/LICENSE" "$project_dir/THIRD_PARTY_NOTICES.txt" "$stage_dir/"
+# Copy only reviewed source templates/notices: no generated personal manifest,
+# app-path/UID pin, recovery journal, credential or auto-install entry point.
+/usr/bin/python3 - "$project_dir" "$stage_dir" "$dist_dir" "$version" <<'PYTOOLS'
+from pathlib import Path
+import re, shutil, sys, zipfile
+project, stage, dist = map(Path, sys.argv[1:4])
+version = sys.argv[4]
+folder = stage / f'Mac Thermal Fan Tools v{version}'
+files = ['scripts/prepare_fan_installation.py', 'Helper/install-template.py',
+         'Helper/uninstall-template.py', 'docs/FAN_CONTROL_SETUP.md',
+         'docs/FAN_CONTROL.md', 'docs/FAN_CONTROL_TESTS.md',
+         'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'SECURITY.md', 'AGENTS.md']
+for name in files:
+    destination = folder / name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(project / name, destination)
+    if destination.suffix == '.md':
+        def resolve_link(match):
+            target = match.group(1)
+            if ':' in target or target.startswith('#'): return match.group(0)
+            relative = target.split('#', 1)[0]
+            resolved = ((project / name).parent / relative).resolve()
+            try: key = str(resolved.relative_to(project))
+            except ValueError: return match.group(0)
+            if key in files or not resolved.is_file(): return match.group(0)
+            anchor = '#' + target.split('#', 1)[1] if '#' in target else ''
+            return '](https://github.com/PIYoung/mac-thermal/blob/v' + version + '/' + key + anchor + ')'
+        destination.write_text(re.sub(r'\]\(([^)]+)\)', resolve_link, destination.read_text()))
+(folder / 'Read Me.txt').write_text(
+    'OPTIONAL FAN CONTROL / 선택형 팬 제어 / 任意のファン制御 / 可选风扇控制\n'
+    'Copy this whole versioned folder to a writable location before preparation.\n'
+    'Review docs/FAN_CONTROL_SETUP.md (한국어 / English / 日本語 / 简体中文).\n'
+    'No installation runs automatically. Basic monitoring needs no root helper.\n'
+    'Keep this folder and its generated package for matching removal before updates.\n')
+archive = dist / f'Mac-Thermal-v{version}-fan-tools.zip'
+with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as output:
+    for file in sorted(folder.rglob('*')):
+        if file.is_file(): output.write(file, file.relative_to(stage))
+with zipfile.ZipFile(archive) as output:
+    if output.testzip() is not None: raise SystemExit('Fan tools ZIP integrity failed')
+    actual = {str(Path(x).relative_to(folder.name)) for x in output.namelist()}
+    if actual != set(files) | {'Read Me.txt'}: raise SystemExit('Unexpected fan tools payload')
+PYTOOLS
 cat > "$stage_dir/Read Me First.txt" <<'TEXT'
 Mac Thermal — Apple Silicon, macOS 14 or later
 
@@ -43,6 +86,12 @@ If macOS blocks it, you can review the source and build locally with Xcode 26+.
 
 The application defaults to Korean. Open the gear button to choose English,
 Japanese, or Simplified Chinese. It runs in the menu bar.
+
+Optional experimental fan control requires a separate, personally reviewed
+administrator installation. Copy the versioned Fan Tools folder to a writable
+location and read its docs/FAN_CONTROL_SETUP.md. Nothing installs automatically.
+Keep its matching generated package: remove the old helper before app updates.
+Basic monitoring needs no helper. No fanless/unsupported device control is implied.
 
 MIT license. Third-party notices are included beside this file and inside the app.
 TEXT
@@ -66,12 +115,14 @@ with zipfile.ZipFile(dist / f'{name}.zip') as archive:
     required = {'Mac Thermal.app/Contents/Info.plist',
                 'Mac Thermal.app/Contents/MacOS/MacThermal',
                 'Mac Thermal.app/Contents/Resources/LICENSE',
-                'Mac Thermal.app/Contents/Resources/THIRD_PARTY_NOTICES.txt'}
+                'Mac Thermal.app/Contents/Resources/THIRD_PARTY_NOTICES.txt',
+                'Mac Thermal.app/Contents/Resources/ASSET_PROVENANCE.md',
+                'Mac Thermal.app/Contents/Resources/local.mac-thermal.fan-helper',
+                'Mac Thermal.app/Contents/Resources/FanHelper.cdhash'}
     if not required.issubset(archive.namelist()):
         raise SystemExit('ZIP is missing required application files.')
 lines = []
-for suffix in ('dmg', 'zip'):
-    path = dist / f'{name}.{suffix}'
+for path in [dist / f'{name}.dmg', dist / f'{name}.zip', dist / f'{name[:-len("-arm64")]}-fan-tools.zip']:
     digest = hashlib.sha256()
     with path.open('rb') as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b''):
@@ -80,4 +131,4 @@ for suffix in ('dmg', 'zip'):
 (dist / 'SHA256SUMS').write_text(''.join(lines), encoding='utf-8')
 print(''.join(lines), end='')
 PY
-print -- "Release artifacts: $dist_dir/$artifact_name.dmg, $artifact_name.zip, SHA256SUMS"
+print -- "Release artifacts: $dist_dir/$artifact_name.dmg, $artifact_name.zip, Mac-Thermal-v${version}-fan-tools.zip, SHA256SUMS"

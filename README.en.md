@@ -4,7 +4,7 @@
 <p align="center"><a href="README.md">한국어</a> · <strong>English</strong> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ Download</strong></a> · <a href="RELEASES.md">Changelog</a></p>
 
-<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.15.0"><strong>v2.15.0</strong></a> · Ten CPU animations · More reliable on-device AI</p>
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.16.0"><strong>v2.16.0</strong></a> · Ten-minute cooling · Selectable RPM · Automatic return</p>
 
 ## Menu bar and panels
 
@@ -23,18 +23,18 @@
 - **Menu bar:** CPU temperature and usage, GPU usage, SSD read/write rates, network speeds and animated indicators.
 - **Click-open panel:** CPU, GPU, memory, SSD and network tabs, recent graphs, top three CPU/memory processes and system uptime.
 - **Temperatures and fans:** CPU/GPU/SSD temperatures, memory **proximity temperature**, independent warning colors, and fan status with actual RPM in the CPU panel. Sensor availability varies by device.
+- **Ten-minute cooling (experimental):** Choose RPM in 100-RPM steps under CPU → Fan control. A separately installed administrator helper controls fans for at most ten minutes, then returns to Apple automatic. Basic monitoring needs no helper.
 - **Guidance and AI help:** Review evidence and suggested actions for each resource tab. Supported macOS 26+ devices can generate short explanations with the Apple on-device model on request; unsupported models, sustained heat or generation errors show a reason and basic guidance.
 - **Codex:** A left companion shows local tokens today, input/output, cache reuse and model TOP 3. Optional account quota and activity summaries share a scrolling card layout with an original slim scrollbar.
 - **Disk cleanup:** Start a home scan without choosing a folder. Select candidates yourself, then confirm before moving them to Trash. Optional one-folder scanning remains available.
 - **Settings:** Choose metrics, ten CPU animation styles, motion and startup at login. Korean by default; English, Japanese and Simplified Chinese supported.
 
 <details>
-<summary>v2.15.0 — CPU motion and more reliable AI help</summary>
+<summary>v2.16.0 — Optional fan control</summary>
 
-- **CPU motion:** Choose Rhythm bars, Orbiting dots, Wave, Pinwheel, Bouncing balls, Radar, Pistons, Conveyor, Hourglass or Pendulum in Settings. Speed follows CPU usage; the motion toggle and macOS Reduce Motion are respected.
-- **AI help:** Brief temperature peaks no longer immediately stop a request. Sustained heat or critical thermal/memory pressure shows a reason and basic guidance. Explicit model-busy errors are retried once within a 45-second overall deadline. Citations use fixed evidence IDs; unsupported numeric sentences are filtered out.
-
-Requires supported macOS 26+ and ready Apple Intelligence. Only existing numeric measurements and app guidance reach the on-device model. There is no cloud fallback.
+- Select a target at or above current RPM and the hardware minimum, up to the hardware maximum. Keep the compact, title-free page and `‹ CPU` navigation matching Disk cleanup.
+- Confirm startup on later readings. Recheck automatic recovery for at least ten seconds and retain its recovery record if unconfirmed. Heat, thermal pressure, sensor errors and disconnects request automatic mode.
+- One Mac passed physical 3,000-RPM control, cancellation, app-exit recovery, hidden-panel operation and the full ten-minute timeout. Other Macs, physical sleep/wake and helper crash recovery remain unverified. [Test report](docs/FAN_CONTROL_TESTS.md)
 
 </details>
 
@@ -45,6 +45,10 @@ Requires supported macOS 26+ and ready Apple Intelligence. Only existing numeric
 3. Launch the app and click its menu bar indicators. Install a newer release to update.
 
 > This build is ad-hoc signed and not notarized by Apple. If macOS blocks it, build from source below instead of disabling security settings. Verify downloads against `SHA256SUMS`.
+
+**If a fan helper is already installed, remove it with its matching old tools before replacing the app.**
+
+**Fan control is a separate opt-in installation.** Use the versioned Fan Tools folder in the DMG or the release’s `fan-tools.zip`. Review the [setup, update and removal guide](docs/FAN_CONTROL_SETUP.md), then perform administrator installation yourself. Launching the app never installs the helper or starts fan control. A fixed RPM may provide too little cooling if load later rises, and can increase noise and power use.
 
 <details>
 <summary>Build and install from source</summary>
