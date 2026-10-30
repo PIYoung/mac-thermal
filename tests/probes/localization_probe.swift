@@ -190,11 +190,11 @@ enum LocalizationProbe {
             ("다음 측정부터 CPU 순위를 표시합니다", 11, 280),
             ("실제 점유 메모리", 9, 94),
             ("전체 CPU 기준", 9, 94),
-            ("CPU 프로세스 TOP 3", 11, 162),
-            ("메모리 프로세스 TOP 3", 11, 162),
+            ("CPU 앱 TOP 3", 11, 162),
+            ("메모리 앱 TOP 3", 11, 162),
             ("통신", 11, 53)
         ]
-        let semiboldKeys: Set<String> = ["CPU 애니메이션 스타일", "메뉴바 움직임", "움직임 강도", "로그인 시 자동 실행", "압축 메모리", "스왑 사용량", "내장 SSD", "사용 중인 메모리", "압박 정상", "압박 주의", "압박 높음", "CPU 프로세스 TOP 3", "메모리 프로세스 TOP 3", "통신"]
+        let semiboldKeys: Set<String> = ["CPU 애니메이션 스타일", "메뉴바 움직임", "움직임 강도", "로그인 시 자동 실행", "압축 메모리", "스왑 사용량", "내장 SSD", "사용 중인 메모리", "압박 정상", "압박 주의", "압박 높음", "CPU 앱 TOP 3", "메모리 앱 TOP 3", "통신"]
         var warnings: [String] = []
         for (key, fontSize, width) in contracts where tables[key] != nil {
             for language in AppLanguage.allCases {

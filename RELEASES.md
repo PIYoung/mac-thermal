@@ -1,5 +1,17 @@
 # Releases
 
+## v2.17.0 — 2026-10-30
+
+App-grouped CPU and memory rankings. Build 61.
+
+- Sum readable processes by their containing application bundle, including nested helpers and verified child processes. Keep separate app paths, uncertain ownership and shell-launched jobs separate; do not merge by process name.
+- Click a TOP 3 row to inspect its members, PIDs and CPU or physical footprint values inside the same compact card. Use the back button to return; panel dimensions and position stay fixed. Native scrolling draws only visible member rows.
+- Preserve CPU baseline/reset/PID-reuse handling, whole-machine CPU percentages, skipped-process counts, selected-tab updates and existing menu animations. Read executable-path/parent metadata only in local memory for grouping; no command arguments, file contents, persistence, AI input or external transmission.
+- Add synthetic grouping/member and four-language UI regressions. Existing fan helper policy and exact app/helper pinning remain unchanged; remove the matching old helper before installing the new app, then prepare/install a matching helper if desired.
+- Project-authored MIT code; no new package or asset dependency. Update the four localized READMEs and measurement documentation.
+
+Apple Silicon · macOS 14+. DMG, app ZIP, optional fan-tools ZIP and SHA256SUMS. Community ad-hoc signatures; no Developer ID signing or Apple notarization.
+
 ## v2.16.0 — 2026-10-22
 
 Optional experimental ten-minute fan control. Build 60.

@@ -4,7 +4,7 @@
 <p align="center"><a href="README.md">한국어</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <strong>简体中文</strong></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ 下载</strong></a> · <a href="RELEASES.md">更新记录</a></p>
 
-<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.16.0"><strong>v2.16.0</strong></a> · 10分钟冷却 · 自选RPM · 自动恢复</p>
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.17.0"><strong>v2.17.0</strong></a> · 应用 TOP 3 · 查看子进程</p>
 
 ## 菜单栏与面板
 
@@ -21,7 +21,7 @@
 ## 主要功能
 
 - **菜单栏：** CPU温度与使用率、GPU使用率、SSD读写、网络速度及动画指示器。
-- **点击面板：** CPU、GPU、内存、SSD、网络标签，近期图表，CPU/内存占用最高的3个进程及系统运行时长。
+- **点击面板：** CPU、GPU、内存、SSD、网络标签，近期图表，CPU/内存**应用 TOP 3**及子进程详情及系统运行时长。
 - **温度与风扇：** CPU/GPU/SSD温度、内存**周边温度**、各指标独立警告颜色，以及CPU面板中的风扇状态和实测RPM。传感器支持因设备而异。
 - **10分钟冷却（实验性）：** 在CPU → 风扇控制中按100 RPM步长选择目标。单独安装的管理员辅助程序最多控制10分钟，然后恢复Apple自动模式。基础监控不需要此辅助程序。
 - **状态指引与AI说明：** 各资源标签页提供测量依据和建议操作。支持的macOS 26及以上设备可按需使用Apple设备端模型生成简短说明；模型不支持、持续高温或生成出错时会显示原因与基本指引。

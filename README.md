@@ -4,7 +4,7 @@
 <p align="center"><strong>한국어</strong> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ 다운로드</strong></a> · <a href="RELEASES.md">업데이트</a></p>
 
-<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.16.0"><strong>v2.16.0</strong></a> · 10분 냉각 · RPM 선택 · 자동 복귀</p>
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.17.0"><strong>v2.17.0</strong></a> · 앱별 TOP 3 · 하위 프로세스 펼치기</p>
 
 ## 메뉴바와 패널
 
@@ -21,7 +21,7 @@
 ## 주요 기능
 
 - **메뉴바:** CPU 온도·사용률, GPU 사용률, SSD 읽기·쓰기, 네트워크 속도와 움직이는 지표.
-- **클릭 패널:** CPU·GPU·메모리·SSD·통신 탭, 최근 그래프, CPU·메모리 프로세스 TOP 3, 부팅 후 경과 시간.
+- **클릭 패널:** CPU·GPU·메모리·SSD·통신 탭, 최근 그래프, CPU·메모리 **앱별 TOP 3**와 하위 프로세스 보기, 부팅 후 경과 시간.
 - **온도와 팬:** CPU·GPU·SSD 온도와 메모리 **주변 온도**, 항목별 독립 경고색, CPU 패널의 팬 상태·실측 RPM. 센서 지원은 기기에 따라 다릅니다.
 - **10분 냉각 (실험적):** CPU → 팬 제어에서 100 RPM 단위로 선택합니다. 별도로 설치한 관리자 도우미가 최대 10분 제어하고 Apple 자동으로 복귀합니다. 기본 모니터링에는 도우미가 필요 없습니다.
 - **상태 안내·AI 설명:** 각 자원 탭에서 측정 근거와 해볼 일을 확인합니다. 지원되는 macOS 26+에서는 요청할 때만 Apple 온디바이스 모델로 짧게 설명하며, 모델 미지원·지속 고온·생성 오류 시에는 이유와 기본 안내를 제공합니다.

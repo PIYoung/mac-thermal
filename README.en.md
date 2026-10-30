@@ -4,7 +4,7 @@
 <p align="center"><a href="README.md">한국어</a> · <strong>English</strong> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a></p>
 <p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/latest"><strong>↓ Download</strong></a> · <a href="RELEASES.md">Changelog</a></p>
 
-<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.16.0"><strong>v2.16.0</strong></a> · Ten-minute cooling · Selectable RPM · Automatic return</p>
+<p align="center"><a href="https://github.com/PIYoung/mac-thermal/releases/tag/v2.17.0"><strong>v2.17.0</strong></a> · App-grouped TOP 3 · Inspect member processes</p>
 
 ## Menu bar and panels
 
@@ -21,7 +21,7 @@
 ## Features
 
 - **Menu bar:** CPU temperature and usage, GPU usage, SSD read/write rates, network speeds and animated indicators.
-- **Click-open panel:** CPU, GPU, memory, SSD and network tabs, recent graphs, top three CPU/memory processes and system uptime.
+- **Click-open panel:** CPU, GPU, memory, SSD and network tabs, recent graphs, **top three CPU/memory apps** with member-process details and system uptime.
 - **Temperatures and fans:** CPU/GPU/SSD temperatures, memory **proximity temperature**, independent warning colors, and fan status with actual RPM in the CPU panel. Sensor availability varies by device.
 - **Ten-minute cooling (experimental):** Choose RPM in 100-RPM steps under CPU → Fan control. A separately installed administrator helper controls fans for at most ten minutes, then returns to Apple automatic. Basic monitoring needs no helper.
 - **Guidance and AI help:** Review evidence and suggested actions for each resource tab. Supported macOS 26+ devices can generate short explanations with the Apple on-device model on request; unsupported models, sustained heat or generation errors show a reason and basic guidance.

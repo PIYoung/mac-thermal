@@ -15,7 +15,7 @@ enum LoginItemManager {
 enum PanelUpdatesProbe {
     private static let origin = Date(timeIntervalSince1970: 1_792_065_600)
 
-    private static func sample(_ index: Int, seconds: Double? = nil, gpu: GPUSnapshot? = nil, cpuTemperature: Double? = nil, ssdTemperature: Double = 42) -> Snapshot {
+    private static func sample(_ index: Int, seconds: Double? = nil, gpu: GPUSnapshot? = nil, cpuTemperature: Double? = nil, ssdTemperature: Double = 42, processes: ProcessSnapshot? = nil) -> Snapshot {
         let elapsed = seconds ?? Double(index * 2)
         let process = ResourceProcess(name: "Fixture \(index)", pid: 1_000 + index,
             cpuPercent: Double(index % 100), memoryBytes: Double(index + 1) * 1_024 * 1_024)
@@ -28,7 +28,7 @@ enum PanelUpdatesProbe {
                 memory: MemorySnapshot(totalBytes: 64 * 1_024 * 1_024 * 1_024,
                     usedBytes: Double(index + 1) * 256 * 1_024 * 1_024,
                     compressedBytes: 512 * 1_024 * 1_024, swapUsedBytes: 0, pressureLevel: 0),
-                processes: ProcessSnapshot(cpuTop: [process], memoryTop: [process], cpuReady: true,
+                processes: processes ?? ProcessSnapshot(cpuTop: [process], memoryTop: [process], cpuReady: true,
                     readableCount: 100 + index, skippedCount: 1, available: true),
                 disk: DiskSnapshot(totalBytes: 512_000_000_000,
                     availableBytes: 256_000_000_000 - Double(index) * 1_000_000_000,
@@ -371,6 +371,38 @@ enum PanelUpdatesProbe {
         precondition(window.frame == initialFrame && panel.probeSurfaceFrames == initialSurfaceFrames)
         precondition(PanelController.surfaceSize == NSSize(width: 340, height: 420))
         print("Resource tab migration/persistence, embedded rankings, selected-tab-only updates, hidden histories, settings/reopen, four-language bounds, and fixed frame checks passed")
+    }
+
+    private static func groupedRankingChecks(defaults: UserDefaults) {
+        for language in AppLanguage.allCases {
+            L10n.setLanguage(language, defaults: defaults)
+            let panel = PanelController(defaults: defaults)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: PanelController.size),
+                styleMask: .borderless, backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentViewController = panel
+            let member = ResourceProcess(name: "Example Helper", pid: 5001, cpuPercent: 12.5, memoryBytes: 1024 * 1024)
+            let group = ResourceProcess(name: "Example", pid: 5000, cpuPercent: 25, memoryBytes: 2 * 1024 * 1024,
+                processCount: 2, members: [member, ResourceProcess(name: "Example", pid: 5000, cpuPercent: 12.5, memoryBytes: 1024 * 1024)])
+            let fixture = sample(20, processes: ProcessSnapshot(cpuTop: [group], memoryTop: [group], cpuReady: true,
+                readableCount: 2, skippedCount: 0, available: true))
+            panel.probeSetVisible(true)
+            for memory in [false, true] {
+                panel.probeSelectTab(memory ? 2 : 0); panel.apply(fixture)
+                let frame = window.frame
+                panel.probeOpenRanking(memory: memory)
+                precondition(panel.probeRankingExpanded(memory: memory))
+                precondition(panel.probeRankingDetails(memory: memory).count == 2)
+                precondition(panel.probeRankingDetails(memory: memory).first!.contains("5000"))
+                panel.apply(fixture)
+                precondition(panel.probeRankingExpanded(memory: memory))
+                precondition(window.frame == frame)
+                panel.probeCloseRanking(memory: memory)
+                precondition(!panel.probeRankingExpanded(memory: memory))
+                checkContentBounds(panel.view)
+            }
+            window.close()
+        }
+        print("Grouped ranking UI: four locales, CPU/memory member navigation, live refresh and fixed frame passed")
     }
 
     private static func codexRecordsSettingsChecks(defaults: UserDefaults) {
@@ -736,6 +768,7 @@ enum PanelUpdatesProbe {
         withDefaults { defaults in componentTemperatureChecks(defaults: defaults) }
         withDefaults { defaults in fanChecks(defaults: defaults) }
         withDefaults { defaults in fanControlChecks(defaults: defaults) }
+        withDefaults { defaults in groupedRankingChecks(defaults: defaults) }
         selectionChecks()
         surfaceHitChecks()
         withDefaults { defaults in groupedWindowChecks(defaults: defaults) }

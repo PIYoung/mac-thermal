@@ -414,14 +414,25 @@ private final class ResourceBadge: FlippedView {
     }
 }
 
-private final class ProcessRankingCard: GlassCard {
+private final class ProcessRankingCard: GlassCard, NSTableViewDataSource {
     private let names = (0..<3).map { _ in text("", size: 11, weight: .medium) }
     private let values = (0..<3).map { _ in text("", size: 11, weight: .semibold, digits: true) }
     private let ranks = (1...3).map { text(String($0), size: 10, weight: .semibold, color: PanelColor.secondary, digits: true) }
+    private let buttons = (0..<3).map { _ in NSButton() }
     private let empty = text("측정 중", size: 11, color: PanelColor.secondary)
     private let count = text("정보 없음", size: 8, color: PanelColor.secondary)
+    private let back = NSButton()
+    private let scroll = NSScrollView()
+    private let table = NSTableView()
+    private var selectedMembers: [ResourceProcess] = []
+    private var separators: [NSBox] = []
+    private var processes: [ResourceProcess] = []
+    private var selectedPID: Int?
+    private var formatValue: ((ResourceProcess) -> String)?
+    private let memoryOrder: Bool
 
     init(title: String, subtitle: String, icon: String, accent: NSColor) {
+        memoryOrder = icon == "memorychip"
         super.init(frame: .zero)
         place(symbol(icon, color: accent), in: self, 12, 9, 13, 13)
         place(text(title, size: 11, weight: .semibold), in: self, 32, 7, 162, 17)
@@ -432,43 +443,115 @@ private final class ProcessRankingCard: GlassCard {
             let y = CGFloat(31 + index * 23)
             ranks[index].alignment = .center
             place(ranks[index], in: self, 10, y + 1, 16, 16)
-            place(names[index], in: self, 33, y, 157, 18)
+            place(names[index], in: self, 33, y, 165, 18)
             values[index].alignment = .right
-            place(values[index], in: self, 196, y, 98, 18)
+            place(values[index], in: self, 202, y, 92, 18)
+            let button = buttons[index]
+            button.title = ""; button.isBordered = false
+            button.tag = index; button.target = self; button.action = #selector(openGroup(_:))
+            place(button, in: self, 8, y - 1, 290, 21)
             if index < 2 {
-                let separator = NSBox()
-                separator.boxType = .separator
+                let separator = NSBox(); separator.boxType = .separator
                 place(separator, in: self, 33, y + 21, 261, 1)
+                separators.append(separator)
             }
         }
         place(empty, in: self, 14, 54, 280, 18)
         place(count, in: self, 14, 104, 280, 12)
+        // Drill into the existing card, preserving both panel size and anchor.
+        back.isBordered = false; back.alignment = .left
+        back.font = .systemFont(ofSize: 10, weight: .medium)
+        back.contentTintColor = accent; back.lineBreakMode = .byTruncatingTail
+        back.target = self; back.action = #selector(closeGroup)
+        place(back, in: self, 12, 28, 282, 18)
+        scroll.drawsBackground = false; scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true; scroll.scrollerStyle = .legacy
+        scroll.verticalScroller = GlassScroller()
+        place(scroll, in: self, 12, 48, 284, 54)
+        table.headerView = nil; table.backgroundColor = .clear
+        table.rowHeight = 22; table.intercellSpacing = .zero
+        table.selectionHighlightStyle = .none; table.allowsEmptySelection = true
+        table.dataSource = self
+        for (id, width) in [("name", CGFloat(177)), ("value", CGFloat(91))] {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(id))
+            column.width = width; column.isEditable = false
+            let cell = NSTextFieldCell(textCell: "")
+            cell.font = .systemFont(ofSize: 10, weight: id == "name" ? .medium : .semibold)
+            cell.textColor = .labelColor; cell.lineBreakMode = .byTruncatingTail
+            cell.alignment = id == "name" ? .left : .right
+            column.dataCell = cell; table.addTableColumn(column)
+        }
+        table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        scroll.documentView = table
+        back.isHidden = true; scroll.isHidden = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unsupported") }
 
-    func update(_ processes: [ResourceProcess], emptyMessage: String, countText: String, detail: String, format: (ResourceProcess) -> String) {
-        empty.isHidden = !processes.isEmpty
-        empty.stringValue = emptyMessage
-        count.stringValue = countText
-        toolTip = detail
+    @objc private func openGroup(_ sender: NSButton) {
+        guard processes.indices.contains(sender.tag), !processes[sender.tag].members.isEmpty else { return }
+        selectedPID = processes[sender.tag].pid
+        scroll.contentView.scroll(to: .zero)
+        renderSelection()
+    }
+    @objc private func closeGroup() { selectedPID = nil; renderSelection() }
+
+    private func renderSelection() {
+        let group = processes.first { $0.pid == selectedPID }
+        if group == nil { selectedPID = nil }
+        let showingDetails = group != nil
+        back.isHidden = !showingDetails; scroll.isHidden = !showingDetails
+        separators.forEach { $0.isHidden = showingDetails }
         for index in 0..<3 {
-            let process = index < processes.count ? processes[index] : nil
-            ranks[index].isHidden = process == nil
-            names[index].isHidden = process == nil
-            values[index].isHidden = process == nil
-            if let process {
-                names[index].stringValue = process.name
-                names[index].toolTip = "\(process.name) · PID \(process.pid)"
-                values[index].stringValue = format(process)
-                names[index].setAccessibilityLabel(L10n.format("%d위 %@, PID %d", index + 1, process.name, process.pid))
-            }
+            let hidden = showingDetails || index >= processes.count
+            names[index].isHidden = hidden; ranks[index].isHidden = hidden
+            values[index].isHidden = hidden; buttons[index].isHidden = hidden
         }
+        empty.isHidden = showingDetails || !processes.isEmpty
+        guard let group else { selectedMembers = []; table.reloadData(); return }
+        back.title = "‹ " + group.name + " · " + L10n.format("프로세스 %d개", group.processCount)
+        back.setAccessibilityLabel(L10n.text("앱 순위로 돌아가기"))
+        selectedMembers = group.members.sorted {
+            let lhs = memoryOrder ? $0.memoryBytes : ($0.cpuPercent ?? -1)
+            let rhs = memoryOrder ? $1.memoryBytes : ($1.cpuPercent ?? -1)
+            return lhs == rhs ? $0.pid < $1.pid : lhs > rhs
+        }
+        // A cell-based native table only draws visible rows, even for large groups.
+        let oldOrigin = scroll.contentView.bounds.origin
+        table.reloadData()
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: min(oldOrigin.y, max(0, table.frame.height - scroll.contentSize.height))))
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int { selectedMembers.count }
+    func tableView(_ tableView: NSTableView, objectValueFor tableColumn: NSTableColumn?, row: Int) -> Any? {
+        guard selectedMembers.indices.contains(row) else { return nil }
+        let member = selectedMembers[row]
+        return tableColumn?.identifier.rawValue == "name" ? "\(member.name) · \(member.pid)" : (formatValue?(member) ?? "—")
+    }
+
+    func update(_ processes: [ResourceProcess], emptyMessage: String, countText: String, detail: String, format: @escaping (ResourceProcess) -> String) {
+        self.processes = processes; formatValue = format
+        empty.stringValue = emptyMessage; count.stringValue = countText; toolTip = detail
+        for (index, process) in processes.prefix(3).enumerated() {
+            let suffix = process.processCount > 1 ? " · \(process.processCount)" : ""
+            names[index].stringValue = process.name + suffix + (process.members.isEmpty ? "" : "  ›")
+            names[index].toolTip = process.name + " · " + L10n.format("프로세스 %d개", process.processCount)
+            values[index].stringValue = format(process)
+            buttons[index].setAccessibilityLabel(names[index].toolTip! + ", " + values[index].stringValue)
+            buttons[index].toolTip = names[index].toolTip
+            buttons[index].isEnabled = !process.members.isEmpty
+        }
+        renderSelection()
     }
     #if PANEL_UPDATES_PROBE
     var probeCount: String { count.stringValue }
     var probeRows: [String] {
         zip(names, values).filter { !$0.0.isHidden }.map { $0.0.stringValue + " · " + $0.1.stringValue }
     }
+    func probeOpen() { buttons[0].performClick(nil) }
+    func probeClose() { closeGroup() }
+    var probeDetailRows: [String] { selectedMembers.map { "\($0.name) · \($0.pid) · " + (formatValue?($0) ?? "—") } }
+    var probeShowingDetails: Bool { !scroll.isHidden }
     #endif
 }
 
@@ -550,8 +633,8 @@ final class PanelController: NSViewController {
     private let memoryPressure = ResourceBadge(frame: .zero)
     private let memoryCompressed = text("—", size: 17, weight: .medium, digits: true)
     private let memorySwap = text("—", size: 17, weight: .medium, digits: true)
-    private let cpuRanking = ProcessRankingCard(title: "CPU 프로세스 TOP 3", subtitle: "전체 CPU 기준", icon: "cpu", accent: PanelColor.blue)
-    private let memoryRanking = ProcessRankingCard(title: "메모리 프로세스 TOP 3", subtitle: "실제 점유 메모리", icon: "memorychip", accent: PanelColor.violet)
+    private let cpuRanking = ProcessRankingCard(title: "CPU 앱 TOP 3", subtitle: "전체 CPU 기준", icon: "cpu", accent: PanelColor.blue)
+    private let memoryRanking = ProcessRankingCard(title: "메모리 앱 TOP 3", subtitle: "실제 점유 메모리", icon: "memorychip", accent: PanelColor.violet)
     private let diskFree = text("—", size: 31, weight: .medium, digits: true)
     private let diskCapacity = text("전체 용량 정보 없음", size: 11, color: PanelColor.secondary)
     private let diskBar = UsageBar()
@@ -1441,7 +1524,7 @@ final class PanelController: NSViewController {
     }
 
     private func processDetail(_ processes: ProcessSnapshot) -> String {
-        L10n.format("정보를 읽은 프로세스 %d개, 종료·권한 제한 등으로 제외한 프로세스 %d개. 앱별로 합산하지 않은 프로세스 기준 순위입니다.", processes.readableCount, processes.skippedCount)
+        L10n.format("조회한 프로세스 %d개 · 제외 %d개. 같은 앱과 확인된 하위 프로세스를 합산합니다. 소속이 불확실한 프로세스는 따로 표시합니다. 메모리는 physical footprint 합계이며 시스템 사용량과 다를 수 있습니다.", processes.readableCount, processes.skippedCount)
     }
 
     private func applyCPUProcesses(_ processes: ProcessSnapshot) {
@@ -1452,8 +1535,8 @@ final class PanelController: NSViewController {
     }
 
     private func applyMemoryProcesses(_ processes: ProcessSnapshot) {
-        memoryRanking.update(processes.memoryTop, emptyMessage: processes.available ? L10n.text("표시할 프로세스가 없습니다") : L10n.text("프로세스 정보를 읽을 수 없습니다"), countText: processCountText(processes), detail: processDetail(processes)) { process in
-            bytesString(process.memoryBytes)
+        memoryRanking.update(processes.memoryTop, emptyMessage: processes.available ? L10n.text("표시할 프로세스가 없습니다") : L10n.text("프로세스 정보를 읽을 수 없습니다"), countText: processCountText(processes), detail: processDetail(processes)) { [weak self] process in
+            self?.bytesString(process.memoryBytes) ?? "—"
         }
     }
 
@@ -1660,6 +1743,10 @@ extension PanelController {
     var probeGPUHistoryTimes: [TimeInterval] { gpuHistory.points.map(\.time) }
     var probePresentedCPUHistoryTimes: [TimeInterval] { cpuGraph.probeTimes }
     var probePresentedGPUHistoryTimes: [TimeInterval] { gpuGraph.probeTimes }
+    func probeOpenRanking(memory: Bool) { (memory ? memoryRanking : cpuRanking).probeOpen() }
+    func probeCloseRanking(memory: Bool) { (memory ? memoryRanking : cpuRanking).probeClose() }
+    func probeRankingDetails(memory: Bool) -> [String] { (memory ? memoryRanking : cpuRanking).probeDetailRows }
+    func probeRankingExpanded(memory: Bool) -> Bool { (memory ? memoryRanking : cpuRanking).probeShowingDetails }
     var probeSurfaceFrames: [NSRect] { tabViews.map(\.frame) + [settingsScroll.frame] }
 }
 #endif

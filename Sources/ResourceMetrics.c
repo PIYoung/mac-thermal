@@ -24,6 +24,109 @@ static pthread_mutex_t mt_process_mutex = PTHREAD_MUTEX_INITIALIZER;
 static MTProcessBaseline *mt_previous_processes;
 static size_t mt_previous_process_count;
 
+static void mt_insert_top(MTProcessEntry top[3], int *count, const MTProcessEntry *entry, int compare_cpu);
+
+typedef struct {
+    MTProcessEntry entry;
+    uint64_t start_time;
+    int32_t parent_pid, group_pid;
+    char command[17];
+    /* Temporary local grouping identity, never displayed or persisted. */
+    char bundle[1024];
+} MTGroupProcess;
+static MTGroupProcess *mt_members;
+static size_t mt_member_count;
+
+static int mt_member_pid_compare(const void *left, const void *right) {
+    const MTGroupProcess *a = left, *b = right;
+    return (a->entry.pid > b->entry.pid) - (a->entry.pid < b->entry.pid);
+}
+
+static int mt_group_compare(const void *left, const void *right) {
+    const MTGroupProcess *a = left, *b = right;
+    int order = strcmp(a->bundle, b->bundle);
+    return order ? order : mt_member_pid_compare(left, right);
+}
+
+static int mt_is_shell(const char *name) {
+    const char *shells[] = {"sh", "bash", "zsh", "fish", "tcsh", "csh", "login", "launchd", "xpcproxy"};
+    for (size_t i = 0; i < sizeof(shells) / sizeof(*shells); ++i)
+        if (strcmp(name, shells[i]) == 0) return 1;
+    return 0;
+}
+
+static void mt_read_group_identity(MTGroupProcess *process) {
+    struct proc_bsdinfo info = {0};
+    if (proc_pidinfo(process->entry.pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) == sizeof(info)) {
+        process->parent_pid = (int32_t)info.pbi_ppid;
+        memcpy(process->command, info.pbi_comm, 16);
+    }
+    char path[PROC_PIDPATHINFO_MAXSIZE] = {0};
+    int length = proc_pidpath(process->entry.pid, path, sizeof(path));
+    if (length <= 0 || length >= (int)sizeof(path)) return;
+    path[sizeof(path) - 1] = '\0';
+    /* Outermost bundle keeps nested Electron helpers in their containing app. */
+    char *end = strstr(path, ".app/Contents/");
+    if (!end || path[0] != '/') return;
+    size_t count = (size_t)(end - path) + 4;
+    if (count >= sizeof(process->bundle)) return; /* Never merge truncated paths. */
+    memcpy(process->bundle, path, count);
+}
+
+static void mt_group_processes(MTGroupProcess *records, size_t count, MTProcessMetrics *metrics) {
+    qsort(records, count, sizeof(*records), mt_member_pid_compare);
+    /* Resolve against original bundle ownership, before writing inherited keys.
+     * Stop at shells so unrelated terminal jobs never collapse into Terminal. */
+
+    for (size_t i = 0; i < count; ++i) {
+        const MTGroupProcess *node = &records[i];
+        for (int depth = 0; depth < 32; ++depth) {
+            if (node->bundle[0]) { records[i].group_pid = node->entry.pid; break; }
+            if (mt_is_shell(node->command) || node->parent_pid <= 1 || node->parent_pid == node->entry.pid) break;
+            MTGroupProcess key = {0}; key.entry.pid = node->parent_pid;
+            const MTGroupProcess *parent = bsearch(&key, records, count, sizeof(*records), mt_member_pid_compare);
+            if (!parent || parent->start_time == 0 || node->start_time == 0 || parent->start_time > node->start_time) break;
+            node = parent;
+        }
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (records[i].group_pid && !records[i].bundle[0]) {
+            MTGroupProcess key = {0}; key.entry.pid = records[i].group_pid;
+            const MTGroupProcess *owner = bsearch(&key, records, count, sizeof(*records), mt_member_pid_compare);
+            if (owner) memcpy(records[i].bundle, owner->bundle, sizeof(records[i].bundle));
+        }
+    }
+    qsort(records, count, sizeof(*records), mt_group_compare);
+    for (size_t i = 0; i < count;) {
+        size_t end = i + 1;
+        if (records[i].bundle[0])
+            while (end < count && strcmp(records[i].bundle, records[end].bundle) == 0) ++end;
+        MTProcessEntry group = {0};
+        group.pid = records[i].entry.pid;
+        group.process_count = (int)(end - i);
+        if (records[i].bundle[0]) {
+            const char *name = strrchr(records[i].bundle, '/');
+            if (name) {
+                size_t length = strlen(++name) - 4;
+                if (length >= sizeof(group.name)) length = sizeof(group.name) - 1;
+                memcpy(group.name, name, length);
+            }
+        }
+        for (size_t j = i; j < end; ++j) {
+            MTProcessEntry *member = &records[j].entry;
+            records[j].group_pid = group.pid;
+            group.memory_bytes = UINT64_MAX - group.memory_bytes < member->memory_bytes ? UINT64_MAX : group.memory_bytes + member->memory_bytes;
+            group.cpu_usage_percent += member->cpu_usage_percent;
+            group.cpu_valid |= member->cpu_valid;
+        }
+        if (group.cpu_usage_percent > 100) group.cpu_usage_percent = 100;
+        mt_insert_top(metrics->memory_top, &metrics->memory_count, &group, 0);
+        if (group.cpu_valid) mt_insert_top(metrics->cpu_top, &metrics->cpu_count, &group, 1);
+        i = end;
+    }
+}
+
+
 MTMemoryMetrics mt_memory_metrics_sample(void) {
     MTMemoryMetrics metrics = {0};
     metrics.pressure_level = -1;
@@ -139,7 +242,8 @@ static void mt_insert_top(MTProcessEntry top[3], int *count,
 }
 
 static void mt_read_process_name(MTProcessEntry *entry) {
-    /* Only the final top entries need a name. Do not query paths or args. */
+    /* Bundle labels are already available; individual names are read on demand. */
+    if (entry->name[0]) return;
     if (proc_name(entry->pid, entry->name, sizeof(entry->name)) <= 0 ||
         entry->name[0] == '\0') {
         snprintf(entry->name, sizeof(entry->name), "PID %d", entry->pid);
@@ -171,6 +275,22 @@ static void mt_clear_process_baseline(void) {
     free(mt_previous_processes);
     mt_previous_processes = NULL;
     mt_previous_process_count = 0;
+    free(mt_members); mt_members = NULL; mt_member_count = 0;
+}
+
+int mt_process_group_members(int32_t group_pid, MTProcessEntry *entries, int capacity) {
+    pthread_mutex_lock(&mt_process_mutex);
+    int count = 0;
+    for (size_t i = 0; i < mt_member_count; ++i) {
+        if (mt_members[i].group_pid != group_pid) continue;
+        if (entries && count < capacity) {
+            mt_read_process_name(&mt_members[i].entry);
+            entries[count] = mt_members[i].entry;
+        }
+        ++count;
+    }
+    pthread_mutex_unlock(&mt_process_mutex);
+    return count;
 }
 
 void mt_process_metrics_reset(void) {
@@ -196,9 +316,11 @@ MTProcessMetrics mt_process_metrics_sample(void) {
     }
     pid_t *pids = calloc(capacity, sizeof(*pids));
     MTProcessBaseline *current = calloc(capacity, sizeof(*current));
-    if (!pids || !current) {
+    MTGroupProcess *records = calloc(capacity, sizeof(*records));
+    if (!pids || !current || !records) {
         free(pids);
         free(current);
+        free(records);
         mt_clear_process_baseline();
         pthread_mutex_unlock(&mt_process_mutex);
         return metrics;
@@ -211,6 +333,7 @@ MTProcessMetrics mt_process_metrics_sample(void) {
         /* Do not silently label a truncated process list as a system top 3. */
         free(pids);
         free(current);
+        free(records);
         mt_clear_process_baseline();
         pthread_mutex_unlock(&mt_process_mutex);
         return metrics;
@@ -244,17 +367,19 @@ MTProcessMetrics mt_process_metrics_sample(void) {
             ++metrics.skipped_count;
             continue;
         }
+        MTGroupProcess *record = &records[current_count];
         MTProcessBaseline *sample = &current[current_count++];
         sample->pid = pids[index];
         sample->start_time = usage.ri_proc_start_abstime;
         sample->cpu_ticks = usage.ri_user_time + usage.ri_system_time;
         sample->sampled_at = sampled_at;
 
-        MTProcessEntry entry = {0};
-        entry.pid = pids[index];
-        entry.memory_bytes = usage.ri_phys_footprint;
+        record->entry.pid = pids[index];
+        record->entry.memory_bytes = usage.ri_phys_footprint;
+        record->entry.process_count = 1;
+        record->start_time = sample->start_time;
+        mt_read_group_identity(record);
         ++metrics.readable_count;
-        mt_insert_top(metrics.memory_top, &metrics.memory_count, &entry, 0);
 
         const MTProcessBaseline *previous = mt_find_previous(sample->pid);
         if (!previous || sample->start_time == 0 ||
@@ -274,13 +399,15 @@ MTProcessMetrics mt_process_metrics_sample(void) {
         double cpu_seconds = (double)(sample->cpu_ticks - previous->cpu_ticks) *
             (double)timebase.numer / (double)timebase.denom / 1e9;
         double percent = cpu_seconds / elapsed / logical_cpus * 100.0;
-        entry.cpu_usage_percent = percent > 100.0 ? 100.0 : percent;
-        mt_insert_top(metrics.cpu_top, &metrics.cpu_count, &entry, 1);
+        record->entry.cpu_usage_percent = percent > 100.0 ? 100.0 : percent;
+        record->entry.cpu_valid = 1;
     }
+    mt_group_processes(records, current_count, &metrics);
     mt_read_top_names(&metrics);
     free(pids);
     qsort(current, current_count, sizeof(*current), mt_baseline_compare);
     mt_clear_process_baseline();
+    mt_members = records; mt_member_count = current_count;
     mt_previous_processes = current;
     mt_previous_process_count = current_count;
     metrics.valid = metrics.readable_count > 0;

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 struct MemorySnapshot {
     let totalBytes: Double?
@@ -11,10 +12,12 @@ struct MemorySnapshot {
 }
 
 struct ResourceProcess {
-    let name: String
+    var name: String
     let pid: Int
     let cpuPercent: Double?
     let memoryBytes: Double
+    var processCount: Int = 1
+    var members: [ResourceProcess] = []
 }
 
 struct ProcessSnapshot {
@@ -77,29 +80,54 @@ enum ResourceSampler {
             swapUsedBytes: memory.swap_valid != 0 ? Double(memory.swap_used_bytes) : nil,
             pressureLevel: memory.pressure_valid != 0 ? Int(memory.pressure_level) : nil)
 
-        func entries<T>(_ storage: T, count: Int32, cpuReady: Bool) -> [ResourceProcess] {
+        func process(_ value: MTProcessEntry) -> ResourceProcess {
+            var entry = value
+            let pid = Int(entry.pid)
+            let name = withUnsafePointer(to: &entry.name) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: 128) {
+                    String(validatingCString: $0) ?? "PID \(pid)"
+                }
+            }
+            let cpu = entry.cpu_usage_percent
+            return ResourceProcess(name: name.isEmpty ? "PID \(pid)" : name,
+                pid: pid, cpuPercent: entry.cpu_valid != 0 && cpu.isFinite ? max(0, min(100, cpu)) : nil,
+                memoryBytes: Double(entry.memory_bytes), processCount: max(1, Int(entry.process_count)))
+        }
+        var cachedMembers: [Int32: [ResourceProcess]] = [:]
+        func entries<T>(_ storage: T, count: Int32) -> [ResourceProcess] {
             withUnsafePointer(to: storage) { storagePointer in
                 storagePointer.withMemoryRebound(to: MTProcessEntry.self, capacity: 3) { pointer in
                     (0..<max(0, min(3, Int(count)))).map { index in
-                        var entry = pointer[index]
-                        let pid = Int(entry.pid)
-                        let name = withUnsafePointer(to: &entry.name) { namePointer in
-                            namePointer.withMemoryRebound(to: CChar.self, capacity: 128) {
-                                String(validatingCString: $0) ?? "PID \(pid)"
-                            }
+                        let entry = pointer[index]
+                        var group = process(entry)
+                        // Prefer the running app's display name only for its outer
+                        // bundle, never a nested helper's misleading localized name.
+                        if let app = NSRunningApplication(processIdentifier: entry.pid),
+                           app.bundleURL?.deletingPathExtension().lastPathComponent == group.name,
+                           let displayName = app.localizedName, !displayName.isEmpty {
+                            group.name = displayName
                         }
-                        let cpu = entry.cpu_usage_percent
-                        return ResourceProcess(name: name.isEmpty ? "PID \(pid)" : name,
-                            pid: pid, cpuPercent: cpuReady && cpu.isFinite ? max(0, min(100, cpu)) : nil,
-                            memoryBytes: Double(entry.memory_bytes))
+                        if let cached = cachedMembers[entry.pid] { group.members = cached }
+                        else {
+                            let count = min(32768, max(0, Int(mt_process_group_members(entry.pid, nil, 0))))
+                            if count > 0 {
+                                var members = [MTProcessEntry](repeating: MTProcessEntry(), count: count)
+                                let copied = members.withUnsafeMutableBufferPointer {
+                                    mt_process_group_members(entry.pid, $0.baseAddress, Int32(count))
+                                }
+                                if copied == count { group.members = members.map(process) }
+                            }
+                            cachedMembers[entry.pid] = group.members
+                        }
+                        return group
                     }
                 }
             }
         }
 
         let processSnapshot = ProcessSnapshot(
-            cpuTop: entries(processes.cpu_top, count: processes.cpu_count, cpuReady: processes.cpu_ready != 0),
-            memoryTop: entries(processes.memory_top, count: processes.memory_count, cpuReady: processes.cpu_ready != 0),
+            cpuTop: entries(processes.cpu_top, count: processes.cpu_count),
+            memoryTop: entries(processes.memory_top, count: processes.memory_count),
             cpuReady: processes.cpu_ready != 0, readableCount: Int(processes.readable_count),
             skippedCount: Int(processes.skipped_count), available: processes.valid != 0)
         let diskSnapshot = DiskSnapshot(

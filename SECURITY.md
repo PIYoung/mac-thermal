@@ -50,3 +50,5 @@ cleanup permission, fan control, process termination or security-policy change
 is introduced by this feature.
 
 See [permission verification](docs/PERMISSION_TESTING.md) for the tested unavailable/denied states and the untested fresh-install macOS permission-dialog boundaries. No permission is required merely to open basic resource guidance; model generation and optional features retain their own availability/access constraints.
+
+App-grouped rankings use executable-path and parent-PID metadata in local memory only, alongside existing numeric process measurements. They do not inspect command arguments or file contents, persist paths, pass them to AI, or transmit them. Separate bundle paths and unknown ownership remain separate, and shell ancestry is not used to fold unrelated terminal jobs into an app. Missing permissions remain skipped; no new privilege or system permission is requested.

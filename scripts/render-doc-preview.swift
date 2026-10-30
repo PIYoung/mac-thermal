@@ -26,8 +26,8 @@ enum RenderDocPreview {
         let upload = [0.5, 0.7, 0.4, 0.9, 1.4, 1.0, 0.8, 0.6, 0.5, 1.1, 1.6, 0.8, 0.7, 1.1, 1.3, 1.0, 0.7, 0.9, 1.2, 1.7, 1.3, 0.8, 0.6, 0.9, 1.1, 1.5, 1.0, 0.9, 1.4, 1.1, 1.2]
         let download = [4.5, 6.1, 5.4, 7.8, 8.6, 6.2, 4.9, 6.5, 9.8, 10.5, 8.3, 7.2, 5.9, 6.8, 8.2, 9.7, 10.8, 8.9, 7.0, 6.4, 8.7, 11.2, 9.8, 8.1, 6.6, 7.5, 9.1, 10.2, 8.8, 9.0, 9.4]
         let processes = [
-            ResourceProcess(name: "Editor", pid: 101, cpuPercent: 12.4, memoryBytes: 2.1 * 1_024 * 1_024 * 1_024),
-            ResourceProcess(name: "Browser", pid: 102, cpuPercent: 8.7, memoryBytes: 1.4 * 1_024 * 1_024 * 1_024),
+            ResourceProcess(name: "Editor", pid: 101, cpuPercent: 12.4, memoryBytes: 2.1 * 1_024 * 1_024 * 1_024, processCount: 8, members: (0..<8).map { ResourceProcess(name: "Editor Helper", pid: 110 + $0, cpuPercent: 12.4 / 8, memoryBytes: 2.1 * 1_024 * 1_024 * 1_024 / 8) }),
+            ResourceProcess(name: "Browser", pid: 102, cpuPercent: 8.7, memoryBytes: 1.4 * 1_024 * 1_024 * 1_024, processCount: 12, members: (0..<12).map { ResourceProcess(name: "Browser Helper", pid: 210 + $0, cpuPercent: 8.7 / 12, memoryBytes: 1.4 * 1_024 * 1_024 * 1_024 / 12) }),
             ResourceProcess(name: "Terminal", pid: 103, cpuPercent: 3.2, memoryBytes: 384 * 1_024 * 1_024)
         ]
         for index in cpu.indices {

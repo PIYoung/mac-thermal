@@ -63,3 +63,5 @@ The delayed-readback correction uses original state-machine code and fixtures;
 physical retesting remains pending as documented in docs/FAN_CONTROL.md. Existing notices remain intact.
 
 Release fan tools copy only project-authored preparation/installation templates and MIT notices. They contain no personal manifest, UID pin, recovery record or credential, and perform no automatic installation.
+
+- v2.17 앱 그룹 순위·카드 내 프로세스 탐색은 프로젝트 자체 AppKit 코드입니다. 기존 시스템 글꼴·기능 아이콘과 커스텀 스크롤러를 사용하며 외부 코드·자산·패키지는 추가하지 않았습니다.

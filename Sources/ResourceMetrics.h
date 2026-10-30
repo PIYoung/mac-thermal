@@ -22,6 +22,8 @@ typedef struct {
     double cpu_usage_percent;
     /* The process's physical footprint, not its virtual address space. */
     uint64_t memory_bytes;
+    int process_count;
+    int cpu_valid;
 } MTProcessEntry;
 
 typedef struct {
@@ -37,6 +39,9 @@ typedef struct {
 
 MTMemoryMetrics mt_memory_metrics_sample(void);
 MTProcessMetrics mt_process_metrics_sample(void);
+/* Copies the most recent group members; no process arguments or file contents.
+ * Call on the sampler queue immediately after sampling. NULL returns count. */
+int mt_process_group_members(int32_t group_pid, MTProcessEntry *entries, int capacity);
 /* Clears CPU history; the next successful sample only establishes a baseline. */
 void mt_process_metrics_reset(void);
 
